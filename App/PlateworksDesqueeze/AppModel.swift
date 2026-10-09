@@ -84,6 +84,8 @@ final class AppModel: ObservableObject {
     /// For example `216 DNG · 12 ARW to convert`.
     var countsLine: String? {
         guard let snapshot else { return nil }
+        // A folder that holds only an orphan backup is not empty: its counts
+        // show, and `folderMessages` names the backup.
         if snapshot.isEmpty { return "No DNG or ARW files in this folder." }
         var parts = ["\(snapshot.dngs.count) DNG"]
         if !snapshot.pendingARWs.isEmpty {

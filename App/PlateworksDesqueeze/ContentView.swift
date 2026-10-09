@@ -173,7 +173,9 @@ struct ContentView: View {
 
     private func result(_ summary: RunSummary) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(countsText(summary))
+            // One line from the core, so the window and the command line
+            // tool show the same counts. It shows "blocked" when it is not zero.
+            Text(summary.countsLine)
                 .font(.callout.weight(.medium))
                 .foregroundStyle(summary.failed == 0 ? Color.green : Color.red)
             Text("Photos already in Lightroom: Metadata › Read Metadata from File.")
@@ -206,15 +208,5 @@ struct ContentView: View {
                 .frame(height: min(notesHeight, 160))
             }
         }
-    }
-
-    private func countsText(_ summary: RunSummary) -> String {
-        var parts: [String] = []
-        if summary.converted > 0 { parts.append("\(summary.converted) converted") }
-        parts.append("\(summary.set) set")
-        parts.append("\(summary.skipped) skipped")
-        parts.append("\(summary.failed) failed")
-        if summary.cancelled { parts.append("stopped") }
-        return parts.joined(separator: " · ")
     }
 }
