@@ -1,0 +1,92 @@
+import Foundation
+
+/// One row of the folder read: a DNG and its current tag.
+public struct TagRow: Equatable, Sendable {
+    public let fileName: String
+    public let horizontal: Double
+    public let vertical: Double
+    public let originalRawFileName: String?
+}
+
+public enum TagError: Error, Equatable {
+    case toolFailed(String)
+}
+
+/// Reads and writes the `DefaultScale` tag. `DesqueezeJob` depends on this
+/// protocol, so its tests need no exiftool.
+public protocol ScaleTagging: Sendable {
+    func readFolder(_ folder: URL) throws -> [TagRow]
+    func write(_ factor: SqueezeFactor, to file: URL) throws
+    func read(_ file: URL) throws -> (horizontal: Double, vertical: Double)?
+}
+
+/// The exiftool implementation.
+///
+/// The group `SubIFD` is named on every call, because that is the image
+/// directory Camera Raw reads.
+public struct ScaleTag: ScaleTagging {
+    static let tagName = "-SubIFD:DefaultScale"
+
+    private let exiftool: URL
+    private let runner: ProcessRunner
+
+    public init(exiftool: URL, runner: ProcessRunner = SystemProcessRunner()) {
+        self.exiftool = exiftool
+        self.runner = runner
+    }
+
+    /// One call for the whole folder. exiftool reads the top level only.
+    public func readFolder(_ folder: URL) throws -> [TagRow] {
+        let result = try runner.run(exiftool, [
+            "-m", "-T", "-filename", Self.tagName, "-OriginalRawFileName", "-ext", "dng", folder.path,
+        ])
+        return Self.parseRows(result.stdout)
+    }
+
+    /// Writes the tag. exiftool keeps the previous file as `<name>_original`.
+    /// `-m` is needed: Adobe DNG Converter files carry a minor flaw in a Sony
+    /// data block, and exiftool refuses to write without it.
+    public func write(_ factor: SqueezeFactor, to file: URL) throws {
+        let result = try runner.run(exiftool, ["-m", "\(Self.tagName)=\(factor.tagValue)", file.path])
+        guard result.exitCode == 0, result.stdout.contains("1 image files updated") else {
+            throw TagError.toolFailed(Self.detail(result))
+        }
+    }
+
+    public func read(_ file: URL) throws -> (horizontal: Double, vertical: Double)? {
+        let result = try runner.run(exiftool, ["-s3", Self.tagName, file.path])
+        return Self.parseScale(result.stdout)
+    }
+
+    /// Parses `1.5 1`. Returns nil for `-`, an empty string, or anything else.
+    static func parseScale(_ text: String) -> (horizontal: Double, vertical: Double)? {
+        let parts = text.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" })
+        guard parts.count == 2, let horizontal = Double(parts[0]), let vertical = Double(parts[1]) else {
+            return nil
+        }
+        return (horizontal, vertical)
+    }
+
+    /// Parses the tab-separated folder read. exiftool includes hidden files,
+    /// so this drops each row whose name starts with a period.
+    static func parseRows(_ text: String) -> [TagRow] {
+        text.split(separator: "\n").compactMap { line in
+            let cells = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            guard cells.count == 3, !cells[0].hasPrefix(".") else { return nil }
+            let scale = parseScale(cells[1]) ?? (1, 1)
+            return TagRow(fileName: cells[0], horizontal: scale.horizontal, vertical: scale.vertical,
+                          originalRawFileName: cells[2] == "-" ? nil : cells[2])
+        }
+    }
+
+    /// One line that says why exiftool failed. The hidden-data warning is
+    /// expected on every Adobe DNG Converter file and says nothing.
+    static func detail(_ result: ProcessResult) -> String {
+        let lines = (result.stderr + "\n" + result.stdout)
+            .split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.contains("Error copying hidden data") }
+        return lines.first(where: { $0.hasPrefix("Error") }) ?? lines.last
+            ?? "exiftool returned \(result.exitCode)."
+    }
+}
