@@ -168,6 +168,18 @@ final class TextOutputTests: XCTestCase {
         ])
     }
 
+    // The sentence is made once, in `FolderText`.
+    func testARunOnAnEmptyFolderSaysSoInPlaceOfTheCounts() {
+        var empty = RunSummary()
+        empty.folderIsEmpty = true
+        let report = RunReport(folder: folder, factor: SqueezeFactor(1.5)!, summary: empty)
+        XCTAssertEqual(TextOutput.run(report, converterInstalled: true), [FolderText.noPhotos])
+        XCTAssertEqual(FolderText.noPhotos, "No DNG or ARW files in this folder.")
+
+        let dry = RunReport(folder: folder, factor: SqueezeFactor(1.5)!, plan: RunPlan(steps: [], summary: empty))
+        XCTAssertEqual(TextOutput.run(dry, converterInstalled: true), ["Dry run. No file was changed.", FolderText.noPhotos])
+    }
+
     func testADryRunWithNoStepHasNoStepLine() {
         let report = RunReport(folder: folder, factor: .noStretch, plan: RunPlan(steps: [], summary: RunSummary()))
         XCTAssertEqual(TextOutput.run(report, converterInstalled: false),

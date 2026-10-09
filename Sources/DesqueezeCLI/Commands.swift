@@ -115,7 +115,15 @@ public enum DesqueezeTool {
         guard let exiftool = environment.exiftool else {
             return fail(missingExiftool, detail: nil, invocation, environment)
         }
-        let url = resolve(folder, against: environment.workingFolder)
+        let named = resolve(folder, against: environment.workingFolder)
+        // The window's rule for what a folder is. A link to a folder is that
+        // folder, and the report names the folder, as the window does. A
+        // file, and a package such as an app or a photo library, are not
+        // folders.
+        guard let url = FolderChoice.folder(at: named) else {
+            return fail("This folder could not be read: \(named.path)", detail: whyNotAFolder(named), invocation,
+                        environment)
+        }
         var runner = environment.runner
         if invocation.verbose {
             runner = LoggingProcessRunner(wrapping: runner, sink: environment.standardError)
@@ -133,9 +141,19 @@ public enum DesqueezeTool {
         }
     }
 
+    /// Why `FolderChoice` takes `path` for no folder. For a person to read.
+    private static func whyNotAFolder(_ path: URL) -> String {
+        let resolved = path.resolvingSymlinksInPath()
+        guard FileManager.default.fileExists(atPath: resolved.path) else { return "Nothing is at this path." }
+        if (try? resolved.resourceValues(forKeys: [.isPackageKey]))?.isPackage == true {
+            return "It is a package, such as an app or a photo library. The window does not take one either."
+        }
+        return "It is not a folder."
+    }
+
     /// An absolute path as it is, and a relative path against the working
     /// folder. `.` and `..` are taken out, and nothing else changes: no link
-    /// is resolved, so the report names the folder as the person named it.
+    /// is resolved. `FolderChoice` decides next what the path names.
     static func resolve(_ folder: String, against workingFolder: URL) -> URL {
         let path = folder.hasPrefix("/") ? folder : workingFolder.path + "/" + folder
         var parts: [Substring] = []

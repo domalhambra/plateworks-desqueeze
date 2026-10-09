@@ -75,6 +75,53 @@ final class EndToEndTests: BuiltToolTestCase {
         XCTAssertEqual(try reported("../Shoot with spaces", in: discard), expected)
     }
 
+    // A symbolic link to a folder is that folder, as in the window. The report
+    // names the folder, not the link, and the run changes the files inside it.
+    func testALinkToAFolderIsThatFolderForEveryCommand() throws {
+        try makeShoot()
+        let link = base.appendingPathComponent("Link to shoot")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: folder)
+
+        let scan = try desqueeze("scan", link.path, "--json")
+        XCTAssertEqual(scan.exitCode, 0, scan.stderr)
+        XCTAssertEqual(try scan.json()["folder"] as? String, folder.path, "the folder, not the link")
+        XCTAssertEqual(try scan.json()["pendingARWs"] as? [String], ["frame.ARW"])
+
+        let run = try desqueeze("run", link.path, "--factor", "1.5", "--json")
+        XCTAssertEqual(run.exitCode, 0, run.stderr)
+        XCTAssertEqual(try run.json()["folder"] as? String, folder.path)
+        XCTAssertEqual(counts(try run.json()), [1, 2, 0, 0, 0, 0])
+        XCTAssertEqual(try scales(), ["already here.dng": "1.5 1", "frame.dng": "1.5 1"])
+        XCTAssertEqual(try names(in: folder), ["already here.dng", "frame.ARW", "frame.dng"])
+        XCTAssertEqual(try names(in: discard), ["already here.dng_original", "frame.dng_original"])
+
+        let remove = try desqueeze("remove", link.path, "--json")
+        XCTAssertEqual(remove.exitCode, 0, remove.stderr)
+        XCTAssertEqual(try scales(), ["already here.dng": "1 1", "frame.dng": "1 1"])
+    }
+
+    // The window refuses a file, and a package such as an app. So does the tool.
+    func testAFileAndAPackageAreNotFolders() throws {
+        try makeShoot()
+        let package = base.appendingPathComponent("Thing.app")
+        try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+        let fileLink = base.appendingPathComponent("Link to file")
+        try FileManager.default.createSymbolicLink(at: fileLink, withDestinationURL: folder.appendingPathComponent("frame.ARW"))
+        let before = try folderState()
+
+        for path in [folder.appendingPathComponent("already here.dng").path, package.path, fileLink.path] {
+            for arguments in [["scan", path], ["run", path, "--factor", "1.5"], ["remove", path]] {
+                let result = try finish(process(arguments), started: { _ in })
+                XCTAssertEqual(result.exitCode, 1, "\(arguments)")
+                XCTAssertEqual(result.stdout, "")
+                XCTAssertEqual(result.messages.first, "desqueeze: This folder could not be read: \(path)")
+                XCTAssertEqual(result.messages.count, 2, "the reason, and one line below it")
+            }
+        }
+        XCTAssertEqual(try folderState(), before)
+        XCTAssertEqual(try names(in: discard), [])
+    }
+
     // MARK: run --dry-run
 
     func testDryRunJSONChangesNoFile() throws {

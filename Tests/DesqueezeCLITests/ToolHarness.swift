@@ -96,6 +96,11 @@ final class ToolHarness {
     /// Runs the tool. Returns its exit code.
     @discardableResult
     func run(_ arguments: String...) -> Int32 {
+        run(arguments)
+    }
+
+    @discardableResult
+    func run(_ arguments: [String]) -> Int32 {
         out.writes = []
         err.writes = []
         return DesqueezeTool.run(arguments, in: environment)

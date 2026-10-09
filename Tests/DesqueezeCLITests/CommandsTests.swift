@@ -81,8 +81,9 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual(try h.json()["folder"] as? String, h.shoot.path)
     }
 
-    // The report names the folder as the person named it. Only `.` and `..`
-    // are taken out. `/private/tmp` does not turn into `/tmp`.
+    // `resolve` makes the path absolute, and nothing else: only `.` and `..`
+    // are taken out. `/private/tmp` does not turn into `/tmp` here. What the
+    // path names is `FolderChoice`'s to decide, next, as it is for the window.
     func testAFolderPathIsMadeAbsoluteAndNothingElse() {
         let working = URL(fileURLWithPath: "/private/tmp/Work Folder")
         func resolved(_ folder: String) -> String { DesqueezeTool.resolve(folder, against: working).path }
@@ -108,6 +109,55 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual(json["error"] as? String, "This folder could not be read: \(missing)")
         XCTAssertNotNil(json["detail"] as? String)
         XCTAssertEqual(h.tools.commands, [])
+    }
+
+    // The window takes a link to a folder as that folder (`FolderChoice`), and
+    // the tool follows it: the report names the folder, not the link.
+    func testALinkToAFolderIsThatFolder() throws {
+        try h.touch("A.dng")
+        h.tools.scales = ["A.dng": "1 1"]
+        let link = h.base.appendingPathComponent("Link to shoot")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: h.shoot)
+        let target = h.shoot.resolvingSymlinksInPath().path
+
+        for path in ["Link to shoot", link.path] {
+            XCTAssertEqual(h.run("scan", path, "--json"), 0, path)
+            let folder = try XCTUnwrap(try h.json()["folder"] as? String)
+            XCTAssertEqual(folder, target, path)
+            XCTAssertEqual(URL(fileURLWithPath: folder).lastPathComponent, "Shoot 1")
+        }
+        XCTAssertEqual(h.run("run", "Link to shoot", "--factor", "1.5", "--json"), 0)
+        XCTAssertEqual(try h.json()["set"] as? Int, 1)
+        XCTAssertEqual(h.tools.scales, ["A.dng": "1.5 1"])
+        XCTAssertEqual(h.run("remove", "Link to shoot", "--dry-run"), 0)
+    }
+
+    // A file, a package, and a link to either are not folders to the window.
+    // The tool gives its "could not be read" error and exit 1, and starts no tool.
+    func testAPathThatIsNotAFolderTheWindowTakesGivesTheCouldNotBeReadError() throws {
+        try h.touch("A.dng")
+        let app = h.base.appendingPathComponent("Thing.app")
+        try FileManager.default.createDirectory(at: app, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: h.base.appendingPathComponent("Link to file"),
+                                                   withDestinationURL: h.shoot.appendingPathComponent("A.dng"))
+        try FileManager.default.createSymbolicLink(at: h.base.appendingPathComponent("Link to app"),
+                                                   withDestinationURL: app)
+        try FileManager.default.createSymbolicLink(at: h.base.appendingPathComponent("Dangling"),
+                                                   withDestinationURL: h.base.appendingPathComponent("gone"))
+
+        for name in ["Shoot 1/A.dng", "Thing.app", "Link to file", "Link to app", "Dangling"] {
+            for arguments in [["scan", name], ["run", name, "--factor", "1.5"], ["remove", name, "--dry-run"]] {
+                XCTAssertEqual(DesqueezeTool.run(arguments, in: h.environment), 1, "\(arguments)")
+            }
+            XCTAssertEqual(h.run("scan", name, "--json"), 1, name)
+            let json = try h.json()
+            XCTAssertEqual(json["error"] as? String,
+                           "This folder could not be read: \(h.base.path)/\(name)", name)
+            XCTAssertNotNil(json["detail"] as? String)
+            XCTAssertEqual(h.err.lines.count, 2, name)
+        }
+        XCTAssertEqual(h.tools.commands, [], "no tool ran")
+        XCTAssertEqual(h.discarded.lines, [])
     }
 
     // MARK: The tools
@@ -240,5 +290,25 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual(json["unconvertedARWs"] as? Int, 1)
         XCTAssertFalse(h.tools.commands.contains { $0.hasPrefix("Adobe") })
         XCTAssertEqual(h.tools.scales, ["A.dng": "2 1"])
+    }
+
+    // Remove is an intent. `run --factor 1 --no-convert` does the same work as
+    // `remove`, and still reports the ARW files it left (design 12.1).
+    func testRunAtFactorOneWithNoConvertIsNotRemove() throws {
+        try h.touch("A.dng", "X.ARW")
+        h.tools.scales = ["A.dng": "1.5 1"]
+        for extra in [[], ["--dry-run"]] {
+            h.tools.scales = ["A.dng": "1.5 1"]
+            XCTAssertEqual(h.run(["run", "Shoot 1", "--factor", "1", "--no-convert", "--json"] + extra), 0)
+            XCTAssertEqual(try h.json()["unconvertedARWs"] as? Int, 1, "\(extra)")
+            XCTAssertEqual(h.run(["remove", "Shoot 1", "--json"] + extra), 0)
+            XCTAssertEqual(try h.json()["unconvertedARWs"] as? Int, 0, "\(extra)")
+        }
+        h.tools.scales = ["A.dng": "1.5 1"]
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1", "--no-convert"), 0)
+        XCTAssertTrue(h.out.lines.contains("1 ARW file was not converted."), h.out.text)
+        h.tools.scales = ["A.dng": "1.5 1"]
+        XCTAssertEqual(h.run("remove", "Shoot 1"), 0)
+        XCTAssertFalse(h.out.text.contains("ARW"))
     }
 }

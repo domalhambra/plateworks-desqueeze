@@ -106,6 +106,48 @@ final class EndToEndFailureTests: BuiltToolTestCase {
         XCTAssertEqual(try folderState(), before)
     }
 
+    // MARK: A pipe that closes early
+
+    // `desqueeze run … | head -1` closes the pipe in the middle of a run. A
+    // write to it raises SIGPIPE, and the default action ends the process
+    // with half the files done. The tool ignores SIGPIPE, completes the run,
+    // and loses only the output (design 12.1).
+    func testAClosedPipeDoesNotStopARun() throws {
+        let count = 10
+        for number in 1...count { try copyFixture("sample.dng", as: "photo \(number).dng") }
+
+        let process = process(["run", folder.path, "--factor", "1.5", "--verbose"])
+        let out = Pipe()
+        let err = Pipe()
+        process.standardOutput = out
+        process.standardError = err
+        try process.run()
+
+        // Read the first output, so the run is under way. Then close both
+        // ends that read, as `head` does. The run has more to write.
+        let first = err.fileHandleForReading.availableData
+        XCTAssertFalse(first.isEmpty, "the run did not start")
+        try err.fileHandleForReading.close()
+        try out.fileHandleForReading.close()
+
+        let limit = Date().addingTimeInterval(120)
+        while process.isRunning, Date() < limit { usleep(10_000) }
+        if process.isRunning {
+            process.terminate()
+            return XCTFail("the tool did not end by itself")
+        }
+        XCTAssertEqual(process.terminationReason, .exit,
+                       "the tool ended by signal \(process.terminationStatus): a closed pipe must not end it")
+        XCTAssertEqual(process.terminationStatus, 0)
+
+        let scales = try scales()
+        XCTAssertEqual(scales.count, count)
+        XCTAssertEqual(Set(scales.values), ["1.5 1"], "every DNG has the tag")
+        XCTAssertEqual(try names(in: folder), (1...count).map { "photo \($0).dng" }.sorted(),
+                       "no backup and no work file stays in the folder")
+        XCTAssertEqual(try names(in: discard).count, count, "every backup was discarded")
+    }
+
     // MARK: The test folder for backups
 
     // The variable must name a folder. `=1` starts nothing, so nobody gets a
@@ -122,6 +164,41 @@ final class EndToEndFailureTests: BuiltToolTestCase {
                 "desqueeze: DESQUEEZE_TEST_BACKUP_FOLDER is set, and its value is not a folder: \"\(value)\"."), value)
         }
         XCTAssertEqual(try folderState(), before)
+    }
+
+    // With --json, standard output gets the one error object, as it does for
+    // every failure that has no report. Standard error keeps its message.
+    func testAWrongValueForTheTestVariableWithJSONPrintsTheErrorObject() throws {
+        try makeShoot()
+        let before = try folderState()
+        for value in ["1", "", "relative", folder.appendingPathComponent("frame.ARW").path] {
+            for arguments in [["run", folder.path, "--factor", "1.5", "--json"], ["scan", folder.path, "--json"],
+                              ["remove", folder.path, "--dry-run", "--json"]] {
+                let result = try finish(process(arguments, environment: [FileBackups.testFolderVariable: value]),
+                                        started: { _ in })
+                XCTAssertEqual(result.exitCode, 1, "\(value) \(arguments)")
+                let json = try result.json()
+                XCTAssertEqual(Set(json.allKeys.compactMap { $0 as? String }), ["error", "detail"], value)
+                XCTAssertEqual(json["error"] as? String,
+                               "DESQUEEZE_TEST_BACKUP_FOLDER is set, and its value is not a folder: \"\(value)\".")
+                XCTAssertEqual(json["detail"] as? String, "It is for tests only. Unset it, then run again.")
+                XCTAssertEqual(result.stderr, "desqueeze: \(json["error"] as! String) \(json["detail"] as! String)\n",
+                               "standard error keeps its message")
+            }
+        }
+        XCTAssertEqual(try folderState(), before)
+    }
+
+    // A usage error wins over the bad variable: exit 2, nothing on standard output.
+    func testAUsageErrorWinsOverAWrongTestVariable() throws {
+        for arguments in [["run", folder.path, "--json"], ["scan", "--frob", "--json"]] {
+            let result = try finish(process(arguments, environment: [FileBackups.testFolderVariable: "1"]),
+                                    started: { _ in })
+            XCTAssertEqual(result.exitCode, 2, "\(arguments)")
+            XCTAssertEqual(result.stdout, "", "\(arguments)")
+            XCTAssertTrue(result.stderr.hasPrefix("desqueeze: "), result.stderr)
+            XCTAssertFalse(result.stderr.contains(FileBackups.testFolderVariable))
+        }
     }
 
     func testTheToolSaysWhenItDoesNotUseTheTrash() throws {

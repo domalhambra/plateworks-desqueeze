@@ -96,6 +96,34 @@ final class ExitCodeTests: XCTestCase {
         XCTAssertTrue(h.out.lines.contains("No DNG or ARW files in this folder."))
     }
 
+    // Run and remove say it too, in text mode. The JSON does not change.
+    func testRunAndRemoveOnAnEmptyFolderSayTheSentenceAndGiveZero() throws {
+        for arguments in [["run", "Shoot 1", "--factor", "1.5"], ["remove", "Shoot 1"]] {
+            XCTAssertEqual(DesqueezeTool.run(arguments, in: h.environment), 0, "\(arguments)")
+            XCTAssertEqual(DesqueezeTool.run(arguments + ["--dry-run"], in: h.environment), 0, "\(arguments)")
+        }
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5"), 0)
+        XCTAssertEqual(h.out.lines, [FolderText.noPhotos])
+        XCTAssertEqual(h.run("remove", "Shoot 1"), 0)
+        XCTAssertEqual(h.out.lines, [FolderText.noPhotos])
+        XCTAssertEqual(h.run("remove", "Shoot 1", "--dry-run"), 0)
+        XCTAssertEqual(h.out.lines, ["Dry run. No file was changed.", FolderText.noPhotos])
+
+        XCTAssertEqual(h.run("remove", "Shoot 1", "--json"), 0)
+        let json = try h.json()
+        XCTAssertEqual(Set(json.allKeys.compactMap { $0 as? String }),
+                       ["folder", "factor", "dryRun", "converted", "set", "skipped", "blocked", "failed", "stopped",
+                        "unconvertedARWs", "notes"])
+        XCTAssertFalse(h.out.text.contains("No DNG or ARW"))
+    }
+
+    // Remove has no ARW work, but a folder with an ARW is not empty.
+    func testRemoveOnAFolderWithOnlyAnARWFileDoesNotSayItIsEmpty() throws {
+        try h.touch("X.ARW")
+        XCTAssertEqual(h.run("remove", "Shoot 1"), 0)
+        XCTAssertEqual(h.out.lines, ["0 set · 0 skipped · 0 failed"])
+    }
+
     // MARK: The test folder for backups
 
     func testTheToolSaysOnStandardErrorWhenBackupsDoNotGoToTheTrash() throws {

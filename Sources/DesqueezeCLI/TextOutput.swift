@@ -54,9 +54,10 @@ public enum TextOutput {
             lines += steps.map {
                 "  " + $0.action.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0) + "  " + $0.name
             }
-            lines.append("A run would give: \(report.countsLine)")
+            lines.append(report.folderIsEmpty ? FolderText.noPhotos : "A run would give: \(report.countsLine)")
         } else {
-            lines.append(report.countsLine)
+            // A folder with nothing in it has no counts worth a line.
+            lines.append(report.folderIsEmpty ? FolderText.noPhotos : report.countsLine)
         }
         for note in report.notes {
             lines.append(note.line)
