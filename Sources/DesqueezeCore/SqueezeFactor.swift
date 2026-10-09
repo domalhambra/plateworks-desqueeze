@@ -45,4 +45,11 @@ public struct SqueezeFactor: Equatable, Hashable, Sendable {
     public func matches(horizontal: Double, vertical: Double) -> Bool {
         abs(horizontal - value) < Self.tolerance && abs(vertical - 1) < Self.tolerance
     }
+
+    /// An unknown scale matches no factor. So a file that gave no value is
+    /// never counted as "already set", for Apply or for Remove.
+    public func matches(_ scale: Scale?) -> Bool {
+        guard let scale else { return false }
+        return matches(horizontal: scale.horizontal, vertical: scale.vertical)
+    }
 }

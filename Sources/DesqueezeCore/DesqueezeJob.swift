@@ -53,10 +53,10 @@ public final class CancelFlag: @unchecked Sendable {
     }
 }
 
-/// One run over a folder snapshot (design, section 4.3).
+/// One run over a folder (design, section 4.3).
 ///
-/// Order: convert every pending ARW, then tag every DNG, the new ones last.
-/// One file at a time. Cancel is honored between files.
+/// Order: scan the folder, convert every pending ARW, then tag every DNG, the
+/// new ones last. One file at a time. Cancel is honored between files.
 public struct DesqueezeJob: Sendable {
     private let tag: ScaleTagging
     private let converter: RawConverter?
@@ -70,8 +70,32 @@ public struct DesqueezeJob: Sendable {
         self.backups = backups
     }
 
+    /// Scans `folder`, then runs on what that scan found.
+    ///
+    /// This is the only public way to run. Each skip is decided on what the
+    /// folder holds at the call, never on what a front end read earlier.
+    ///
     /// - Parameter convert: false for Remove, which never converts.
+    /// - Throws: only when the scan fails. No file is changed then. A file
+    ///   that fails during the run is a note in the summary, not an error.
     public func run(
+        folder: URL,
+        factor: SqueezeFactor,
+        convert: Bool,
+        cancel: CancelFlag = CancelFlag(),
+        progress: (RunProgress) -> Void = { _ in }
+    ) throws -> RunSummary {
+        let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
+        return run(snapshot, factor: factor, convert: convert, cancel: cancel, progress: progress)
+    }
+
+    /// The run itself, on a snapshot.
+    ///
+    /// Not public, on purpose. A snapshot is true only at the moment of its
+    /// scan. A window that kept one across a run made Remove report "skipped"
+    /// for files that the run had just stretched. Tests reach this method
+    /// with `@testable`, to give the job a folder state without a folder.
+    func run(
         _ snapshot: FolderSnapshot,
         factor: SqueezeFactor,
         convert: Bool,
@@ -85,29 +109,35 @@ public struct DesqueezeJob: Sendable {
             return summary
         }
 
-        let arws = (convert && converter != nil) ? snapshot.pendingARWs : []
+        // Remove never converts. With no converter the ARW files wait.
+        let converter = convert ? self.converter : nil
+        let arws = converter == nil ? [] : snapshot.pendingARWs
         var dngs = snapshot.dngs
         var total = arws.count * 2 + dngs.count
         var completed = 0
 
-        for arw in arws {
-            if cancel.isCancelled {
-                summary.cancelled = true
-                return summary
+        if let converter {
+            for arw in arws {
+                if cancel.isCancelled {
+                    summary.cancelled = true
+                    return summary
+                }
+                do {
+                    let dng = try converter.convert(arw)
+                    summary.converted += 1
+                    // The converter writes no stretch, so the scale is known.
+                    dngs.append(DNGFile(url: dng, scale: .noStretch,
+                                        originalRawFileName: arw.lastPathComponent, hasBackup: false))
+                } catch {
+                    summary.failed += 1
+                    // This ARW made no DNG, so its tag step will not happen.
+                    total -= 1
+                    summary.notes.append(FileNote(name: arw.lastPathComponent, message: "Not converted.",
+                                                  detail: Self.describe(error)))
+                }
+                completed += 1
+                progress(RunProgress(completed: completed, total: total, name: arw.lastPathComponent))
             }
-            do {
-                let dng = try converter!.convert(arw)
-                summary.converted += 1
-                dngs.append(DNGFile(url: dng, horizontal: 1, vertical: 1,
-                                    originalRawFileName: arw.lastPathComponent, hasBackup: false))
-            } catch {
-                summary.failed += 1
-                total -= 1
-                summary.notes.append(FileNote(name: arw.lastPathComponent, message: "Not converted.",
-                                              detail: Self.describe(error)))
-            }
-            completed += 1
-            progress(RunProgress(completed: completed, total: total, name: arw.lastPathComponent))
         }
 
         for dng in dngs {
@@ -123,14 +153,23 @@ public struct DesqueezeJob: Sendable {
     }
 
     private func tagOne(_ dng: DNGFile, _ factor: SqueezeFactor, _ summary: inout RunSummary) {
-        if factor.matches(horizontal: dng.horizontal, vertical: dng.vertical) {
+        let hasBackup = backups.backupExists(for: dng.url)
+        if factor.matches(dng.scale) {
             summary.skipped += 1
+            // A run that died after its write leaves this. The backup is the
+            // file as it was before, so the user must know that it is there.
+            if hasBackup {
+                summary.notes.append(FileNote(
+                    name: dng.name,
+                    message: "Already set. A backup, \(dng.name)_original, is beside this file.",
+                    detail: nil))
+            }
             return
         }
         // exiftool never replaces an existing `_original`. A write over one
         // would leave a backup of the wrong state, and this app must not
         // discard a backup that it did not make.
-        if backups.backupExists(for: dng.url) {
+        if hasBackup {
             summary.skipped += 1
             summary.notes.append(FileNote(
                 name: dng.name,
@@ -141,24 +180,27 @@ public struct DesqueezeJob: Sendable {
 
         do {
             try tag.write(factor, to: dng.url)
-            guard let now = try tag.read(dng.url),
-                  factor.matches(horizontal: now.horizontal, vertical: now.vertical) else {
+            guard factor.matches(try tag.read(dng.url)) else {
                 throw TagError.toolFailed("The tag did not read back as \(factor.tagValue).")
             }
         } catch {
             // A failed write makes no backup and leaves the file unchanged.
             // Restore only when a backup exists.
             var message = "Not changed."
+            var detail = Self.describe(error)
             if backups.backupExists(for: dng.url) {
                 do {
                     try backups.restoreBackup(for: dng.url)
                     message = "Not changed. The backup was restored."
-                } catch {
-                    message = "The write failed, and the backup could not be restored. The backup is \(dng.name)_original."
+                } catch let restoreError {
+                    // The write may have passed and the check failed, so the
+                    // file may be changed. "The write failed" would be wrong.
+                    message = "The change failed, and the backup could not be restored. The backup is \(dng.name)_original."
+                    detail += "\nRestore: " + Self.describe(restoreError)
                 }
             }
             summary.failed += 1
-            summary.notes.append(FileNote(name: dng.name, message: message, detail: Self.describe(error)))
+            summary.notes.append(FileNote(name: dng.name, message: message, detail: detail))
             return
         }
 

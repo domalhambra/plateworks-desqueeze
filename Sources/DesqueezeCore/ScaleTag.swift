@@ -1,10 +1,26 @@
 import Foundation
 
+/// The two numbers of the `DefaultScale` tag: horizontal stretch, then
+/// vertical stretch.
+public struct Scale: Equatable, Sendable {
+    public let horizontal: Double
+    public let vertical: Double
+
+    /// No stretch: 1 and 1. A DNG that the converter just made holds this.
+    public static let noStretch = Scale(horizontal: 1, vertical: 1)
+
+    public init(horizontal: Double, vertical: Double) {
+        self.horizontal = horizontal
+        self.vertical = vertical
+    }
+}
+
 /// One row of the folder read: a DNG and its current tag.
 public struct TagRow: Equatable, Sendable {
     public let fileName: String
-    public let horizontal: Double
-    public let vertical: Double
+    /// Nil when exiftool gave no value. The tag is absent, or the file is not
+    /// a DNG that exiftool can read. The two cases look the same here.
+    public let scale: Scale?
     public let originalRawFileName: String?
 }
 
@@ -17,7 +33,8 @@ public enum TagError: Error, Equatable {
 public protocol ScaleTagging: Sendable {
     func readFolder(_ folder: URL) throws -> [TagRow]
     func write(_ factor: SqueezeFactor, to file: URL) throws
-    func read(_ file: URL) throws -> (horizontal: Double, vertical: Double)?
+    /// Nil when the file gives no value.
+    func read(_ file: URL) throws -> Scale?
 }
 
 /// The exiftool implementation.
@@ -58,20 +75,20 @@ public struct ScaleTag: ScaleTagging {
         }
     }
 
-    public func read(_ file: URL) throws -> (horizontal: Double, vertical: Double)? {
+    public func read(_ file: URL) throws -> Scale? {
         let result = try runner.run(exiftool, ["-s3", Self.tagName, file.path])
         return Self.parseScale(result.stdout)
     }
 
     /// Parses `1.5 1`. Returns nil for `-`, an empty string, or anything else.
-    static func parseScale(_ text: String) -> (horizontal: Double, vertical: Double)? {
+    static func parseScale(_ text: String) -> Scale? {
         let parts = text.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" })
         // `Double` parses "inf" and "nan", and exiftool will write and print them.
         guard parts.count == 2, let horizontal = Double(parts[0]), let vertical = Double(parts[1]),
               horizontal.isFinite, vertical.isFinite else {
             return nil
         }
-        return (horizontal, vertical)
+        return Scale(horizontal: horizontal, vertical: vertical)
     }
 
     /// Parses the tab-separated folder read. exiftool includes hidden files,
@@ -80,8 +97,7 @@ public struct ScaleTag: ScaleTagging {
         text.split(separator: "\n").compactMap { line in
             let cells = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
             guard cells.count == 3, !cells[0].hasPrefix(".") else { return nil }
-            let scale = parseScale(cells[1]) ?? (1, 1)
-            return TagRow(fileName: cells[0], horizontal: scale.horizontal, vertical: scale.vertical,
+            return TagRow(fileName: cells[0], scale: parseScale(cells[1]),
                           originalRawFileName: cells[2] == "-" ? nil : cells[2])
         }
     }

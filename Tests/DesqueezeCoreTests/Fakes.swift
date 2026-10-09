@@ -36,6 +36,12 @@ func removeTemporaryFolder(_ folder: URL) {
     try? FileManager.default.removeItem(at: base)
 }
 
+/// An error with a fixed description, so a test can assert the exact text.
+struct NamedError: LocalizedError {
+    let text: String
+    var errorDescription: String? { text }
+}
+
 /// An ordered record of what the fakes were asked to do.
 final class CallLog: @unchecked Sendable {
     var entries: [String] = []
@@ -69,9 +75,14 @@ final class FakeTag: ScaleTagging, @unchecked Sendable {
     let log: CallLog
     let backups: FakeBackups
     var rows: [TagRow] = []
+    var readFolderError: Error?
     var failWrites: Set<String> = []
     /// File names whose read-back does not match what was written.
     var wrongReadBack: Set<String> = []
+    /// File names whose read-back throws, as when exiftool cannot start.
+    var failReads: Set<String> = []
+    /// File names whose read-back finds no tag.
+    var noReadBack: Set<String> = []
     var onWrite: (() -> Void)?
     private var written: [String: SqueezeFactor] = [:]
 
@@ -82,6 +93,7 @@ final class FakeTag: ScaleTagging, @unchecked Sendable {
 
     func readFolder(_ folder: URL) throws -> [TagRow] {
         log.entries.append("readFolder")
+        if let readFolderError { throw readFolderError }
         return rows
     }
 
@@ -94,22 +106,26 @@ final class FakeTag: ScaleTagging, @unchecked Sendable {
         backups.existing.insert(name)
     }
 
-    func read(_ file: URL) throws -> (horizontal: Double, vertical: Double)? {
+    func read(_ file: URL) throws -> Scale? {
         let name = file.lastPathComponent
         log.entries.append("read \(name)")
-        if wrongReadBack.contains(name) { return (1, 1) }
-        return written[name].map { ($0.value, 1) }
+        if failReads.contains(name) { throw TagError.toolFailed("Error: read failed") }
+        if noReadBack.contains(name) { return nil }
+        if wrongReadBack.contains(name) { return .noStretch }
+        return written[name].map { Scale(horizontal: $0.value, vertical: 1) }
     }
 }
 
 final class FakeConverter: RawConverter, @unchecked Sendable {
     let log: CallLog
     var fail: Set<String> = []
+    var onConvert: (() -> Void)?
 
     init(log: CallLog) { self.log = log }
 
     func convert(_ arw: URL) throws -> URL {
         log.entries.append("convert \(arw.lastPathComponent)")
+        onConvert?()
         if fail.contains(arw.lastPathComponent) { throw ConvertError.failed("made no DNG") }
         return AdobeConverter.outputURL(for: arw)
     }

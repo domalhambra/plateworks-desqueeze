@@ -22,14 +22,14 @@ final class ScaleTagTests: XCTestCase {
     func testParseRowsReadsScaleAndOriginalName() {
         let rows = ScaleTag.parseRows("one.dng\t1 1\ta.ARW\nTWO.DNG\t1.5 1\tDSC05680.ARW\n")
         XCTAssertEqual(rows, [
-            TagRow(fileName: "one.dng", horizontal: 1, vertical: 1, originalRawFileName: "a.ARW"),
-            TagRow(fileName: "TWO.DNG", horizontal: 1.5, vertical: 1, originalRawFileName: "DSC05680.ARW"),
+            TagRow(fileName: "one.dng", scale: .noStretch, originalRawFileName: "a.ARW"),
+            TagRow(fileName: "TWO.DNG", scale: Scale(horizontal: 1.5, vertical: 1), originalRawFileName: "DSC05680.ARW"),
         ])
     }
 
     func testParseRowsDropsHiddenFilesAndReadsDashAsNoValue() {
         let rows = ScaleTag.parseRows(".hidden.dng\t1 1\ta.ARW\nnotag.dng\t-\t-\n\n")
-        XCTAssertEqual(rows, [TagRow(fileName: "notag.dng", horizontal: 1, vertical: 1, originalRawFileName: nil)])
+        XCTAssertEqual(rows, [TagRow(fileName: "notag.dng", scale: nil, originalRawFileName: nil)])
     }
 
     func testWritePassesTheFactorAsOneArgument() throws {
@@ -111,5 +111,13 @@ final class ScaleTagTests: XCTestCase {
         let summary = ProcessResult(exitCode: 0, stdout: "    0 image files updated\n    1 image files unchanged\n",
                                     stderr: "")
         XCTAssertEqual(ScaleTag.detail(summary), "1 image files unchanged")
+    }
+
+    // A row that holds no scale must not read as "1 1". Remove would then
+    // skip a file that it never read.
+    func testParseRowsGivesNoScaleForAnyCellThatIsNotTwoNumbers() {
+        let rows = ScaleTag.parseRows("junk.dng\t-\t-\nodd.dng\tinf 1\t-\nempty.dng\t\t-\ngood.dng\t1 1\t-\n")
+        XCTAssertEqual(rows.map(\.fileName), ["junk.dng", "odd.dng", "empty.dng", "good.dng"])
+        XCTAssertEqual(rows.map(\.scale), [nil, nil, nil, .noStretch])
     }
 }

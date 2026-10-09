@@ -50,4 +50,12 @@ final class SqueezeFactorTests: XCTestCase {
         XCTAssertEqual(SqueezeFactor(1.50001)?.value, 1.5)
         XCTAssertEqual(SqueezeFactor(1.23456)?.label, "1.2346")
     }
+
+    func testAnUnknownScaleMatchesNoFactor() {
+        XCTAssertFalse(SqueezeFactor.noStretch.matches(nil))
+        XCTAssertFalse(SqueezeFactor(1.5)!.matches(nil))
+        XCTAssertTrue(SqueezeFactor.noStretch.matches(Scale.noStretch))
+        XCTAssertTrue(SqueezeFactor(1.5)!.matches(Scale(horizontal: 1.5, vertical: 1)))
+        XCTAssertFalse(SqueezeFactor(1.5)!.matches(Scale.noStretch))
+    }
 }

@@ -6,15 +6,20 @@ public struct FolderSnapshot: Equatable, Sendable {
     public var dngs: [DNGFile]
     /// The ARW files that no DNG claims. Only these may go to the converter.
     public var pendingARWs: [URL]
+    /// Each `<name>.dng_original` whose DNG is not beside it. exiftool leaves
+    /// one when it stops between its two renames. It may be the only copy of
+    /// a photo. It is in no count, and a run does not touch it.
+    public var orphanBackups: [URL]
     public var isWritable: Bool
 
     public var photoCount: Int { dngs.count + pendingARWs.count }
     public var isEmpty: Bool { photoCount == 0 }
 
-    public init(folder: URL, dngs: [DNGFile], pendingARWs: [URL], isWritable: Bool) {
+    public init(folder: URL, dngs: [DNGFile], pendingARWs: [URL], orphanBackups: [URL], isWritable: Bool) {
         self.folder = folder
         self.dngs = dngs
         self.pendingARWs = pendingARWs
+        self.orphanBackups = orphanBackups
         self.isWritable = isWritable
     }
 }
@@ -38,8 +43,7 @@ public struct FolderScanner: Sendable {
             let row = rows[url.lastPathComponent]
             return DNGFile(
                 url: url,
-                horizontal: row?.horizontal ?? 1,
-                vertical: row?.vertical ?? 1,
+                scale: row?.scale,
                 originalRawFileName: row?.originalRawFileName,
                 hasBackup: backups.backupExists(for: url)
             )
@@ -48,6 +52,7 @@ public struct FolderScanner: Sendable {
             folder: folder,
             dngs: dngs,
             pendingARWs: FolderScan.pending(arws: contents.arws, dngs: dngs),
+            orphanBackups: contents.orphanBackups,
             isWritable: FileManager.default.isWritableFile(atPath: folder.path)
         )
     }

@@ -14,7 +14,7 @@ final class FolderScanTests: XCTestCase {
     }
 
     func dng(_ name: String, original: String? = nil) -> DNGFile {
-        DNGFile(url: folder.appendingPathComponent(name), horizontal: 1, vertical: 1,
+        DNGFile(url: folder.appendingPathComponent(name), scale: .noStretch,
                 originalRawFileName: original, hasBackup: false)
     }
 
@@ -85,5 +85,54 @@ final class FolderScanTests: XCTestCase {
             withDestinationURL: folder.appendingPathComponent("real.dng"))
         let contents = try FolderScan.contents(of: folder)
         XCTAssertEqual(contents.dngs.map(\.lastPathComponent), ["real.dng"])
+    }
+
+    // exiftool renames X.dng to X.dng_original, then its new file to X.dng.
+    // When it stops between the two, the backup is the only copy.
+    func testABackupWithNoDNGBesideItIsAnOrphan() throws {
+        for name in ["gone.dng_original", "LOUD.DNG_ORIGINAL", "DSC10.dng_original", "DSC9.dng_original"] {
+            try touch(name)
+        }
+        let contents = try FolderScan.contents(of: folder)
+        XCTAssertEqual(contents.orphanBackups.map(\.lastPathComponent),
+                       ["DSC9.dng_original", "DSC10.dng_original", "gone.dng_original", "LOUD.DNG_ORIGINAL"])
+        XCTAssertEqual(contents.dngs, [])
+        XCTAssertEqual(contents.arws, [])
+    }
+
+    func testABackupWithItsDNGBesideItIsNotAnOrphan() throws {
+        for name in ["kept.dng", "kept.dng_original", "gone.dng_original"] { try touch(name) }
+        let contents = try FolderScan.contents(of: folder)
+        XCTAssertEqual(contents.dngs.map(\.lastPathComponent), ["kept.dng"])
+        XCTAssertEqual(contents.orphanBackups.map(\.lastPathComponent), ["gone.dng_original"])
+    }
+
+    func testOnlyATopLevelVisibleRegularDNGBackupCanBeAnOrphan() throws {
+        try touch("gone.dng_original")
+        try touch(".hidden.dng_original")
+        try touch("Exports/nested.dng_original")
+        try touch("frame.ARW_original")
+        try touch("notes.txt_original")
+        try touch("dng_original")
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("folder.dng_original"),
+                                                withIntermediateDirectories: true)
+        let contents = try FolderScan.contents(of: folder)
+        XCTAssertEqual(contents.orphanBackups.map(\.lastPathComponent), ["gone.dng_original"])
+    }
+
+    // The scan does not count a folder or a link named X.dng as a DNG, so the
+    // backup beside one has no DNG.
+    func testABackupBesideAFolderOrALinkNamedLikeItsDNGIsAnOrphan() throws {
+        try touch("real.dng")
+        try touch("a.dng_original")
+        try touch("b.dng_original")
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("a.dng"),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: folder.appendingPathComponent("b.dng"),
+            withDestinationURL: folder.appendingPathComponent("real.dng"))
+        let contents = try FolderScan.contents(of: folder)
+        XCTAssertEqual(contents.dngs.map(\.lastPathComponent), ["real.dng"])
+        XCTAssertEqual(contents.orphanBackups.map(\.lastPathComponent), ["a.dng_original", "b.dng_original"])
     }
 }

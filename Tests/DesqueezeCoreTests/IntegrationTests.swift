@@ -50,6 +50,24 @@ final class IntegrationTests: XCTestCase {
         try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { $0.hasSuffix(suffix) }.sorted()
     }
 
+    /// The tag as the file holds it now. One file, read directly: not a scan.
+    func scaleOnDisk(_ name: String) throws -> Scale? {
+        try tag.read(folder.appendingPathComponent(name))
+    }
+
+    /// exiftool's SHA-256 of the image data alone. A tag write must not
+    /// change it.
+    func imageDataHash(_ file: URL) throws -> String {
+        let result = try SystemProcessRunner().run(
+            exiftool, ["-api", "ImageHashType=SHA256", "-ImageDataHash", "-s3", file.path])
+        let hash = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        // exiftool prints nothing, and exits 0, for a file that it cannot
+        // hash. Two empty strings would compare as equal.
+        XCTAssertEqual(hash.count, 64, "no image data hash for \(file.lastPathComponent): \(result.stderr)")
+        XCTAssertTrue(hash.allSatisfy(\.isHexDigit))
+        return hash
+    }
+
     func testARealRunConvertsTagsChecksAndClearsTheBackups() throws {
         // "already here.dng" has no ARW. "frame.ARW" has no DNG.
         _ = try copyFixture("sample.dng", as: "already here.dng")
@@ -69,8 +87,8 @@ final class IntegrationTests: XCTestCase {
 
         let second = try scanner.snapshot(of: folder)
         XCTAssertEqual(second.dngs.map(\.name), ["already here.dng", "frame.dng"])
-        XCTAssertEqual(second.dngs.map(\.horizontal), [1.5, 1.5])
-        XCTAssertEqual(second.dngs.map(\.vertical), [1, 1])
+        XCTAssertEqual(second.dngs.map(\.scale?.horizontal), [1.5, 1.5])
+        XCTAssertEqual(second.dngs.map(\.scale?.vertical), [1, 1])
         XCTAssertEqual(second.pendingARWs, [])
         XCTAssertEqual(try names(withSuffix: "_original"), [])
         XCTAssertEqual(try names(withSuffix: ".dng"), ["already here.dng", "frame.dng"], "no _1.dng duplicate")
@@ -83,7 +101,9 @@ final class IntegrationTests: XCTestCase {
 
         let removed = job.run(second, factor: .noStretch, convert: false)
         XCTAssertEqual(removed.set, 2)
-        XCTAssertEqual(try scanner.snapshot(of: folder).dngs.map(\.horizontal), [1, 1])
+        XCTAssertEqual(removed.failed, 0)
+        XCTAssertEqual(removed.notes, [])
+        XCTAssertEqual(try scanner.snapshot(of: folder).dngs.map(\.scale?.horizontal), [1, 1])
         XCTAssertEqual(try names(withSuffix: "_original"), [])
     }
 
@@ -95,5 +115,92 @@ final class IntegrationTests: XCTestCase {
         let snapshot = try scanner.snapshot(of: folder)
         XCTAssertEqual(snapshot.dngs.first?.originalRawFileName, "sample.ARW")
         XCTAssertEqual(snapshot.pendingARWs, [])
+    }
+
+    // The two runs are the only calls. Nothing scans between them, so Remove
+    // is right only when the job reads the folder itself.
+    func testApplyThenRemoveWithNoScanBetweenThemLeavesEveryDNGUnstretched() throws {
+        _ = try copyFixture("sample.dng", as: "already here.dng")
+        _ = try copyFixture("sample.ARW", as: "frame.ARW")
+
+        let applied = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+        let removed = try job.run(folder: folder, factor: .noStretch, convert: false)
+
+        XCTAssertEqual(applied.converted, 1)
+        XCTAssertEqual(applied.set, 2)
+        XCTAssertEqual(applied.failed, 0)
+        XCTAssertEqual(applied.notes, [])
+
+        XCTAssertEqual(removed.converted, 0)
+        XCTAssertEqual(removed.set, 2, "Remove must write both files, the converted one too")
+        XCTAssertEqual(removed.skipped, 0)
+        XCTAssertEqual(removed.failed, 0)
+        XCTAssertEqual(removed.notes, [])
+
+        XCTAssertEqual(try names(withSuffix: ".dng"), ["already here.dng", "frame.dng"])
+        XCTAssertEqual(try scaleOnDisk("already here.dng"), .noStretch)
+        XCTAssertEqual(try scaleOnDisk("frame.dng"), .noStretch)
+        XCTAssertEqual(try names(withSuffix: "_original"), [])
+    }
+
+    // The note "Not changed." is true only when a failed exiftool write makes
+    // no backup and leaves the file as it was. The fakes assume that. This
+    // test holds the real exiftool to it.
+    func testAFailedWriteAndAnOlderBackupLeaveEveryFileAsItWas() throws {
+        let good = try copyFixture("sample.dng", as: "good.dng")
+        let planted = try copyFixture("sample.dng", as: "planted.dng")
+        let plantedBackup = folder.appendingPathComponent("planted.dng_original")
+        let junk = folder.appendingPathComponent("junk.dng")
+        let junkBytes = Data("not a photo".utf8)
+        let backupBytes = Data("an older backup".utf8)
+        try junkBytes.write(to: junk)
+        try backupBytes.write(to: plantedBackup)
+        let plantedBefore = try Data(contentsOf: planted)
+        let hashBefore = try imageDataHash(good)
+
+        let applied = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+
+        XCTAssertEqual(applied.converted, 0)
+        XCTAssertEqual(applied.set, 1)
+        XCTAssertEqual(applied.failed, 1)
+        XCTAssertEqual(applied.skipped, 1)
+        XCTAssertEqual(applied.notes.map(\.name), ["junk.dng", "planted.dng"])
+        XCTAssertEqual(applied.notes.first?.message, "Not changed.")
+        XCTAssertEqual(applied.notes.first?.detail?.hasPrefix("Error"), true, "exiftool's own reason")
+        XCTAssertEqual(applied.notes.last, FileNote(
+            name: "planted.dng",
+            message: "Skipped. An older backup, planted.dng_original, is beside this file. Move it away, then run again.",
+            detail: nil))
+
+        // The junk file: the same bytes, and no backup of it.
+        XCTAssertEqual(try Data(contentsOf: junk), junkBytes)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: junk.path + "_original"))
+        // The planted pair: neither file was touched.
+        XCTAssertEqual(try Data(contentsOf: planted), plantedBefore)
+        XCTAssertEqual(try Data(contentsOf: plantedBackup), backupBytes)
+        XCTAssertEqual(try names(withSuffix: "_original"), ["planted.dng_original"])
+        XCTAssertEqual(try names(withSuffix: "_exiftool_tmp"), [])
+        // The good file: the tag changed, and the image data did not.
+        XCTAssertEqual(try scaleOnDisk("good.dng"), Scale(horizontal: 1.5, vertical: 1))
+        XCTAssertEqual(try imageDataHash(good), hashBefore)
+
+        // Remove, on the same folder. exiftool cannot read the junk file, so
+        // its scale is unknown, and it must fail aloud. It must not be skipped.
+        let removed = try job.run(folder: folder, factor: .noStretch, convert: false)
+
+        XCTAssertEqual(removed.set, 1)
+        XCTAssertEqual(removed.failed, 1)
+        XCTAssertEqual(removed.skipped, 1)
+        XCTAssertEqual(removed.notes.map(\.name), ["junk.dng", "planted.dng"])
+        XCTAssertEqual(removed.notes.first?.message, "Not changed.")
+        XCTAssertEqual(removed.notes.last, FileNote(
+            name: "planted.dng", message: "Already set. A backup, planted.dng_original, is beside this file.",
+            detail: nil))
+        XCTAssertEqual(try Data(contentsOf: junk), junkBytes)
+        XCTAssertEqual(try Data(contentsOf: planted), plantedBefore)
+        XCTAssertEqual(try Data(contentsOf: plantedBackup), backupBytes)
+        XCTAssertEqual(try names(withSuffix: "_original"), ["planted.dng_original"])
+        XCTAssertEqual(try scaleOnDisk("good.dng"), .noStretch)
+        XCTAssertEqual(try imageDataHash(good), hashBefore)
     }
 }

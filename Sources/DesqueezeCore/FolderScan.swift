@@ -3,9 +3,9 @@ import Foundation
 /// One DNG in the folder, with what the scan learned about it.
 public struct DNGFile: Equatable, Sendable {
     public let url: URL
-    /// The current `DefaultScale`. A missing tag reads as 1 and 1.
-    public var horizontal: Double
-    public var vertical: Double
+    /// The current `DefaultScale`. Nil when it is not known: exiftool gave no
+    /// value, or no row, for this file. Unknown is not "no stretch".
+    public var scale: Scale?
     /// The source file name that the converter recorded, when it did.
     public var originalRawFileName: String?
     /// True when `<name>_original` was beside the file at scan time.
@@ -13,10 +13,9 @@ public struct DNGFile: Equatable, Sendable {
 
     public var name: String { url.lastPathComponent }
 
-    public init(url: URL, horizontal: Double, vertical: Double, originalRawFileName: String?, hasBackup: Bool) {
+    public init(url: URL, scale: Scale?, originalRawFileName: String?, hasBackup: Bool) {
         self.url = url
-        self.horizontal = horizontal
-        self.vertical = vertical
+        self.scale = scale
         self.originalRawFileName = originalRawFileName
         self.hasBackup = hasBackup
     }
@@ -25,22 +24,31 @@ public struct DNGFile: Equatable, Sendable {
 public struct FolderContents: Equatable, Sendable {
     public var dngs: [URL]
     public var arws: [URL]
+    /// Each `<name>.dng_original` whose DNG is not beside it.
+    public var orphanBackups: [URL]
 }
 
 public enum FolderScan {
-    /// The DNG and ARW files at the top level of `folder`, sorted by name.
-    /// Subfolders, hidden files, and other file types are not returned.
+    /// The DNG and ARW files at the top level of `folder`, and each DNG
+    /// backup that has lost its DNG, sorted by name. Subfolders, hidden
+    /// files, and other file types are not returned.
     public static func contents(of folder: URL) throws -> FolderContents {
         let items = try FileManager.default.contentsOfDirectory(
             at: folder, includingPropertiesForKeys: [.isRegularFileKey], options: [])
-        var contents = FolderContents(dngs: [], arws: [])
+        var contents = FolderContents(dngs: [], arws: [], orphanBackups: [])
         for item in items {
-            guard !item.lastPathComponent.hasPrefix("."),
-                  (try? item.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
-            else { continue }
+            guard !item.lastPathComponent.hasPrefix("."), isRegularFile(item) else { continue }
             switch item.pathExtension.lowercased() {
             case "dng": contents.dngs.append(item)
             case "arw": contents.arws.append(item)
+            case "dng_original":
+                // The DNG is looked up on the disk, not in the list above, so
+                // the volume decides letter case here as it does for
+                // `FileBackups`. A folder or a link named like the DNG is not
+                // a DNG to this scan, so it does not count.
+                let name = item.lastPathComponent.dropLast("_original".count)
+                let dng = item.deletingLastPathComponent().appendingPathComponent(String(name))
+                if !isRegularFile(dng) { contents.orphanBackups.append(item) }
             default: break
             }
         }
@@ -49,7 +57,13 @@ public enum FolderScan {
         }
         contents.dngs.sort(by: byName)
         contents.arws.sort(by: byName)
+        contents.orphanBackups.sort(by: byName)
         return contents
+    }
+
+    /// False for a folder, and for a symbolic link: this does not follow one.
+    private static func isRegularFile(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
     }
 
     /// The ARW files that no DNG claims.
