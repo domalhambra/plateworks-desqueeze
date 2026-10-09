@@ -11,19 +11,36 @@ final class AppModel: ObservableObject {
         case custom
     }
 
+    /// The loaded folder. Set at the moment of a load, before its scan.
+    @Published private(set) var folder: URL?
+    /// What the newest scan of `folder` found. Nil until that scan lands.
     @Published private(set) var snapshot: FolderSnapshot?
-    @Published private(set) var folderMessage: String?
+    /// True while the newest scan is in flight.
+    @Published private(set) var isScanning = false
+    /// True when the newest scan of `folder` failed.
+    @Published private(set) var scanFailed = false
+    /// "Drop a folder", after a wrong drop. It says nothing about the loaded
+    /// folder, so it is apart from `folderMessages`.
+    @Published private(set) var dropMessage: String?
     @Published var choice: Choice
     @Published var customText: String
     @Published var customError: String?
     @Published private(set) var progress: RunProgress?
     @Published private(set) var summary: RunSummary?
+    /// True from the click on Run or Remove until the scan after the run has
+    /// landed. So no click can act on counts from before the run.
     @Published private(set) var isRunning = false
 
     let exiftool: URL?
     let converter: URL?
 
-    private var cancelFlag: CancelFlag?
+    /// The job that is in flight: how to stop it, and how to wait for it.
+    private var job: (cancel: CancelFlag, work: Task<RunSummary, Error>)?
+    /// The number of the newest scan. A scan that lands with an older number
+    /// is discarded.
+    private var scanNumber = 0
+    /// True after a quit has stopped a run. The app is about to end.
+    private var isQuitting = false
     private static let factorKey = "lastFactor"
 
     init() {
@@ -62,7 +79,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    var folderName: String? { snapshot?.folder.lastPathComponent }
+    var folderName: String? { folder?.lastPathComponent }
 
     /// For example `216 DNG · 12 ARW to convert`.
     var countsLine: String? {
@@ -77,14 +94,48 @@ final class AppModel: ObservableObject {
         return parts.joined(separator: " · ")
     }
 
+    /// The messages about the loaded folder. All come from the newest scan.
+    var folderMessages: [String] {
+        if scanFailed { return ["This folder could not be read."] }
+        guard let snapshot else { return [] }
+        var messages: [String] = []
+        if !snapshot.isWritable {
+            messages.append("This folder is read-only. Desqueeze cannot change its files.")
+        }
+        let orphans = snapshot.orphanBackups
+        if orphans.count == 1 {
+            let backup = orphans[0].lastPathComponent
+            let photo = backup.dropLast("_original".count)
+            messages.append("1 backup file has no DNG beside it. Rename \(backup) to \(photo) to get the photo back.")
+        } else if orphans.count > 1 {
+            messages.append("\(orphans.count) backup files have no DNG beside them. "
+                + "Rename each one from <name>.dng_original to <name>.dng to get the photos back.")
+        }
+        return messages
+    }
+
     /// The count in the run button: DNG files, plus ARW files that can convert.
     var runCount: Int {
         guard let snapshot else { return 0 }
         return snapshot.dngs.count + (converter == nil ? 0 : snapshot.pendingARWs.count)
     }
 
-    var canRun: Bool {
-        exiftool != nil && !isRunning && runCount > 0 && snapshot?.isWritable == true
+    var runLabel: String {
+        switch runCount {
+        case 0: return "Desqueeze"
+        case 1: return "Desqueeze 1 photo"
+        default: return "Desqueeze \(runCount) photos"
+        }
+    }
+
+    var canRun: Bool { canChangeFiles && runCount > 0 }
+
+    /// Remove never converts, so it needs a DNG.
+    var canRemove: Bool { canChangeFiles && snapshot?.dngs.isEmpty == false }
+
+    /// True when the counts are current and the folder accepts a write.
+    private var canChangeFiles: Bool {
+        !isScanning && !isRunning && snapshot?.isWritable == true
     }
 
     // MARK: Folder
@@ -102,43 +153,48 @@ final class AppModel: ObservableObject {
         guard !isRunning else { return false }
         guard urls.count == 1, let url = urls.first,
               (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
-            folderMessage = "Drop a folder"
+            dropMessage = "Drop a folder"
             return false
         }
         load(url)
         return true
     }
 
-    func load(_ folder: URL) {
+    /// Makes `url` the loaded folder. Everything about the previous folder is
+    /// gone at once, so the window never shows its counts under the new name.
+    func load(_ url: URL) {
+        guard !isRunning else { return }
+        folder = url
+        snapshot = nil
+        scanFailed = false
+        dropMessage = nil
         summary = nil
         progress = nil
-        scan(folder)
+        scan(url)
     }
 
-    private func scan(_ folder: URL) {
-        folderMessage = nil
-        guard let exiftool else {
-            snapshot = nil
-            return
-        }
+    /// Starts a scan off the main thread. Scans can overlap: a second folder
+    /// can load before the first scan lands. Only the newest scan is applied.
+    @discardableResult
+    private func scan(_ folder: URL) -> Task<Void, Never> {
+        guard let exiftool else { return Task {} }
+        scanNumber += 1
+        let number = scanNumber
+        isScanning = true
         let scanner = FolderScanner(tag: ScaleTag(exiftool: exiftool))
-        Task {
-            do {
-                let result = try await Task.detached { try scanner.snapshot(of: folder) }.value
-                snapshot = result
-                if !result.isWritable {
-                    folderMessage = "This folder is read-only. Desqueeze cannot change its files."
-                }
-            } catch {
-                snapshot = nil
-                folderMessage = "This folder could not be read."
-            }
+        return Task {
+            let result = try? await Task.detached { try scanner.snapshot(of: folder) }.value
+            guard number == scanNumber else { return }
+            snapshot = result
+            scanFailed = result == nil
+            isScanning = false
         }
     }
 
     // MARK: Run
 
     func run() {
+        guard canRun else { return }
         guard let factor else {
             customError = "Enter a number from 1 to 4, with at most four decimal places."
             return
@@ -149,35 +205,64 @@ final class AppModel: ObservableObject {
     }
 
     func remove() {
+        guard canRemove else { return }
         start(factor: .noStretch, convert: false)
     }
 
     func cancel() {
-        cancelFlag?.cancel()
+        job?.cancel.cancel()
+    }
+
+    /// For a quit during a run. Cancels the run and returns when its current
+    /// file is complete. Returns at once when no file work is in flight.
+    /// The caller must quit next: the window stays as it is, "running".
+    func stopRunForQuit() async {
+        isQuitting = true
+        guard let job else { return }
+        job.cancel.cancel()
+        _ = await job.work.result
     }
 
     private func start(factor: SqueezeFactor, convert: Bool) {
-        guard !isRunning, let snapshot, let exiftool else { return }
-        let job = DesqueezeJob(
+        guard let folder, let exiftool else { return }
+        let runner = DesqueezeJob(
             tag: ScaleTag(exiftool: exiftool),
             converter: converter.map { AdobeConverter(executable: $0) }
         )
         let flag = CancelFlag()
-        cancelFlag = flag
+        // The job reports progress from its own thread. A stream keeps the
+        // updates in order, and ends when the job returns.
+        let (updates, updatesEnd) = AsyncStream.makeStream(of: RunProgress.self)
+        let work = Task.detached {
+            defer { updatesEnd.finish() }
+            // The job scans the folder itself. It gets no counts from here.
+            return try runner.run(folder: folder, factor: factor, convert: convert, cancel: flag) {
+                updatesEnd.yield($0)
+            }
+        }
+        job = (flag, work)
         isRunning = true
         summary = nil
         progress = nil
 
         Task {
-            let result = await Task.detached {
-                job.run(snapshot, factor: factor, convert: convert, cancel: flag) { update in
-                    Task { @MainActor in self.progress = update }
-                }
-            }.value
+            for await update in updates { progress = update }
+            let result = try? await work.value
+            job = nil
+            // No scan for a window that is about to close: the scan would
+            // leave an exiftool process behind the app.
+            guard !isQuitting else { return }
+            if result == nil {
+                // The job's own scan failed, so no file was tried.
+                snapshot = nil
+                scanFailed = true
+            } else {
+                await scan(folder).value
+            }
+            // The result and the new counts arrive together.
             summary = result
+            progress = nil
             isRunning = false
-            cancelFlag = nil
-            scan(snapshot.folder)
         }
     }
 }

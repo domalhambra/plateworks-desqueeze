@@ -5,6 +5,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var model: AppModel
     @State private var isTargeted = false
+    @State private var notesHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -12,7 +13,7 @@ struct ContentView: View {
             dropZone
             factorRow
             actionRow
-            if let progress = model.progress, model.isRunning {
+            if let progress = model.progress {
                 ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
                 Text(progress.name)
                     .font(.caption)
@@ -66,12 +67,12 @@ struct ContentView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+            } else if model.isScanning {
+                ProgressView().controlSize(.small)
             }
-            if let message = model.folderMessage {
-                Text(message)
-                    .font(.callout)
-                    .foregroundStyle(.red)
-            }
+            ForEach(model.folderMessages, id: \.self) { zoneMessage($0) }
+            // A wrong drop gets its own line. It never hides a line above.
+            if let message = model.dropMessage { zoneMessage(message) }
             Button("Choose folder") { model.chooseFolder() }
                 .disabled(model.isRunning)
             Text("or drag a folder here")
@@ -93,6 +94,14 @@ struct ContentView: View {
         } isTargeted: {
             isTargeted = $0
         }
+    }
+
+    private func zoneMessage(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.red)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var factorRow: some View {
@@ -149,7 +158,7 @@ struct ContentView: View {
                     .controlSize(.large)
             } else {
                 Button(action: model.run) {
-                    Text("Desqueeze \(model.runCount) photos").frame(maxWidth: .infinity)
+                    Text(model.runLabel).frame(maxWidth: .infinity)
                 }
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
@@ -157,7 +166,7 @@ struct ContentView: View {
             }
             Button("Remove", action: model.remove)
                 .controlSize(.large)
-                .disabled(!model.canRun)
+                .disabled(!model.canRemove)
                 .help("Set every DNG back to no stretch")
         }
     }
@@ -178,17 +187,23 @@ struct ContentView: View {
                                 Text(note.name).font(.callout.weight(.medium))
                                 Text(note.message).font(.callout)
                                 if let detail = note.detail {
+                                    // A restore failure has two lines here.
                                     Text(detail)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
                                         .textSelection(.enabled)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { notesHeight = $0 }
                 }
-                .frame(maxHeight: 160)
+                // A scroll view has no height of its own, and this window
+                // takes its size from its content. So the list gets the
+                // height of its rows, up to a limit.
+                .frame(height: min(notesHeight, 160))
             }
         }
     }
