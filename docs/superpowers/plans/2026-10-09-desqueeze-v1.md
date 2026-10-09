@@ -276,11 +276,14 @@ git commit -m "core: package scaffold and SqueezeFactor"
 **Acceptance Criteria:**
 - [ ] `SystemProcessRunner` returns exit code, standard output, and standard error as three separate values.
 - [ ] `SystemProcessRunner` does not hang when a program writes 200,000 bytes to each stream.
+- [ ] `SystemProcessRunner` holds no file descriptor after a call returns or throws. Forty calls in a loop leave the open count where it started.
+- [ ] A missing executable makes `run` throw.
+- [ ] A relative `PATH` entry is not a candidate.
 - [ ] `ToolLocator` tries `/opt/homebrew/bin/exiftool`, then `/usr/local/bin/exiftool`, then each folder in `PATH`.
 - [ ] `ToolLocator` tries the registered converter app before `/Applications/Adobe DNG Converter.app`.
 - [ ] Each lookup returns `nil` when no candidate is executable.
 
-**Verify:** `swift test --filter "ProcessRunnerTests|ToolLocatorTests"` → `Executed 8 tests, with 0 failures`
+**Verify:** `swift test --filter "ProcessRunnerTests|ToolLocatorTests"` → `Executed 12 tests, with 0 failures`
 
 **Steps:**
 
@@ -316,6 +319,24 @@ final class ProcessRunnerTests: XCTestCase {
         let result = try runner.run(shell, ["-c", script])
         XCTAssertEqual(result.stdout.count, 200_000)
         XCTAssertEqual(result.stderr.count, 200_000)
+    }
+
+    func testAMissingExecutableThrows() {
+        XCTAssertThrowsError(try runner.run(URL(fileURLWithPath: "/nonexistent/exiftool"), []))
+    }
+
+    // One run makes two or three calls for each photo. Foundation autoreleases
+    // the pipe handles, so without a pool inside `run` a 700-photo folder
+    // passes the descriptor limit and every later call fails.
+    func testRepeatedCallsDoNotHoldFileDescriptors() throws {
+        func openDescriptors() throws -> Int {
+            try FileManager.default.contentsOfDirectory(atPath: "/dev/fd").count
+        }
+        _ = try runner.run(shell, ["-c", "true"])
+        let before = try openDescriptors()
+        for _ in 0..<20 { _ = try runner.run(shell, ["-c", "true"]) }
+        for _ in 0..<20 { _ = try? runner.run(URL(fileURLWithPath: "/nonexistent/tool"), []) }
+        XCTAssertLessThanOrEqual(try openDescriptors(), before + 4)
     }
 }
 ```
@@ -358,6 +379,19 @@ final class ToolLocatorTests: XCTestCase {
         XCTAssertNil(found.exiftool())
         XCTAssertNil(found.dngConverter())
     }
+
+    func testRelativePathEntriesAreNotCandidates() {
+        let found = locator(path: "bin:.:~/bin::/opt/tools", present: [])
+        XCTAssertEqual(found.exiftoolCandidates, [
+            "/opt/homebrew/bin/exiftool", "/usr/local/bin/exiftool", "/opt/tools/exiftool",
+        ])
+    }
+
+    func testTheStandardConverterAppIsListedOnce() {
+        let registered = URL(fileURLWithPath: "/Applications/Adobe DNG Converter.app/")
+        XCTAssertEqual(locator(registered: registered, present: []).converterApps,
+                       ["/Applications/Adobe DNG Converter.app"])
+    }
 }
 ```
 
@@ -384,7 +418,8 @@ final class FakeRunner: ProcessRunner, @unchecked Sendable {
     }
 }
 
-/// Makes an empty temporary folder and removes it when the test ends.
+/// Makes an empty temporary folder inside a new `desqueeze-tests-<id>` folder.
+/// The test removes it in `tearDown` with `removeTemporaryFolder`.
 func makeTemporaryFolder(named name: String = "Shoot 1") throws -> URL {
     let base = FileManager.default.temporaryDirectory
         .appendingPathComponent("desqueeze-tests-\(UUID().uuidString)")
@@ -393,8 +428,12 @@ func makeTemporaryFolder(named name: String = "Shoot 1") throws -> URL {
     return folder
 }
 
+/// Removes the `desqueeze-tests-<id>` folder that holds `folder`. Does nothing
+/// for any other URL, so a wrong argument cannot remove a real folder.
 func removeTemporaryFolder(_ folder: URL) {
-    try? FileManager.default.removeItem(at: folder.deletingLastPathComponent())
+    let base = folder.deletingLastPathComponent()
+    guard base.lastPathComponent.hasPrefix("desqueeze-tests-") else { return }
+    try? FileManager.default.removeItem(at: base)
 }
 ```
 
@@ -430,32 +469,38 @@ public struct SystemProcessRunner: ProcessRunner {
     public init() {}
 
     public func run(_ executable: URL, _ arguments: [String]) throws -> ProcessResult {
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = arguments
-        let out = Pipe()
-        let err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        process.standardInput = FileHandle.nullDevice
-        try process.run()
+        // Foundation autoreleases the pipe handles. Without this pool, a caller
+        // that loops holds two descriptors for each call until its own pool drains.
+        try autoreleasepool {
+            let process = Process()
+            process.executableURL = executable
+            process.arguments = arguments
+            let out = Pipe()
+            let err = Pipe()
+            process.standardOutput = out
+            process.standardError = err
+            process.standardInput = FileHandle.nullDevice
+            try process.run()
 
-        // Read both pipes at the same time. A program that fills one pipe
-        // while this code waits on the other would block forever.
-        let outData = DataBox()
-        let errData = DataBox()
-        let group = DispatchGroup()
-        let queue = DispatchQueue(label: "org.plateworks.desqueeze.pipes", attributes: .concurrent)
-        queue.async(group: group) { outData.value = out.fileHandleForReading.readDataToEndOfFile() }
-        queue.async(group: group) { errData.value = err.fileHandleForReading.readDataToEndOfFile() }
-        group.wait()
-        process.waitUntilExit()
+            // Read both pipes at the same time. A program that fills one pipe
+            // while this code waits on the other would block forever. A serial
+            // queue always gets a thread of its own, also when every thread of
+            // the Swift concurrency pool is blocked in this method.
+            let errData = DataBox()
+            let group = DispatchGroup()
+            DispatchQueue(label: "org.plateworks.desqueeze.stderr").async(group: group) {
+                errData.value = err.fileHandleForReading.readDataToEndOfFile()
+            }
+            let outData = out.fileHandleForReading.readDataToEndOfFile()
+            group.wait()
+            process.waitUntilExit()
 
-        return ProcessResult(
-            exitCode: process.terminationStatus,
-            stdout: String(decoding: outData.value, as: UTF8.self),
-            stderr: String(decoding: errData.value, as: UTF8.self)
-        )
+            return ProcessResult(
+                exitCode: process.terminationStatus,
+                stdout: String(decoding: outData, as: UTF8.self),
+                stderr: String(decoding: errData.value, as: UTF8.self)
+            )
+        }
     }
 }
 
@@ -490,7 +535,8 @@ public struct ToolLocator: Sendable {
         isExecutable: @escaping @Sendable (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
     ) {
         var tools = ["/opt/homebrew/bin/exiftool", "/usr/local/bin/exiftool"]
-        for folder in (pathVariable ?? "").split(separator: ":") where !folder.isEmpty {
+        // A relative entry would resolve against the app's working folder.
+        for folder in (pathVariable ?? "").split(separator: ":") where folder.hasPrefix("/") {
             let candidate = "\(folder)/exiftool"
             if !tools.contains(candidate) { tools.append(candidate) }
         }
@@ -518,11 +564,13 @@ public struct ToolLocator: Sendable {
 - [ ] **Step 5: Run the tests to see them pass**
 
 Run: `swift test --filter "ProcessRunnerTests|ToolLocatorTests"`
-Expected: `Executed 8 tests, with 0 failures`
+Expected: `Executed 12 tests, with 0 failures`
 
 - [ ] **Step 6: Break it, then restore it**
 
 In `ToolLocator.init`, swap the two fixed paths. Run the filter. Expected: `testExiftoolCandidateOrder` fails. Restore and run again. Expected: 0 failures.
+
+Then, in `SystemProcessRunner.run`, replace `try autoreleasepool {` with `try {` and the closing `}` of that block with `}()`. Run the filter. Expected: `testRepeatedCallsDoNotHoldFileDescriptors` fails. Restore and run again. Expected: 0 failures.
 
 - [ ] **Step 7: Commit**
 
@@ -1993,7 +2041,7 @@ git add scripts/make_fixtures.sh Tests
 git commit -m "tests: integration run on the real exiftool and Adobe DNG Converter"
 ```
 
-Expected from `swift test`: `Executed 53 tests, with 0 failures`.
+Expected from `swift test`: `Executed 57 tests, with 0 failures`.
 
 ---
 
@@ -2864,7 +2912,7 @@ python3 scripts/docs_check.py . --require docs/decisions.md --known-absent fixtu
 swift test 2>&1 | tail -2
 ```
 
-Expected: `exit 0`, then `Executed 54 tests, with 0 failures`.
+Expected: `exit 0`, then `Executed 58 tests, with 0 failures`.
 
 If the check reports a `dead-path`, correct the path in the document. Add no new `--known-absent` entry: the only path that is legitimately absent is `fixtures/`.
 
@@ -3330,4 +3378,4 @@ The spec's "known limitation" about Finder previews is a fact, not a behavior. I
 
 **Type check.** `SqueezeFactor`, `ProcessResult`, `ProcessRunner`, `SystemProcessRunner`, `ToolLocator`, `DNGFile`, `FolderContents`, `FolderScan`, `TagRow`, `TagError`, `ScaleTagging`, `ScaleTag`, `BackupHandling`, `FileBackups`, `ConvertError`, `RawConverter`, `AdobeConverter`, `FolderSnapshot`, `FolderScanner`, `FileNote`, `RunSummary`, `RunProgress`, `CancelFlag`, `DesqueezeJob`: each is defined in one task and used with the same signature in later tasks.
 
-**Test counts.** Task 1: 7. Task 2: 8. Task 3: 6. Task 4: 8. Task 5: 7. Task 6: 15 (3 scanner, 12 job). Task 7: 2. Task 9: 1. Total: 54.
+**Test counts.** Task 1: 7. Task 2: 12. Task 3: 6. Task 4: 8. Task 5: 7. Task 6: 15 (3 scanner, 12 job). Task 7: 2. Task 9: 1. Total: 58.
