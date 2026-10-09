@@ -1,0 +1,180 @@
+import DesqueezeCore
+import Foundation
+
+/// Everything the tool takes from the outside. A test gives its own.
+public struct ToolEnvironment: Sendable {
+    /// A relative folder on the command line is resolved against this.
+    public var workingFolder: URL
+    /// Nil when exiftool is not installed. No command can run then.
+    public var exiftool: URL?
+    /// Nil when Adobe DNG Converter is not installed. The DNG files still run.
+    public var dngConverter: URL?
+    public var runner: ProcessRunner
+    public var backups: BackupHandling
+    /// Set when `backups` does not use the Trash. The tool then says so.
+    public var testBackupFolder: URL?
+    /// Called once, at the start of a run that changes files. Returns the
+    /// flag that Control-C sets. Other commands keep the system's Control-C.
+    public var interruptFlag: @Sendable () -> CancelFlag
+    /// Each call is one line, or one JSON object. The line end is added.
+    public var standardOutput: @Sendable (String) -> Void
+    public var standardError: @Sendable (String) -> Void
+
+    public init(
+        workingFolder: URL, exiftool: URL?, dngConverter: URL?, runner: ProcessRunner, backups: BackupHandling,
+        testBackupFolder: URL?, interruptFlag: @escaping @Sendable () -> CancelFlag,
+        standardOutput: @escaping @Sendable (String) -> Void, standardError: @escaping @Sendable (String) -> Void
+    ) {
+        self.workingFolder = workingFolder
+        self.exiftool = exiftool
+        self.dngConverter = dngConverter
+        self.runner = runner
+        self.backups = backups
+        self.testBackupFolder = testBackupFolder
+        self.interruptFlag = interruptFlag
+        self.standardOutput = standardOutput
+        self.standardError = standardError
+    }
+}
+
+/// The `desqueeze` command line tool (design 12.1): parse, do, print.
+///
+/// Standard output holds the result only: text for a person, or with `--json`
+/// exactly one JSON object. Progress, `--verbose` and every message go to
+/// standard error. All file work is in `DesqueezeOperations`.
+public enum DesqueezeTool {
+    static let missingExiftool =
+        "Desqueeze needs exiftool, and it is not installed. Install it with: brew install exiftool"
+
+    /// - Parameter arguments: the command line with no program name.
+    /// - Returns: the exit code. 0, 1 or 2, as the design defines them.
+    public static func run(_ arguments: [String], in environment: ToolEnvironment) -> Int32 {
+        let invocation: Invocation
+        do {
+            invocation = try Arguments.parse(arguments)
+        } catch let error as UsageError {
+            Usage.error(error).forEach(environment.standardError)
+            return 2
+        } catch {
+            return 2
+        }
+
+        switch invocation.command {
+        case .help:
+            environment.standardOutput(Usage.help)
+            return 0
+        case .version:
+            environment.standardOutput(Usage.version)
+            return 0
+        case .scan(let folder):
+            return perform(invocation, folder, in: environment) { operations, url in
+                let report = try operations.scan(url)
+                return (try output(report, TextOutput.scan(report), invocation), exitCode(report))
+            }
+        case .run(let folder, let factor, let convert, let dryRun):
+            return perform(invocation, folder, in: environment) { operations, url in
+                let report = try operations.run(
+                    url, factor: factor, convert: convert, dryRun: dryRun,
+                    cancel: dryRun ? CancelFlag() : environment.interruptFlag(), progress: progress(to: environment))
+                return (try output(report, runText(report, environment), invocation), exitCode(report))
+            }
+        case .remove(let folder, let dryRun):
+            return perform(invocation, folder, in: environment) { operations, url in
+                let report = try operations.remove(
+                    url, dryRun: dryRun, cancel: dryRun ? CancelFlag() : environment.interruptFlag(),
+                    progress: progress(to: environment))
+                return (try output(report, runText(report, environment), invocation), exitCode(report))
+            }
+        }
+    }
+
+    // MARK: Exit codes
+
+    /// 1 when a file failed or was blocked, the run was stopped, or the
+    /// folder is read-only. A dry run gives the code of the run it plans.
+    static func exitCode(_ report: RunReport) -> Int32 {
+        let readOnly = report.notes.contains { $0.kind == .folderReadOnly }
+        return report.failed > 0 || report.blocked > 0 || report.stopped || readOnly ? 1 : 0
+    }
+
+    static func exitCode(_ report: ScanReport) -> Int32 { report.writable ? 0 : 1 }
+
+    // MARK: The parts of a command
+
+    /// The frame around every command that reads a folder: the exiftool
+    /// check, the folder path, `--verbose`, the output, and a scan that fails.
+    private static func perform(
+        _ invocation: Invocation, _ folder: String, in environment: ToolEnvironment,
+        _ work: (DesqueezeOperations, URL) throws -> (output: String, exitCode: Int32)
+    ) -> Int32 {
+        if let testFolder = environment.testBackupFolder {
+            environment.standardError("Test mode: backups go to \(testFolder.path), not to the Trash.")
+        }
+        guard let exiftool = environment.exiftool else {
+            return fail(missingExiftool, detail: nil, invocation, environment)
+        }
+        let url = resolve(folder, against: environment.workingFolder)
+        var runner = environment.runner
+        if invocation.verbose {
+            runner = LoggingProcessRunner(wrapping: runner, sink: environment.standardError)
+        }
+        let operations = DesqueezeOperations(exiftool: exiftool, dngConverter: environment.dngConverter,
+                                             runner: runner, backups: environment.backups)
+        do {
+            let result = try work(operations, url)
+            environment.standardOutput(result.output)
+            return result.exitCode
+        } catch {
+            // Only a scan throws. No file was tried.
+            return fail("This folder could not be read: \(url.path)", detail: describe(error), invocation,
+                        environment)
+        }
+    }
+
+    /// An absolute path as it is, and a relative path against the working
+    /// folder. `.` and `..` are taken out, and nothing else changes: no link
+    /// is resolved, so the report names the folder as the person named it.
+    static func resolve(_ folder: String, against workingFolder: URL) -> URL {
+        let path = folder.hasPrefix("/") ? folder : workingFolder.path + "/" + folder
+        var parts: [Substring] = []
+        for part in path.split(separator: "/") where part != "." {
+            if part == ".." {
+                _ = parts.popLast()
+            } else {
+                parts.append(part)
+            }
+        }
+        return URL(fileURLWithPath: "/" + parts.joined(separator: "/"), isDirectory: true)
+    }
+
+    /// The text of a result: one JSON object, or the lines for a person.
+    private static func output<Report: Encodable>(_ report: Report, _ text: @autoclosure () -> [String],
+                                                  _ invocation: Invocation) throws -> String {
+        invocation.json ? try ReportJSON.text(report) : text().joined(separator: "\n")
+    }
+
+    private static func runText(_ report: RunReport, _ environment: ToolEnvironment) -> [String] {
+        TextOutput.run(report, converterInstalled: environment.dngConverter != nil)
+    }
+
+    private static func progress(to environment: ToolEnvironment) -> (RunProgress) -> Void {
+        { environment.standardError("\($0.completed)/\($0.total) \($0.name)") }
+    }
+
+    /// A command that could give no report. The message goes to standard
+    /// error. With `--json`, standard output still gets its one object.
+    private static func fail(_ message: String, detail: String?, _ invocation: Invocation,
+                             _ environment: ToolEnvironment) -> Int32 {
+        environment.standardError("desqueeze: \(message)")
+        if let detail { environment.standardError("    \(detail)") }
+        if invocation.json, let json = try? ReportJSON.text(ErrorReport(error: message, detail: detail)) {
+            environment.standardOutput(json)
+        }
+        return 1
+    }
+
+    private static func describe(_ error: Error) -> String {
+        if case TagError.toolFailed(let text) = error { return text }
+        return error.localizedDescription
+    }
+}
