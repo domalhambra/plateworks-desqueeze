@@ -53,7 +53,8 @@ section named.
 | Finder and Quick Look ignore `DefaultScale`. Previews stay squeezed. | 4.4: a known limitation. |
 | Camera Raw honors the tag: a 4240-wide DNG opened at 6360 wide at 1.5, from both converters. | Confirms section 1. |
 | One tag write takes 0.10 s. One conversion takes 0.37 s, or 0.52 s with the converter's window open. A 228-file folder takes about 30 s. | 3: parallel writes are not needed. |
-| Trash on an external volume is untested. No volume was mounted. | 4.3 step 4 and 8: keep the backup and report. |
+| The Trash works on exFAT, HFS+ and APFS disk images, and a second file of the same name gets a time suffix. A physical card and a network share are untested. | 4.3 step 4 and 8: keep the backup and report. |
+| exiftool writes a new file. The tagged DNG has a creation date of now and no Finder tags. The file that carried them is the backup, which goes to the Trash. | 4.4: a known limitation. |
 
 **dnglab against Adobe DNG Converter.** dnglab 0.8.0 is an open-source
 converter (`brew install dnglab`). It read the A7S III file. Both outputs went
@@ -158,7 +159,9 @@ A run does these steps in order. One file at a time.
 
    The conversion passes when the exit code is 0 and `<base>.dng` exists. Both
    conditions are needed: the converter returns 0 on a file it cannot read, and
-   makes no DNG. The app never changes, moves, or deletes an ARW.
+   makes no DNG. The app never changes, moves, or deletes an ARW. If
+   `<base>.dng` appeared after the scan, the app does not start the converter
+   for that ARW, and reports it.
 
    The command line ignores the converter's window preferences. With `-c` it
    writes DNG 1.4, lossless raw, JPEG previews. That is the format of every DNG
@@ -196,7 +199,7 @@ A run does these steps in order. One file at a time.
      refuses the file, which can happen on an external volume, keep the backup
      and report the file with the reason.
    - Write or check failed, and a backup exists: restore `<name>.dng_original`
-     as `<name>.dng`, and report the file as failed.
+     as `<name>.dng` with one atomic rename, and report the file as failed.
    - Write failed with no backup: the file is unchanged. A failed write makes
      no backup. Report the file as failed.
 
@@ -213,8 +216,13 @@ each failed or reported file has its name and one plain sentence that says why.
 Under the counts, one fixed line: "Photos already in Lightroom: Metadata ›
 Read Metadata from File." Lightroom caches the tag at import.
 
-Known limitation: Finder and Quick Look ignore the tag, so their previews stay
-squeezed. Lightroom and Camera Raw render the correct shape.
+Known limitations:
+
+- Finder and Quick Look ignore the tag, so their previews stay squeezed.
+  Lightroom and Camera Raw render the correct shape.
+- A tagged DNG is a new file. Finder shows its Date Created as the time of the
+  run, and Finder tags on the old file are gone. The capture date inside the
+  photo does not change, and Lightroom reads that one.
 
 ## 5. The window
 

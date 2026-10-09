@@ -1097,13 +1097,15 @@ git commit -m "core: ScaleTag reads and writes DefaultScale through exiftool"
 
 **Acceptance Criteria:**
 - [ ] The backup of `a.dng` is `a.dng_original` in the same folder.
-- [ ] `restoreBackup` replaces the DNG with the backup's bytes, and the backup file is gone after it.
+- [ ] `restoreBackup` replaces the DNG with the backup's bytes, and the backup file is gone after it. The restored file has the backup's creation date.
+- [ ] `restoreBackup` with no backup throws and leaves the DNG unchanged. It works when the DNG is missing.
 - [ ] `trashBackup` calls the injected trash function with the backup's URL. Unit tests never move a file to the real Trash.
 - [ ] `AdobeConverter` passes exactly `-c -d <folder> <file.ARW>`.
 - [ ] `AdobeConverter` throws when the exit code is not 0.
 - [ ] `AdobeConverter` throws when the exit code is 0 and no `<base>.dng` exists. The real converter does this on a file it cannot read.
+- [ ] `AdobeConverter` does not start the converter when `<base>.dng` exists already.
 
-**Verify:** `swift test --filter "BackupsTests|RawConverterTests"` → `Executed 7 tests, with 0 failures`
+**Verify:** `swift test --filter "BackupsTests|RawConverterTests"` → `Executed 12 tests, with 0 failures`
 
 **Steps:**
 
@@ -1152,7 +1154,36 @@ final class BackupsTests: XCTestCase {
         let seen = URLBox()
         let backups = FileBackups(trash: { seen.url = $0 })
         try backups.trashBackup(for: dng)
-        XCTAssertEqual(seen.url?.lastPathComponent, "one.dng_original")
+        XCTAssertEqual(seen.url?.path, folder.path + "/one.dng_original")
+    }
+
+    func testBackupURLKeepsTheNameAsItIs() {
+        let odd = folder.appendingPathComponent("A #1 50%?.DNG")
+        XCTAssertEqual(FileBackups.backupURL(for: odd).path, folder.path + "/A #1 50%?.DNG_original")
+    }
+
+    func testRestoreWorksWhenTheDNGIsMissing() throws {
+        try Data("old".utf8).write(to: backup)
+        try FileBackups().restoreBackup(for: dng)
+        XCTAssertEqual(try Data(contentsOf: dng), Data("old".utf8))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: backup.path))
+    }
+
+    // In a folder with no ARW files the DNG is the only copy of the photo.
+    func testRestoreThrowsAndKeepsTheDNGWhenThereIsNoBackup() throws {
+        try Data("new".utf8).write(to: dng)
+        XCTAssertThrowsError(try FileBackups().restoreBackup(for: dng))
+        XCTAssertEqual(try Data(contentsOf: dng), Data("new".utf8))
+    }
+
+    func testRestoreBringsBackTheOriginalCreationDate() throws {
+        try Data("new".utf8).write(to: dng)
+        try Data("old".utf8).write(to: backup)
+        let shotOn = Date(timeIntervalSince1970: 1_577_880_000)
+        try FileManager.default.setAttributes([.creationDate: shotOn], ofItemAtPath: backup.path)
+        try FileBackups().restoreBackup(for: dng)
+        let restored = try FileManager.default.attributesOfItem(atPath: dng.path)[.creationDate] as? Date
+        XCTAssertEqual(restored, shotOn)
     }
 }
 
@@ -1170,42 +1201,74 @@ import XCTest
 final class RawConverterTests: XCTestCase {
     let executable = URL(fileURLWithPath: "/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter")
     let arw = URL(fileURLWithPath: "/tmp/Shoot 1/DSC05680.ARW")
+    let dngPath = "/tmp/Shoot 1/DSC05680.dng"
+    var runner: FakeRunner!
+    var disk: FakeDisk!
+
+    override func setUp() {
+        runner = FakeRunner()
+        disk = FakeDisk()
+    }
+
+    func converter() -> AdobeConverter {
+        let disk = self.disk!
+        return AdobeConverter(executable: executable, runner: runner, fileExists: { disk.exists($0) })
+    }
+
+    /// The converter writes the DNG while it runs.
+    func converterWritesTheDNG(exitCode: Int32 = 0) {
+        let disk = self.disk!
+        let dngPath = self.dngPath
+        runner.handler = { _ in
+            disk.paths.insert(dngPath)
+            return ProcessResult(exitCode: exitCode, stdout: "", stderr: "")
+        }
+    }
 
     func testPassesTheExactArgumentsAndReturnsTheDNG() throws {
-        let runner = FakeRunner()
-        let converter = AdobeConverter(executable: executable, runner: runner, fileExists: { _ in true })
-        let output = try converter.convert(arw)
+        converterWritesTheDNG()
+        let output = try converter().convert(arw)
         XCTAssertEqual(runner.calls, [FakeRunner.Call(executable: executable.path, arguments: [
             "-c", "-d", "/tmp/Shoot 1", "/tmp/Shoot 1/DSC05680.ARW",
         ])])
-        XCTAssertEqual(output.path, "/tmp/Shoot 1/DSC05680.dng")
+        XCTAssertEqual(output.path, dngPath)
     }
 
     func testThrowsWhenTheExitCodeIsNotZero() {
-        let runner = FakeRunner()
-        runner.handler = { _ in ProcessResult(exitCode: 1, stdout: "", stderr: "") }
-        let converter = AdobeConverter(executable: executable, runner: runner, fileExists: { _ in true })
-        XCTAssertThrowsError(try converter.convert(arw)) {
+        converterWritesTheDNG(exitCode: 1)
+        XCTAssertThrowsError(try converter().convert(arw)) {
             XCTAssertEqual($0 as? ConvertError, .failed("Adobe DNG Converter returned 1."))
         }
     }
 
     func testThrowsWhenExitIsZeroButNoDNGExists() {
-        let checked = PathBox()
-        let converter = AdobeConverter(executable: executable, runner: FakeRunner(), fileExists: {
-            checked.path = $0
-            return false
-        })
-        XCTAssertThrowsError(try converter.convert(arw)) {
+        XCTAssertThrowsError(try converter().convert(arw)) {
             XCTAssertEqual($0 as? ConvertError,
                            .failed("Adobe DNG Converter made no DNG. It may not support this file."))
         }
-        XCTAssertEqual(checked.path, "/tmp/Shoot 1/DSC05680.dng")
+        XCTAssertEqual(runner.calls.count, 1)
+        XCTAssertEqual(disk.checked, [dngPath, dngPath])
+    }
+
+    // The real converter never overwrites: it would write DSC05680_1.dng.
+    func testRefusesToStartWhenTheDNGExistsAlready() {
+        disk.paths = [dngPath]
+        XCTAssertThrowsError(try converter().convert(arw)) {
+            XCTAssertEqual($0 as? ConvertError, .failed("A DNG with this name exists already. Not converted."))
+        }
+        XCTAssertEqual(runner.calls, [])
     }
 }
 
-private final class PathBox: @unchecked Sendable {
-    var path: String?
+/// Answers "does this file exist" from a set, and records each question.
+final class FakeDisk: @unchecked Sendable {
+    var paths: Set<String> = []
+    var checked: [String] = []
+
+    func exists(_ path: String) -> Bool {
+        checked.append(path)
+        return paths.contains(path)
+    }
 }
 ```
 
@@ -1251,8 +1314,14 @@ public struct FileBackups: BackupHandling {
         try trash(Self.backupURL(for: dng))
     }
 
+    /// One atomic `rename`. The restored file is the backup itself, with its
+    /// own creation date and permissions. `FileManager.replaceItemAt` keeps the
+    /// replaced file's creation date, which is the time of the failed write.
+    /// With no backup this throws and leaves the DNG as it is.
     public func restoreBackup(for dng: URL) throws {
-        _ = try FileManager.default.replaceItemAt(dng, withItemAt: Self.backupURL(for: dng))
+        guard rename(Self.backupURL(for: dng).path, dng.path) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
     }
 }
 ```
@@ -1297,13 +1366,17 @@ public struct AdobeConverter: RawConverter {
     /// `-c` is lossless compression. `-d` is the output folder. The command
     /// line ignores the converter's window preferences.
     ///
-    /// Call this only for a pending ARW. When `<base>.dng` exists already, the
-    /// converter writes `<base>_1.dng`, and this method reports success for
-    /// the old file.
+    /// Only a pending ARW converts. When `<base>.dng` exists already, the real
+    /// converter writes `<base>_1.dng`, so this method refuses to start it.
     ///
     /// Never pass `-h`: it opens a window and the process never returns.
     public func convert(_ arw: URL) throws -> URL {
         let output = Self.outputURL(for: arw)
+        // The scan sends only pending files. This guard holds the rule at the
+        // last moment, for a DNG that appeared after the scan.
+        guard !fileExists(output.path) else {
+            throw ConvertError.failed("A DNG with this name exists already. Not converted.")
+        }
         let result = try runner.run(executable, ["-c", "-d", arw.deletingLastPathComponent().path, arw.path])
         guard result.exitCode == 0 else {
             throw ConvertError.failed("Adobe DNG Converter returned \(result.exitCode).")
@@ -1320,11 +1393,11 @@ public struct AdobeConverter: RawConverter {
 - [ ] **Step 5: Run the tests to see them pass**
 
 Run: `swift test --filter "BackupsTests|RawConverterTests"`
-Expected: `Executed 7 tests, with 0 failures`
+Expected: `Executed 12 tests, with 0 failures`
 
 - [ ] **Step 6: Break it, then restore it**
 
-In `convert`, delete the `guard fileExists(output.path)` block. Run the filter. Expected: `testThrowsWhenExitIsZeroButNoDNGExists` fails. Restore and run again. Expected: 0 failures.
+In `convert`, delete the second guard, `guard fileExists(output.path)`, which follows the run. Run the filter. Expected: `testThrowsWhenExitIsZeroButNoDNGExists` fails. Restore and run again. Expected: 0 failures.
 
 - [ ] **Step 7: Commit**
 
@@ -2128,7 +2201,7 @@ git add scripts/make_fixtures.sh Tests
 git commit -m "tests: integration run on the real exiftool and Adobe DNG Converter"
 ```
 
-Expected from `swift test`: `Executed 65 tests, with 0 failures`.
+Expected from `swift test`: `Executed 70 tests, with 0 failures`.
 
 ---
 
@@ -2999,7 +3072,7 @@ python3 scripts/docs_check.py . --require docs/decisions.md --known-absent fixtu
 swift test 2>&1 | tail -2
 ```
 
-Expected: `exit 0`, then `Executed 66 tests, with 0 failures`.
+Expected: `exit 0`, then `Executed 71 tests, with 0 failures`.
 
 If the check reports a `dead-path`, correct the path in the document. Add no new `--known-absent` entry: the only path that is legitimately absent is `fixtures/`.
 
@@ -3465,4 +3538,4 @@ The spec's "known limitation" about Finder previews is a fact, not a behavior. I
 
 **Type check.** `SqueezeFactor`, `ProcessResult`, `ProcessRunner`, `SystemProcessRunner`, `ToolLocator`, `DNGFile`, `FolderContents`, `FolderScan`, `TagRow`, `TagError`, `ScaleTagging`, `ScaleTag`, `BackupHandling`, `FileBackups`, `ConvertError`, `RawConverter`, `AdobeConverter`, `FolderSnapshot`, `FolderScanner`, `FileNote`, `RunSummary`, `RunProgress`, `CancelFlag`, `DesqueezeJob`: each is defined in one task and used with the same signature in later tasks.
 
-**Test counts.** Task 1: 7. Task 2: 12. Task 3: 9. Task 4: 13. Task 5: 7. Task 6: 15 (3 scanner, 12 job). Task 7: 2. Task 9: 1. Total: 66.
+**Test counts.** Task 1: 7. Task 2: 12. Task 3: 9. Task 4: 13. Task 5: 12. Task 6: 15 (3 scanner, 12 job). Task 7: 2. Task 9: 1. Total: 71.
