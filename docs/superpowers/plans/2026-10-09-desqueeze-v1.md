@@ -76,8 +76,10 @@ Each file has one job. `DesqueezeCore` imports Foundation only. AppKit and Swift
 - [ ] `SqueezeFactor.presets` has the labels `1.33`, `1.5`, `1.8`, `2`, in that order.
 - [ ] `SqueezeFactor(1.5)!.tagValue` is `"1.5 1"`.
 - [ ] `SqueezeFactor(text:)` rejects a value outside 1 to 4, more than four decimal places, a comma, and an empty string.
+- [ ] Two factors one step apart never match: `1.5` does not match a read-back of `1.5001`.
+- [ ] The stored value is rounded to four decimal places, so two factors with the same label are equal.
 
-**Verify:** `swift test --filter SqueezeFactorTests` → `Executed 6 tests, with 0 failures`
+**Verify:** `swift test --filter SqueezeFactorTests` → `Executed 7 tests, with 0 failures`
 
 **Steps:**
 
@@ -89,7 +91,7 @@ Each file has one job. `DesqueezeCore` imports Foundation only. AppKit and Swift
 
 # Swift and Xcode build state
 .build/
-build/
+/build/
 DerivedData/
 xcuserdata/
 .swiftpm/
@@ -97,7 +99,9 @@ xcuserdata/
 .DS_Store
 
 # One ARW and one DNG for the integration tests. Made by scripts/make_fixtures.sh.
-fixtures/
+# Anchored to the root: the repo ignores letter case, and an unanchored rule
+# would also hide a folder named Fixtures under Tests.
+/fixtures/
 
 # Python bytecode from scripts/docs_check.py, which the docs test runs.
 __pycache__/
@@ -137,7 +141,7 @@ final class SqueezeFactorTests: XCTestCase {
         XCTAssertEqual(SqueezeFactor(1.5)?.tagValue, "1.5 1")
         XCTAssertEqual(SqueezeFactor(2)?.tagValue, "2 1")
         XCTAssertEqual(SqueezeFactor(1.3333)?.tagValue, "1.3333 1")
-        XCTAssertEqual(SqueezeFactor.none.tagValue, "1 1")
+        XCTAssertEqual(SqueezeFactor.noStretch.tagValue, "1 1")
     }
 
     func testRangeIsOneToFourInclusive() {
@@ -161,12 +165,21 @@ final class SqueezeFactorTests: XCTestCase {
         }
     }
 
-    func testMatchesUsesTheReadBackTolerance() {
+    func testMatchesTellsAdjacentFactorsApart() {
         let factor = SqueezeFactor(1.5)!
         XCTAssertTrue(factor.matches(horizontal: 1.5, vertical: 1))
-        XCTAssertTrue(factor.matches(horizontal: 1.50005, vertical: 1))
-        XCTAssertFalse(factor.matches(horizontal: 1.51, vertical: 1))
+        XCTAssertTrue(factor.matches(horizontal: 1.50004, vertical: 1))
+        XCTAssertFalse(factor.matches(horizontal: 1.5001, vertical: 1))
+        XCTAssertFalse(factor.matches(horizontal: 1.4999, vertical: 1))
         XCTAssertFalse(factor.matches(horizontal: 1.5, vertical: 2))
+        XCTAssertFalse(SqueezeFactor(2)!.matches(horizontal: 2.0001, vertical: 1))
+    }
+
+    func testValueIsRoundedSoEqualLabelsAreEqualFactors() {
+        XCTAssertEqual(SqueezeFactor(text: "1.5"), SqueezeFactor(1.5))
+        XCTAssertEqual(SqueezeFactor(1.50001), SqueezeFactor(1.5))
+        XCTAssertEqual(SqueezeFactor(1.50001)?.value, 1.5)
+        XCTAssertEqual(SqueezeFactor(1.23456)?.label, "1.2346")
     }
 }
 ```
@@ -189,14 +202,17 @@ import Foundation
 /// app writes `<factor> 1`. A factor of 1 is no stretch.
 public struct SqueezeFactor: Equatable, Hashable, Sendable {
     public static let range: ClosedRange<Double> = 1...4
-    /// How close a read-back value must be to count as this factor.
-    public static let tolerance = 0.0001
+    /// How close a read-back value must be to count as this factor: less than
+    /// half of the smallest step between two factors, so neighbors never match.
+    public static let tolerance = 0.00005
     public static let presets: [SqueezeFactor] = [1.33, 1.5, 1.8, 2].compactMap { SqueezeFactor($0) }
-    /// No stretch. Remove writes this.
-    public static let none = SqueezeFactor(1)!
+    /// No stretch. Remove writes this. Not named `none`: on a `SqueezeFactor?`,
+    /// `.none` would mean nil.
+    public static let noStretch = SqueezeFactor(1)!
 
     public let value: Double
 
+    /// Rounds to four decimal places, then checks the range.
     public init?(_ value: Double) {
         let rounded = (value * 10_000).rounded() / 10_000
         guard Self.range.contains(rounded) else { return nil }
@@ -223,7 +239,7 @@ public struct SqueezeFactor: Equatable, Hashable, Sendable {
     public var tagValue: String { "\(label) 1" }
 
     public func matches(horizontal: Double, vertical: Double) -> Bool {
-        abs(horizontal - value) <= Self.tolerance && abs(vertical - 1) <= Self.tolerance
+        abs(horizontal - value) < Self.tolerance && abs(vertical - 1) < Self.tolerance
     }
 }
 ```
@@ -231,7 +247,7 @@ public struct SqueezeFactor: Equatable, Hashable, Sendable {
 - [ ] **Step 6: Run the test to see it pass**
 
 Run: `swift test --filter SqueezeFactorTests`
-Expected: `Executed 6 tests, with 0 failures`
+Expected: `Executed 7 tests, with 0 failures`
 
 - [ ] **Step 7: Break it, then restore it**
 
@@ -1202,7 +1218,7 @@ git commit -m "core: backup handling and the Adobe converter"
 - [ ] A DNG with an existing backup gets no write, counts as skipped, and gets a note.
 - [ ] A failed write with no backup calls no restore. A failed check with a backup calls restore. Both count as failed.
 - [ ] A refused Trash counts the file as set and adds a note.
-- [ ] Remove (factor 1, `convert: false`) never calls the converter.
+- [ ] Remove (`.noStretch`, `convert: false`) never calls the converter.
 - [ ] The converter is never called for an ARW that is not in `pendingARWs`.
 - [ ] Cancel stops before the next file. Files already done stay done.
 - [ ] A read-only folder changes nothing and returns one note.
@@ -1454,7 +1470,7 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testRemoveWritesOneOneAndNeverConverts() {
         let files = [dng("A.dng", at: 1.5), dng("B.dng", at: 1)]
-        let summary = job().run(snapshot(dngs: files, pending: ["X.ARW"]), factor: .none, convert: false)
+        let summary = job().run(snapshot(dngs: files, pending: ["X.ARW"]), factor: .noStretch, convert: false)
         XCTAssertEqual(log.entries, ["write 1 1 A.dng", "read A.dng", "trash A.dng"])
         XCTAssertEqual(summary.converted, 0)
         XCTAssertEqual(summary.set, 1)
@@ -1934,7 +1950,7 @@ final class IntegrationTests: XCTestCase {
         XCTAssertEqual(rerun.set, 0)
         XCTAssertEqual(rerun.converted, 0)
 
-        let removed = job.run(second, factor: .none, convert: false)
+        let removed = job.run(second, factor: .noStretch, convert: false)
         XCTAssertEqual(removed.set, 2)
         XCTAssertEqual(try scanner.snapshot(of: folder).dngs.map(\.horizontal), [1, 1])
         XCTAssertEqual(try names(withSuffix: "_original"), [])
@@ -1977,7 +1993,7 @@ git add scripts/make_fixtures.sh Tests
 git commit -m "tests: integration run on the real exiftool and Adobe DNG Converter"
 ```
 
-Expected from `swift test`: `Executed 52 tests, with 0 failures`.
+Expected from `swift test`: `Executed 53 tests, with 0 failures`.
 
 ---
 
@@ -2233,7 +2249,7 @@ final class AppModel: ObservableObject {
     }
 
     func remove() {
-        start(factor: .none, convert: false)
+        start(factor: .noStretch, convert: false)
     }
 
     func cancel() {
@@ -2848,7 +2864,7 @@ python3 scripts/docs_check.py . --require docs/decisions.md --known-absent fixtu
 swift test 2>&1 | tail -2
 ```
 
-Expected: `exit 0`, then `Executed 53 tests, with 0 failures`.
+Expected: `exit 0`, then `Executed 54 tests, with 0 failures`.
 
 If the check reports a `dead-path`, correct the path in the document. Add no new `--known-absent` entry: the only path that is legitimately absent is `fixtures/`.
 
@@ -3314,4 +3330,4 @@ The spec's "known limitation" about Finder previews is a fact, not a behavior. I
 
 **Type check.** `SqueezeFactor`, `ProcessResult`, `ProcessRunner`, `SystemProcessRunner`, `ToolLocator`, `DNGFile`, `FolderContents`, `FolderScan`, `TagRow`, `TagError`, `ScaleTagging`, `ScaleTag`, `BackupHandling`, `FileBackups`, `ConvertError`, `RawConverter`, `AdobeConverter`, `FolderSnapshot`, `FolderScanner`, `FileNote`, `RunSummary`, `RunProgress`, `CancelFlag`, `DesqueezeJob`: each is defined in one task and used with the same signature in later tasks.
 
-**Test counts.** Task 1: 6. Task 2: 8. Task 3: 6. Task 4: 8. Task 5: 7. Task 6: 15 (3 scanner, 12 job). Task 7: 2. Task 9: 1. Total: 53.
+**Test counts.** Task 1: 7. Task 2: 8. Task 3: 6. Task 4: 8. Task 5: 7. Task 6: 15 (3 scanner, 12 job). Task 7: 2. Task 9: 1. Total: 54.

@@ -187,7 +187,8 @@ A run does these steps in order. One file at a time.
    exiftool -s3 -SubIFD:DefaultScale <file.dng>
    ```
 
-   The check passes when the first number is within 0.0001 of the factor and
+   The check passes when the first number is within 0.00005 of the factor (half
+   of the smallest step between two factors, so neighbors never match) and
    the second number is 1.
 
 4. **Clear the backup.**
