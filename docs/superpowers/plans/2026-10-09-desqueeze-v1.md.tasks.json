@@ -4,7 +4,7 @@
     {
       "id": 1,
       "subject": "Task 1: Package scaffold and `SqueezeFactor`",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** A Swift package that builds and tests, with the type that validates a squeeze factor and formats the tag value.\n\n**Files:**\n- Create: `.gitignore`\n- Create: `Package.swift`\n- Create: `Sources/DesqueezeCore/SqueezeFactor.swift`\n- Test: `Tests/DesqueezeCoreTests/SqueezeFactorTests.swift`\n\n**Acceptance Criteria:**\n- [ ] `swift test` runs and passes with no Xcode project present.\n- [ ] `SqueezeFactor.presets` has the labels `1.33`, `1.5`, `1.8`, `2`, in that order.\n- [ ] `SqueezeFactor(1.5)!.tagValue` is `\"1.5 1\"`.\n- [ ] `SqueezeFactor(text:)` rejects a value outside 1 to 4, more than four decimal places, a comma, and an empty string.\n- [ ] Two factors one step apart never match: `1.5` does not match a read-back of `1.5001`.\n- [ ] The stored value is rounded to four decimal places, so two factors with the same label are equal.\n\n**Verify:** `swift test --filter SqueezeFactorTests` \u2192 `Executed 7 tests, with 0 failures`\n\n**Steps:**\n- Step 1: Write `.gitignore`\n- Step 2: Write `Package.swift`\n- Step 3: Write the failing test\n- Step 4: Run the test to see it fail\n- Step 5: Write the implementation\n- Step 6: Run the test to see it pass\n- Step 7: Break it, then restore it\n- Step 8: Commit\n\n```json:metadata\n{\"files\": [\".gitignore\", \"Package.swift\", \"Sources/DesqueezeCore/SqueezeFactor.swift\", \"Tests/DesqueezeCoreTests/SqueezeFactorTests.swift\"], \"verifyCommand\": \"swift test --filter SqueezeFactorTests\", \"acceptanceCriteria\": [\"`swift test` runs and passes with no Xcode project present.\", \"`SqueezeFactor.presets` has the labels `1.33`, `1.5`, `1.8`, `2`, in that order.\", \"`SqueezeFactor(1.5)!.tagValue` is `\\\"1.5 1\\\"`.\", \"`SqueezeFactor(text:)` rejects a value outside 1 to 4, more than four decimal places, a comma, and an empty string.\", \"Two factors one step apart never match: `1.5` does not match a read-back of `1.5001`.\", \"The stored value is rounded to four decimal places, so two factors with the same label are equal.\"]}\n```"
     },
     {
@@ -110,5 +110,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-10-09T13:12:25-07:00"
+  "lastUpdated": "2026-10-09T13:15:46-07:00"
 }
