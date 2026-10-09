@@ -157,6 +157,82 @@ final class RunSummaryTests: XCTestCase {
         XCTAssertEqual(h.log.entries, [])
     }
 
+    // MARK: The sentence about the ARW files a run left
+
+    func left(_ count: Int, stopped: Bool = false) -> RunSummary {
+        var summary = RunSummary()
+        summary.unconvertedARWs = count
+        summary.cancelled = stopped
+        return summary
+    }
+
+    func testARunThatLeftNoARWHasNoSentence() {
+        XCTAssertNil(left(0).unconvertedARWsLine(converterAvailable: true))
+        XCTAssertNil(left(0).unconvertedARWsLine(converterAvailable: false))
+    }
+
+    func testTheSentenceHasTheCount() {
+        XCTAssertEqual(left(1).unconvertedARWsLine(converterAvailable: true), "1 ARW file was not converted.")
+        XCTAssertEqual(left(12).unconvertedARWsLine(converterAvailable: true), "12 ARW files were not converted.")
+    }
+
+    func testTheSentenceSaysWhyWhenTheConverterIsMissing() {
+        XCTAssertEqual(left(1).unconvertedARWsLine(converterAvailable: false),
+                       "1 ARW file was not converted. Adobe DNG Converter is not installed.")
+        XCTAssertEqual(left(12).unconvertedARWsLine(converterAvailable: false),
+                       "12 ARW files were not converted. Adobe DNG Converter is not installed.")
+    }
+
+    // The job with no converter, to the sentence: the count is the job's own.
+    func testTheSentenceOfARunWithNoConverter() {
+        let summary = h.job(withConverter: false).run(
+            h.snapshot(dngs: [h.dng("A.dng")], pending: ["X.ARW", "Y.ARW"]), factor: factor, convert: true)
+        XCTAssertEqual(summary.unconvertedARWsLine(converterAvailable: false),
+                       "2 ARW files were not converted. Adobe DNG Converter is not installed.")
+    }
+
+    func testTheReportOfARunHasTheSameSentence() {
+        let report = RunReport(folder: h.folder, factor: factor, summary: left(12))
+        XCTAssertEqual(report.unconvertedARWsLine(converterAvailable: false),
+                       left(12).unconvertedARWsLine(converterAvailable: false))
+    }
+
+    func testTheReportOfADryRunSaysWouldNotBe() {
+        let plan = RunPlan(steps: [], summary: left(2))
+        let report = RunReport(folder: h.folder, factor: factor, plan: plan)
+        XCTAssertEqual(report.unconvertedARWsLine(converterAvailable: true), "2 ARW files would not be converted.")
+        XCTAssertEqual(report.unconvertedARWsLine(converterAvailable: false),
+                       "2 ARW files would not be converted. Adobe DNG Converter is not installed.")
+        let one = RunReport(folder: h.folder, factor: factor, plan: RunPlan(steps: [], summary: left(1)))
+        XCTAssertEqual(one.unconvertedARWsLine(converterAvailable: true), "1 ARW file would not be converted.")
+    }
+
+    // MARK: The line of a note, and the result that needs a look
+
+    func testTheLineOfANoteIsItsNameThenItsSentence() {
+        XCTAssertEqual(FileNote(name: "x.dng", kind: .failed, message: "Not changed.", detail: "Error").line,
+                       "x.dng: Not changed.")
+    }
+
+    func testAResultWithAFailedOrABlockedFileNeedsAttention() {
+        XCTAssertFalse(RunSummary().needsAttention)
+        var summary = RunSummary()
+        summary.set = 3
+        summary.skipped = 2
+        summary.unconvertedARWs = 4
+        summary.cancelled = true
+        XCTAssertFalse(summary.needsAttention, "a stopped run with no failed file is not an error")
+        summary.failed = 1
+        XCTAssertTrue(summary.needsAttention)
+        summary.failed = 0
+        summary.blocked = 1
+        XCTAssertTrue(summary.needsAttention)
+    }
+
+    func testTheLightroomLineIsTheLineOfTheDesign() {
+        XCTAssertEqual(RunSummary.lightroomHint, "Photos already in Lightroom: Metadata › Read Metadata from File.")
+    }
+
     // MARK: The one line of counts
 
     func line(_ change: (inout RunSummary) -> Void) -> String {

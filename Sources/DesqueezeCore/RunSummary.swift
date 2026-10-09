@@ -30,6 +30,8 @@ public struct FileNote: Equatable, Sendable, Identifiable, Codable {
     public let detail: String?
 
     public var id: String { name + "\n" + message }
+    /// The note as one line of text: the name, then the sentence.
+    public var line: String { "\(name): \(message)" }
 
     public init(name: String, kind: Kind, message: String, detail: String?) {
         self.name = name
@@ -51,6 +53,9 @@ public struct FileNote: Equatable, Sendable, Identifiable, Codable {
 /// Each sentence a run can say about a file, with its kind. They are made
 /// here and nowhere else, so the run and the dry run say the same words.
 extension FileNote {
+    /// The only place that makes this sentence. A front end that names an
+    /// orphan backup shows the `line` of this note (`FolderText.messages`).
+    ///
     /// - Parameter backup: the file name, `<name>.dng_original`.
     public static func orphanBackup(named backup: String) -> FileNote {
         FileNote(name: backup, kind: .orphanBackup,
@@ -124,6 +129,29 @@ extension RunSummary {
         parts.append("\(failed) failed")
         if stopped { parts.append("stopped") }
         return parts.joined(separator: " · ")
+    }
+
+    /// The fixed line under the counts (design 4.4). Lightroom reads the tag
+    /// at import, and keeps what it read.
+    public static let lightroomHint = "Photos already in Lightroom: Metadata › Read Metadata from File."
+
+    /// True when a file failed or was blocked. A front end then marks the
+    /// result as one to look at. A stopped run with no such file is not one.
+    public var needsAttention: Bool { failed > 0 || blocked > 0 }
+
+    /// The sentence about the ARW files the run left, with the count. Nil
+    /// when it left none.
+    ///
+    /// - Parameter converterAvailable: false adds the reason.
+    public func unconvertedARWsLine(converterAvailable: Bool) -> String? {
+        Self.unconvertedARWsLine(count: unconvertedARWs, dryRun: false, converterAvailable: converterAvailable)
+    }
+
+    static func unconvertedARWsLine(count: Int, dryRun: Bool, converterAvailable: Bool) -> String? {
+        guard count > 0 else { return nil }
+        let files = count == 1 ? "1 ARW file" : "\(count) ARW files"
+        let verb = dryRun ? "would not be" : (count == 1 ? "was not" : "were not")
+        return "\(files) \(verb) converted." + (converterAvailable ? "" : " Adobe DNG Converter is not installed.")
     }
 }
 

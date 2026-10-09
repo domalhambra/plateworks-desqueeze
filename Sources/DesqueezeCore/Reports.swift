@@ -127,6 +127,12 @@ public struct RunReport: Codable, Equatable, Sendable {
         RunSummary.countsLine(converted: converted, set: set, skipped: skipped, blocked: blocked, failed: failed,
                               stopped: stopped)
     }
+
+    /// The sentence of `RunSummary.unconvertedARWsLine`. A dry run says
+    /// "would not be".
+    public func unconvertedARWsLine(converterAvailable: Bool) -> String? {
+        RunSummary.unconvertedARWsLine(count: unconvertedARWs, dryRun: dryRun, converterAvailable: converterAvailable)
+    }
 }
 
 /// What a front end prints as JSON when it can give no report.
