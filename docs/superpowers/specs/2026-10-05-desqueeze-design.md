@@ -243,6 +243,14 @@ skipped, blocked (when it is not zero), failed, and "stopped" after a Cancel. Be
 reported file has its name, one plain sentence, and the tool's own words on a
 detail line.
 
+When a run left ARW files unconverted because Adobe DNG Converter is missing,
+the result says so, with the count.
+
+The result line and each error message carry a symbol, and the counts stay in
+the primary text colour. Colour is never the only signal: the Mac's accent
+colour can be the same red as an error. A result with a failed or blocked file
+gets the "needs attention" symbol.
+
 Under the counts, one fixed line: "Photos already in Lightroom: Metadata ›
 Read Metadata from File." Lightroom caches the tag at import.
 
@@ -260,12 +268,12 @@ One fixed-width window, about 440 points wide.
 
 | Part | Behavior |
 |---|---|
-| Drop zone | Accepts one folder. A dropped file that is not a folder shows "Drop a folder" until the next folder loads. That message never replaces a message about the loaded folder. Holds the "Choose folder" button, which opens the standard folder panel. |
-| Folder summary | Folder name and the counts from the scan. While a scan runs, the previous folder's counts are gone and Run and Remove are off. A read-only folder and each orphan backup get a message here. |
-| Factor row | Four preset buttons and one custom field. One factor is selected at a time. |
+| Drop zone | Accepts one folder. A symbolic link to a folder counts as that folder. A package, such as an app or a Lightroom library, is not a folder here. A dropped file that is not a folder shows "Drop a folder" until the next folder loads. That message never replaces a message about the loaded folder. Holds the "Choose folder" button, which opens the standard folder panel. |
+| Folder summary | Folder name and the counts from the scan. While a scan runs, the previous folder's counts are gone and Run and Remove are off. A read-only folder gets a message here. Each orphan backup is named here with the name to rename it to: up to five by name, then a count of the others. |
+| Factor row | Four preset buttons and one custom field. One factor is selected at a time. A click in the custom field selects it. VoiceOver hears which factor is selected. |
 | Run button | Label: `Desqueeze N photos`, `Desqueeze 1 photo`, or `Desqueeze` when there is nothing to run. N is the count of DNG files plus the pending ARW files that can convert. When Adobe DNG Converter is missing, the ARW files are not in N. |
 | Remove button | Writes `1 1`. On only when the folder has a DNG. It asks nothing and runs at once: the change is reversible. |
-| Progress bar | One step for each conversion and one for each tag write. During a run, the Run button becomes Cancel. The run stays "running" until the scan after it has landed, so no click can act on old counts. |
+| Progress bar | One step for each conversion and one for each tag write. Before the first step completes, the bar is indeterminate. During a run, the Run button becomes Cancel, and Escape presses it. After a Cancel the button reads "Finishing…" and is off until the run has ended, so a second click cannot start a new run. The run stays "running" until the scan after it has landed, so no click can act on old counts. |
 | Quit during a run | The app cancels the run, lets the current file complete, then quits. |
 | Result line and list | Section 4.4. |
 
@@ -320,6 +328,11 @@ project.yml                       XcodeGen spec
 | `RawConverter` | A protocol: convert one ARW and confirm the DNG exists. Version 1 has one implementation, `AdobeConverter`. A dnglab one is the planned swap (section 3). | `ProcessRunner` |
 | `DesqueezeJob` | `run(folder:)` scans, then runs section 4.3 in order, reports progress for each step, honors Cancel, returns the result. `plan(folder:)` returns what a run would do and changes nothing. | the units above |
 
+**Text rules live in the core.** The folder counts line, the run count, the
+run button label, the folder messages, and the result counts line are pure
+functions in `DesqueezeCore` with unit tests. The window and the command line
+tool only show them.
+
 **In the app:** one view, and one observable model that owns the folder, the
 factor, and the running job. The model calls `DesqueezeJob` off the main thread
 and publishes progress to the view. Only one job runs at a time.
@@ -333,7 +346,7 @@ and publishes progress to the view. Only one job runs at a time.
 | The folder has no DNG and no ARW | "No DNG or ARW files in this folder." |
 | A conversion fails | The ARW is listed as failed. The run continues. |
 | A write or check fails | The backup is restored. The DNG is listed as failed. The run continues. |
-| A DNG has an existing backup | The DNG is listed as skipped, with the reason. |
+| A DNG has an existing backup | The DNG is listed as blocked, with the reason. Its note starts "Blocked." |
 | The Trash refuses a backup | The DNG is listed as done, with a note that its backup stayed beside it. |
 | The folder is not writable | One message for the folder. No file is tried. A read-only file inside a writable folder still writes, because exiftool replaces the file. |
 | A DNG's current value is unknown | The write is tried. A file exiftool cannot read is listed as failed. |
@@ -365,7 +378,8 @@ a detail line below the plain sentence.
   with spaces, a start with the launch argument `-simulateMissingTools YES`
   (this Mac has exiftool in two places, so a rename proves nothing). The launch argument
   `-openFolder <path>` loads a folder at launch, because the standard Open
-  panel runs in another process that a script cannot drive. Then one file opened in
+  panel runs in another process that a script cannot drive. Both are read from
+  the launch arguments only, never from saved defaults. Then one file opened in
   Lightroom at each factor. Dom's photo folders are never the test target.
 
 ## 10. Documentation and filing
@@ -388,7 +402,7 @@ a detail line below the plain sentence.
 | DNG beside the ARW, same base name | The app never renames, and a second run can skip converted files. Dom chose this. |
 | Top level only | Subfolders hold exports and Capture One data. |
 | Backup kept until the check passes, then moved to the Trash | In a folder with no ARW files, the DNG is the only copy. |
-| Skip a DNG that has an existing backup | The app must not remove or replace a backup it did not make. |
+| Hold back (block) a DNG that has an existing backup | The app must not remove or replace a backup it did not make. |
 | One exiftool call for each write | Clear progress and a failure that stays with one file. At 0.10 s a file, speed is not a reason to batch. |
 | Adobe DNG Converter in version 1, behind a protocol | Its output is the file Lightroom's "Copy as DNG" makes, and it keeps 0.09 stops of highlight headroom that dnglab clips (2.1). dnglab is the swap for a release, because Adobe's converter cannot be bundled. |
 | Pending rule reads `OriginalRawFileName` | A DNG renamed on import still claims its ARW, so a rerun never converts it twice. |
@@ -429,8 +443,16 @@ desqueeze --help
 - A relative folder path is resolved against the working folder.
 - Exit code 0: the command completed, no file failed, and no file was
   blocked. Exit code 1: a file failed or was blocked, the run was stopped, the
-  folder could not be scanned or is read-only, or exiftool is missing. Exit
-  code 2: a usage error.
+  folder could not be scanned, a run or a dry run met a read-only folder, or
+  exiftool is missing. Exit code 2: a usage error.
+- `scan` exits 0 whenever the scan completed, also for a read-only folder: the
+  report says `"writable": false`.
+- When a command fails with no report to print, `--json` prints one object,
+  `{ "error": "…", "detail": "…" }`. A usage error prints nothing on standard
+  output.
+- JSON is pretty-printed with its keys in alphabetical order.
+- The tool looks for Adobe DNG Converter in `/Applications` only. The window
+  also asks Launch Services, which needs AppKit.
 - `--verbose`, on every command: prints each exiftool and converter command
   line, its exit code, and its raw output to standard error. For
   troubleshooting.
