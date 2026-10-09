@@ -10,7 +10,7 @@ final class SqueezeFactorTests: XCTestCase {
         XCTAssertEqual(SqueezeFactor(1.5)?.tagValue, "1.5 1")
         XCTAssertEqual(SqueezeFactor(2)?.tagValue, "2 1")
         XCTAssertEqual(SqueezeFactor(1.3333)?.tagValue, "1.3333 1")
-        XCTAssertEqual(SqueezeFactor.none.tagValue, "1 1")
+        XCTAssertEqual(SqueezeFactor.noStretch.tagValue, "1 1")
     }
 
     func testRangeIsOneToFourInclusive() {
@@ -34,11 +34,20 @@ final class SqueezeFactorTests: XCTestCase {
         }
     }
 
-    func testMatchesUsesTheReadBackTolerance() {
+    func testMatchesTellsAdjacentFactorsApart() {
         let factor = SqueezeFactor(1.5)!
         XCTAssertTrue(factor.matches(horizontal: 1.5, vertical: 1))
-        XCTAssertTrue(factor.matches(horizontal: 1.50005, vertical: 1))
-        XCTAssertFalse(factor.matches(horizontal: 1.51, vertical: 1))
+        XCTAssertTrue(factor.matches(horizontal: 1.50004, vertical: 1))
+        XCTAssertFalse(factor.matches(horizontal: 1.5001, vertical: 1))
+        XCTAssertFalse(factor.matches(horizontal: 1.4999, vertical: 1))
         XCTAssertFalse(factor.matches(horizontal: 1.5, vertical: 2))
+        XCTAssertFalse(SqueezeFactor(2)!.matches(horizontal: 2.0001, vertical: 1))
+    }
+
+    func testValueIsRoundedSoEqualLabelsAreEqualFactors() {
+        XCTAssertEqual(SqueezeFactor(text: "1.5"), SqueezeFactor(1.5))
+        XCTAssertEqual(SqueezeFactor(1.50001), SqueezeFactor(1.5))
+        XCTAssertEqual(SqueezeFactor(1.50001)?.value, 1.5)
+        XCTAssertEqual(SqueezeFactor(1.23456)?.label, "1.2346")
     }
 }

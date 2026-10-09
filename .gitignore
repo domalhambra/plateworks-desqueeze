@@ -3,7 +3,7 @@
 
 # Swift and Xcode build state
 .build/
-build/
+/build/
 DerivedData/
 xcuserdata/
 .swiftpm/
@@ -11,7 +11,9 @@ xcuserdata/
 .DS_Store
 
 # One ARW and one DNG for the integration tests. Made by scripts/make_fixtures.sh.
-fixtures/
+# Anchored to the root: the repo ignores letter case, and an unanchored rule
+# would also hide a folder named Fixtures under Tests.
+/fixtures/
 
 # Python bytecode from scripts/docs_check.py, which the docs test runs.
 __pycache__/
