@@ -122,7 +122,9 @@ The app reads the top level of the folder only. It does not enter subfolders.
   DNG's `OriginalRawFileName` tag equals the ARW's file name. Both comparisons
   ignore letter case. Both converters write that tag, so a DNG that was renamed
   on import still claims its ARW.
-- An ARW is **pending** when no DNG in the folder claims it.
+- An ARW is **pending** when no DNG in the folder claims it. An orphan backup
+  (below) claims an ARW the same way its DNG would, by base name, so the run
+  never converts a photo whose DNG is waiting to be renamed back.
 - A DNG has an **existing backup** when a file named `<name>.dng_original` is
   beside it. exiftool never replaces an existing `_original`, so a write over
   one would leave a backup of the wrong state. The run checks for the backup
@@ -185,10 +187,12 @@ Then the run does these steps in order. One file at a time.
 
 2. **Tag.** For each DNG, including the new ones:
    - Skip it when its current value is known and equals the chosen factor. If
-     a backup is beside such a file, report that too: "Already set. A backup,
-     `<name>_original`, is beside this file."
-   - Skip it and report it when it has an existing backup. The app does not
-     touch a backup that it did not make.
+     a backup is beside such a file, report that too: "Already at this value.
+     A backup, `<name>_original`, is beside this file."
+   - Hold it back and report it when it has an existing backup. The app does
+     not touch a backup that it did not make. Such a file counts as
+     **blocked**, not as skipped: "skipped" means only "already at this
+     value".
    - Otherwise write the tag. Exiftool keeps the previous file as
      `<name>.dng_original`.
 
@@ -235,7 +239,7 @@ tagged.
 ### 4.4 Result
 
 The window shows one line of counts: converted (when it is not zero), set,
-skipped, failed, and "stopped" after a Cancel. Below it, each failed or
+skipped, blocked (when it is not zero), failed, and "stopped" after a Cancel. Below it, each failed or
 reported file has its name, one plain sentence, and the tool's own words on a
 detail line.
 
@@ -423,9 +427,13 @@ desqueeze --help
   output and nothing else there. Progress lines go to standard error in both
   modes.
 - A relative folder path is resolved against the working folder.
-- Exit code 0: the command completed and no file failed. Exit code 1: a file
-  failed, the run was stopped, the folder could not be scanned, or exiftool is
-  missing. Exit code 2: a usage error.
+- Exit code 0: the command completed, no file failed, and no file was
+  blocked. Exit code 1: a file failed or was blocked, the run was stopped, the
+  folder could not be scanned or is read-only, or exiftool is missing. Exit
+  code 2: a usage error.
+- `--verbose`, on every command: prints each exiftool and converter command
+  line, its exit code, and its raw output to standard error. For
+  troubleshooting.
 - When Adobe DNG Converter is missing, `run` still tags the DNG files, says
   how many ARW files it left, and exits 0.
 - Control-C stops the run after the current file, prints the result so far,
@@ -442,9 +450,9 @@ JSON shapes. `scale` is the tag value as text, or `null` when it is unknown.
 
 ```json
 { "folder": "/path", "factor": "1.5", "dryRun": false,
-  "converted": 1, "set": 2, "skipped": 0, "failed": 0, "stopped": false,
-  "unconvertedARWs": 0,
-  "notes": [ { "name": "x.dng", "message": "…", "detail": null } ] }
+  "converted": 1, "set": 2, "skipped": 0, "blocked": 0, "failed": 0,
+  "stopped": false, "unconvertedARWs": 0,
+  "notes": [ { "name": "x.dng", "kind": "failed", "message": "…", "detail": null } ] }
 ```
 
 A dry run prints the same object with `"dryRun": true`, the counts a real run
@@ -452,8 +460,18 @@ would give if every step passed, and a `"steps"` list of
 `{ "name", "action" }`, where action is `convert`, `write`, `skip`, or
 `blocked`.
 
+A note's `kind` is one of `orphanBackup`, `notConverted`, `failed`,
+`blockedByBackup`, `leftoverBackup`, `backupKept`, `folderReadOnly`. A front
+end reads the kind, never the English sentence. `unconvertedARWs` is the count
+of pending ARW files the run left, from the run's own scan.
+
 The report types are `Codable` structs in `DesqueezeCore`, so the tool and the
-MCP server print the same JSON.
+MCP server print the same JSON. The dry run and the real run share one
+function that decides skip, blocked, or write for a file, so they cannot
+disagree.
+
+A folder that holds only an orphan backup is not "empty": every front end
+reports the orphan.
 
 ### 12.2 `desqueeze-mcp`, the MCP server
 
@@ -473,6 +491,8 @@ minor version because the library is not yet at 1.0. No other target links it.
   JSON carries the failures. A scan that cannot run is a tool error.
 - When the client sends a progress token, the server sends one progress
   message for each step of the run.
+- The server runs one tool call at a time. The job assumes one run in a folder
+  at a time, and two at once can produce false notes.
 - Each tool's description tells the model what the tool changes, that the
   change is reversible with `desqueeze_remove`, and to call `desqueeze_scan`
   first.

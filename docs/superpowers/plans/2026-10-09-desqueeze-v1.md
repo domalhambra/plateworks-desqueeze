@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-05-desqueeze-design.md`. Read sections 2.1, 4, and 8 before Task 4. Where this plan and the spec disagree, the spec wins and the plan has a bug.
 
+**Revisions after review, 2026-10-09.** The code blocks in Tasks 1 to 8 are the first version of each file. Each task's quality review changed the code, and the changes for Tasks 6 to 8 were designed by the fix implementers from review requirements, not from this plan. The repo and the design are the source of truth. Tasks 9 and 10 (the command line tool and the MCP server) were added at Dom's request and are requirement-driven. The documents task is now Task 11, workspace registration Task 12, acceptance Task 13, and the GitHub repo Task 14.
+
 **Rules for every task**
 
 - The repo root is `/Users/dom/Documents/Claude/20-29 Properties/27 Plateworks Desqueeze`. Run every command from it unless the step names another folder. The path has spaces. Quote it.
@@ -2751,7 +2753,7 @@ In the window:
 4. Confirm the run button says `Desqueeze 3 photos`.
 5. Drag `one.dng` from Finder onto the window. Confirm the zone shows `Drop a folder`.
 
-Do not run the job here. Task 11 does the full pass. Quit the app.
+Do not run the job here. Task 13 does the full pass. Quit the app.
 
 Then check the missing-tool message. This Mac has exiftool in two places, so the app takes a launch argument in place of a renamed tool:
 
@@ -2770,7 +2772,90 @@ git commit -m "app: one window that scans a folder and runs the job"
 
 ---
 
-### Task 9: Repo documentation, Floor tier
+### Task 9: Front-end support in the core, and the `desqueeze` command line tool
+
+**Goal:** A `desqueeze` executable that scans, runs, removes, and dry-runs from the terminal with text or JSON output, built on new shared report types and a `plan(folder:)` in `DesqueezeCore`.
+
+This task and Task 10 are requirement-driven: the contract is design section 12 (and sections 4 and 8), not code in this plan. The implementer designs the code, test-first.
+
+**Files:**
+- Modify: `Package.swift`
+- Modify: `Sources/DesqueezeCore/DesqueezeJob.swift`
+- Modify: `Sources/DesqueezeCore/FolderScan.swift`
+- Modify: `Sources/DesqueezeCore/FolderScanner.swift`
+- Create: `Sources/DesqueezeCore/Reports.swift`
+- Create: `Sources/DesqueezeCore/LoggingProcessRunner.swift`
+- Create: `Sources/DesqueezeCLI/Arguments.swift`
+- Create: `Sources/DesqueezeCLI/Commands.swift`
+- Create: `Sources/desqueeze/main.swift`
+- Modify: `App/PlateworksDesqueeze/AppModel.swift`
+- Modify: `App/PlateworksDesqueeze/ContentView.swift`
+- Test: `Tests/DesqueezeCoreTests/ReportsTests.swift`
+- Test: `Tests/DesqueezeCoreTests/PlanTests.swift`
+- Test: `Tests/DesqueezeCLITests/ArgumentsTests.swift`
+- Test: `Tests/DesqueezeCLITests/EndToEndTests.swift`
+
+**Acceptance Criteria:**
+- [ ] `RunSummary` has a `blocked` count and an `unconvertedARWs` count, and each `FileNote` has a `kind`. A file held back by an older backup counts as blocked, not skipped.
+- [ ] An orphan backup claims its ARW, so a folder with `frame.dng_original` and `frame.ARW` converts nothing and gives one note for that photo.
+- [ ] `DesqueezeJob.plan(folder:factor:convert:)` returns the steps a run would take and changes no file. The plan and the run decide skip, blocked, or write through one shared function.
+- [ ] A folder that holds only an orphan backup is reported by every front end, not treated as empty.
+- [ ] `desqueeze scan`, `run`, `remove`, `--dry-run`, `--json`, `--verbose`, `--version`, `--help` behave as design section 12.1 states, with its exit codes.
+- [ ] `desqueeze run` with no `--factor` exits 2 and changes nothing.
+- [ ] The JSON matches the shapes in design section 12.1, including `kind` on each note.
+- [ ] The `desqueeze` target and `DesqueezeCore` link no third-party code.
+- [ ] The window still builds and shows the blocked count when it is not zero.
+
+**Verify:** `swift test 2>&1 | grep Executed | tail -1` → `0 failures`, and `swift run desqueeze scan fixtures --json` prints one JSON object
+
+**Steps:**
+
+- [ ] **Step 1: Core additions, test-first** — `kind` on `FileNote`, `blocked` and `unconvertedARWs` on `RunSummary`, the orphan claim in `FolderScan.pending`, the "Already at this value." wording, and the shared decision function.
+- [ ] **Step 2: `plan(folder:)` and the report types** — `Codable` scan and run reports in `Reports.swift`, with tests that pin the exact JSON keys.
+- [ ] **Step 3: `LoggingProcessRunner`** — a `ProcessRunner` that wraps another and writes each command, exit code, and raw output to a sink. For `--verbose`.
+- [ ] **Step 4: The argument parser** — a library target `DesqueezeCLI` so it can be unit-tested. Every command, every flag, each usage error.
+- [ ] **Step 5: The commands and `main.swift`** — text and JSON output, progress on standard error, exit codes, Control-C.
+- [ ] **Step 6: End-to-end tests** — start the built `desqueeze` against a temporary folder with the fixtures. Skip when fixtures are absent.
+- [ ] **Step 7: The window** — show the blocked count. Build the app.
+- [ ] **Step 8: Commit**
+
+---
+
+### Task 10: The `desqueeze-mcp` server
+
+**Goal:** An MCP server over standard input and output with three tools, built on the official Swift MCP library, so Claude Code and Cowork can scan, run, and remove with no window.
+
+**Files:**
+- Modify: `Package.swift`
+- Create: `Sources/desqueeze-mcp/main.swift`
+- Create: `Sources/desqueeze-mcp/Tools.swift`
+- Test: `Tests/DesqueezeMCPTests/ServerEndToEndTests.swift`
+
+**Acceptance Criteria:**
+- [ ] `Package.swift` pins `modelcontextprotocol/swift-sdk` to one minor version, and only the `desqueeze-mcp` target depends on it.
+- [ ] `swift build` still builds `DesqueezeCore`, `DesqueezeCLI` and `desqueeze` with no third-party module in their dependency lists.
+- [ ] The server answers `initialize` and `tools/list` with three tools: `desqueeze_scan` (marked read-only), `desqueeze_run`, `desqueeze_remove`, each with a JSON schema for its arguments.
+- [ ] Each tool returns the same JSON as the matching `desqueeze` command with `--json`.
+- [ ] `folder` that is relative, missing, or not a folder gives a tool error and changes nothing.
+- [ ] `dry_run` changes no file.
+- [ ] The server runs one tool call at a time.
+- [ ] With a progress token, a run sends one progress message for each step.
+- [ ] An end-to-end test starts the built server, speaks MCP to it over its pipes, and calls each tool against a temporary folder.
+
+**Verify:** `swift test --filter ServerEndToEndTests 2>&1 | grep Executed | tail -1` → `0 failures`
+
+**Steps:**
+
+- [ ] **Step 1: Read the library** — the README and the server examples of the pinned version. Confirm its minimum Swift version and what it adds to `Package.resolved`.
+- [ ] **Step 2: The package target** — the dependency, pinned, on one target only.
+- [ ] **Step 3: The end-to-end test, failing** — a small MCP client in the test: write JSON-RPC lines to the server's standard input, read its standard output.
+- [ ] **Step 4: The server** — the three tools, the argument checks, one call at a time, progress.
+- [ ] **Step 5: Try it with Claude Code** — `claude mcp add` in a scratch project scope or `--scope local` only, call `desqueeze_scan` on a temporary folder, then remove the registration. Registering it for Dom is Task 13, on his yes.
+- [ ] **Step 6: Commit**
+
+---
+
+### Task 11: Repo documentation, Floor tier
 
 **Goal:** Document the repo to the Plateworks documentation standard, with the docs check running inside `swift test`.
 
@@ -3108,7 +3193,7 @@ In `PROJECT_CHARTER.md`, change these four lines from `- [ ]` to `- [x]` and add
 - [ ] Repo documented to the Floor tier; workspace Projects row added
 ```
 
-Leave the last one open if Task 10 is not done. In "Current status", replace `Design approved. No code yet.` with `Version 1 is built: the package is green and the window runs.`
+Leave the last one open if Task 12 is not done. In "Current status", replace `Design approved. No code yet.` with `Version 1 is built: the package is green and the window runs.`
 
 - [ ] **Step 12: Commit**
 
@@ -3119,7 +3204,7 @@ git commit -m "docs: Floor tier, with the docs check in the package suite"
 
 ---
 
-### Task 10: Register the property in the workspace
+### Task 12: Register the property in the workspace
 
 **Goal:** Make the workspace route to the new repo, and record the vendored docs check.
 
@@ -3149,7 +3234,7 @@ cd /Users/dom/Documents/Claude
 bash .claude/docs-report.sh
 ```
 
-Expected now: a new `unrouted` finding for `27 Plateworks Desqueeze` (its `CLAUDE.md` exists since Task 9), and the old `budget` finding (`about 3,525 tokens, budget 3,500`).
+Expected now: a new `unrouted` finding for `27 Plateworks Desqueeze` (its `CLAUDE.md` exists since Task 11), and the old `budget` finding (`about 3,525 tokens, budget 3,500`).
 
 - [ ] **Step 2: Edit the router, four exact replacements**
 
@@ -3284,7 +3369,7 @@ git commit -m "charter: workspace filing is complete"
 
 ---
 
-### Task 11: Acceptance pass and install
+### Task 13: Acceptance pass and install
 
 **Goal:** Prove version 1 on a scratch copy of a real shoot folder, install the app, and get Dom's confirmation in Lightroom.
 
@@ -3450,7 +3535,7 @@ Write the Session Log entry per the convention file at `/Users/dom/Documents/Cla
 
 ---
 
-### Task 12: Private GitHub repo
+### Task 14: Private GitHub repo
 
 **Goal:** Put the repo on GitHub as `plateworks-desqueeze`, private, and record it.
 
