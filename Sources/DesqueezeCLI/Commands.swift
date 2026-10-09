@@ -69,7 +69,9 @@ public enum DesqueezeTool {
         case .scan(let folder):
             return perform(invocation, folder, in: environment) { operations, url in
                 let report = try operations.scan(url)
-                return (try output(report, TextOutput.scan(report), invocation), exitCode(report))
+                // The scan completed, so it gives 0, also for a read-only
+                // folder: the report says `"writable": false`.
+                return (try output(report, TextOutput.scan(report), invocation), 0)
             }
         case .run(let folder, let factor, let convert, let dryRun):
             return perform(invocation, folder, in: environment) { operations, url in
@@ -90,14 +92,14 @@ public enum DesqueezeTool {
 
     // MARK: Exit codes
 
-    /// 1 when a file failed or was blocked, the run was stopped, or the
-    /// folder is read-only. A dry run gives the code of the run it plans.
+    /// The code of a run or a remove: 1 when a file failed or was blocked,
+    /// the run was stopped, or the folder is read-only. A dry run gives the
+    /// code of the run it plans. A scan has no such code: when it completed,
+    /// it gives 0.
     static func exitCode(_ report: RunReport) -> Int32 {
         let readOnly = report.notes.contains { $0.kind == .folderReadOnly }
         return report.failed > 0 || report.blocked > 0 || report.stopped || readOnly ? 1 : 0
     }
-
-    static func exitCode(_ report: ScanReport) -> Int32 { report.writable ? 0 : 1 }
 
     // MARK: The parts of a command
 

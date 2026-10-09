@@ -34,8 +34,8 @@ final class TextOutputTests: XCTestCase {
             "  b.ARW",
             "  c.ARW",
             "",
-            "lost.dng_original: A backup with no DNG beside it. Rename it to lost.dng to get the photo back.",
             "This folder is read-only. Desqueeze cannot change its files.",
+            "lost.dng_original: A backup with no DNG beside it. Rename it to lost.dng to get the photo back.",
             "",
             "exiftool: /opt/homebrew/bin/exiftool",
             "Adobe DNG Converter: /Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter",
@@ -78,6 +78,17 @@ final class TextOutputTests: XCTestCase {
             "",
             "lost.dng_original: A backup with no DNG beside it. Rename it to lost.dng to get the photo back.",
         ])
+    }
+
+    // The messages are the core's, in the core's order, so the window and the
+    // tool say the same words. The tool prints a list: it names every orphan.
+    func testTheMessagesOfAScanAreTheMessagesOfTheCoreWithEveryOrphanNamed() {
+        let orphans = (1...7).map { "lost\($0).dng_original" }
+        let lines = TextOutput.scan(scan(orphans: orphans, writable: false))
+        let messages = FolderText.messages(isWritable: false, orphanBackups: orphans, namedOrphanLimit: nil)
+        XCTAssertEqual(messages.count, 8)
+        XCTAssertEqual(Array(lines.dropFirst(6).prefix(8)), messages)
+        XCTAssertFalse(lines.contains { $0.hasSuffix("more") })
     }
 
     // MARK: A run

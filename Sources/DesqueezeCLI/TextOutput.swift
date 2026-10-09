@@ -1,16 +1,16 @@
 import DesqueezeCore
 
 /// The output for a person. Each function is pure: a report in, lines out.
+///
+/// Every sentence that the window also shows is made in `DesqueezeCore`
+/// (`FolderText`, `FileNote`, `RunSummary`). This type only lays them out.
 public enum TextOutput {
-    static let readOnlyFolder = "This folder is read-only. Desqueeze cannot change its files."
-    static let lightroomHint = "Photos already in Lightroom: Metadata › Read Metadata from File."
-
     /// A short table of the DNG files, then the ARW files with no DNG, then
     /// the messages about the folder, then where the two tools are.
     public static func scan(_ report: ScanReport) -> [String] {
         var lines = [report.folder, ""]
         if report.isEmpty {
-            lines.append("No DNG or ARW files in this folder.")
+            lines.append(FolderText.noPhotos)
         } else {
             lines.append("DNG files: \(report.dngs.count)")
             if !report.dngs.isEmpty {
@@ -30,8 +30,10 @@ public enum TextOutput {
         }
         lines.append("")
 
-        var messages = report.orphanBackups.map { line(for: .orphanBackup(named: $0)) }
-        if !report.writable { messages.append(readOnlyFolder) }
+        // The window names five orphan backups. This is a list, so it names
+        // every one.
+        let messages = FolderText.messages(isWritable: report.writable, orphanBackups: report.orphanBackups,
+                                           namedOrphanLimit: nil)
         if !messages.isEmpty { lines += messages + [""] }
 
         lines.append("exiftool: \(report.exiftool)")
@@ -57,20 +59,13 @@ public enum TextOutput {
             lines.append(report.countsLine)
         }
         for note in report.notes {
-            lines.append(line(for: note))
+            lines.append(note.line)
             // The detail of a failed restore has two lines.
             lines += (note.detail ?? "").split(separator: "\n").map { "    \($0)" }
         }
-        if report.unconvertedARWs > 0 {
-            let count = report.unconvertedARWs == 1 ? "1 ARW file" : "\(report.unconvertedARWs) ARW files"
-            let verb = report.dryRun ? "would not be" : (report.unconvertedARWs == 1 ? "was not" : "were not")
-            lines.append("\(count) \(verb) converted."
-                + (converterInstalled ? "" : " Adobe DNG Converter is not installed."))
-        }
+        if let left = report.unconvertedARWsLine(converterAvailable: converterInstalled) { lines.append(left) }
         // Lightroom reads the tag at import, and keeps what it read.
-        if !report.dryRun, report.set > 0 { lines.append(lightroomHint) }
+        if !report.dryRun, report.set > 0 { lines.append(RunSummary.lightroomHint) }
         return lines
     }
-
-    private static func line(for note: FileNote) -> String { "\(note.name): \(note.message)" }
 }

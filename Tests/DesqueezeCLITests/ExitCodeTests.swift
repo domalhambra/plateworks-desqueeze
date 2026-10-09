@@ -36,15 +36,22 @@ final class ExitCodeTests: XCTestCase {
         XCTAssertEqual(h.tools.scales, ["A.dng": "1 1"], "the file was not written")
     }
 
-    func testAReadOnlyFolderGivesOneForScanAndForRun() throws {
+    // The scan completed, so it gives 0: the report says that the folder is
+    // read-only (design 12.1). A run cannot do its work there, so it gives 1.
+    func testAReadOnlyFolderGivesZeroForScanAndOneForEachRun() throws {
         try h.touch("A.dng")
         h.tools.scales = ["A.dng": "1 1"]
         try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: h.shoot.path)
 
-        XCTAssertEqual(h.run("scan", "Shoot 1", "--json"), 1)
+        XCTAssertEqual(h.run("scan", "Shoot 1", "--json"), 0)
         XCTAssertEqual(try h.json()["writable"] as? Bool, false)
+        XCTAssertEqual(h.run("scan", "Shoot 1"), 0)
+        XCTAssertTrue(h.out.lines.contains("This folder is read-only. Desqueeze cannot change its files."))
+
         XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5", "--json"), 1)
         XCTAssertEqual(((try h.json()["notes"] as? [NSDictionary])?.first)?["kind"] as? String, "folderReadOnly")
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5", "--dry-run"), 1)
+        XCTAssertEqual(h.run("remove", "Shoot 1"), 1)
         XCTAssertEqual(h.run("remove", "Shoot 1", "--dry-run"), 1)
         XCTAssertEqual(h.tools.scales, ["A.dng": "1 1"])
     }

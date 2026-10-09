@@ -67,13 +67,13 @@ final class EndToEndFailureTests: BuiltToolTestCase {
         XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent("junk.dng")), Data("not a photo".utf8))
     }
 
-    func testAReadOnlyFolderGivesOneAndNoFileIsTried() throws {
+    func testAReadOnlyFolderScansWithZeroAndRunsWithOneAndNoFileIsTried() throws {
         try makeShoot()
         try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
         let before = try folderState()
 
         let scan = try desqueeze("scan", folder.path, "--json")
-        XCTAssertEqual(scan.exitCode, 1)
+        XCTAssertEqual(scan.exitCode, 0, "the scan completed")
         XCTAssertEqual(try scan.json()["writable"] as? Bool, false)
 
         let run = try desqueeze("run", folder.path, "--factor", "1.5", "--json")

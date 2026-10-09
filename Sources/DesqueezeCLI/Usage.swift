@@ -41,12 +41,14 @@ public enum Usage {
         file, and the result so far is still printed.
 
         A change is reversible: remove sets each DNG back. No pixel changes.
-        Photos already in Lightroom: Metadata › Read Metadata from File.
+        \(RunSummary.lightroomHint)
 
         Exit codes:
-          0  The command completed, no file failed, and no file was blocked.
+          0  The command completed, no file failed, and no file was blocked. A
+             scan that completed gives 0, also for a read-only folder.
           1  A file failed or was blocked, the run was stopped, the folder could
-             not be read or is read-only, or exiftool is missing.
+             not be read, a run or a dry run met a read-only folder, or exiftool
+             is missing.
           2  The command line was wrong.
         """
 
