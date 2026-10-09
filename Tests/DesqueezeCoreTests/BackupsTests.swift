@@ -14,13 +14,18 @@ final class BackupsTests: XCTestCase {
 
     override func tearDown() { removeTemporaryFolder(folder) }
 
+    /// Backups that fail the test if anything tries to discard a file. No
+    /// test here may reach the real Trash.
+    var backups: FileBackups {
+        FileBackups(trash: { _ in XCTFail("this test must not discard a backup") })
+    }
+
     func testBackupURLAppendsOriginalToTheFullName() {
         XCTAssertEqual(FileBackups.backupURL(for: dng).lastPathComponent, "one.dng_original")
         XCTAssertEqual(FileBackups.backupURL(for: dng).deletingLastPathComponent().path, folder.path)
     }
 
     func testBackupExistsOnlyWhenTheFileIsThere() throws {
-        let backups = FileBackups()
         XCTAssertFalse(backups.backupExists(for: dng))
         try Data("old".utf8).write(to: backup)
         XCTAssertTrue(backups.backupExists(for: dng))
@@ -29,7 +34,7 @@ final class BackupsTests: XCTestCase {
     func testRestorePutsTheOldBytesBackAndConsumesTheBackup() throws {
         try Data("new".utf8).write(to: dng)
         try Data("old".utf8).write(to: backup)
-        try FileBackups().restoreBackup(for: dng)
+        try backups.restoreBackup(for: dng)
         XCTAssertEqual(try Data(contentsOf: dng), Data("old".utf8))
         XCTAssertFalse(FileManager.default.fileExists(atPath: backup.path))
     }
@@ -48,7 +53,7 @@ final class BackupsTests: XCTestCase {
 
     func testRestoreWorksWhenTheDNGIsMissing() throws {
         try Data("old".utf8).write(to: backup)
-        try FileBackups().restoreBackup(for: dng)
+        try backups.restoreBackup(for: dng)
         XCTAssertEqual(try Data(contentsOf: dng), Data("old".utf8))
         XCTAssertFalse(FileManager.default.fileExists(atPath: backup.path))
     }
@@ -56,7 +61,7 @@ final class BackupsTests: XCTestCase {
     // In a folder with no ARW files the DNG is the only copy of the photo.
     func testRestoreThrowsAndKeepsTheDNGWhenThereIsNoBackup() throws {
         try Data("new".utf8).write(to: dng)
-        XCTAssertThrowsError(try FileBackups().restoreBackup(for: dng))
+        XCTAssertThrowsError(try backups.restoreBackup(for: dng))
         XCTAssertEqual(try Data(contentsOf: dng), Data("new".utf8))
     }
 
@@ -65,7 +70,7 @@ final class BackupsTests: XCTestCase {
         try Data("old".utf8).write(to: backup)
         let shotOn = Date(timeIntervalSince1970: 1_577_880_000)
         try FileManager.default.setAttributes([.creationDate: shotOn], ofItemAtPath: backup.path)
-        try FileBackups().restoreBackup(for: dng)
+        try backups.restoreBackup(for: dng)
         let restored = try FileManager.default.attributesOfItem(atPath: dng.path)[.creationDate] as? Date
         XCTAssertEqual(restored, shotOn)
     }

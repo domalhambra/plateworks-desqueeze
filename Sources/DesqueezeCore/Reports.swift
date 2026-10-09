@@ -96,6 +96,14 @@ public struct RunReport: Codable, Equatable, Sendable {
     public let notes: [FileNote]
     /// Only a dry run has steps. A real run has no `steps` key.
     public let steps: [RunPlan.Step]?
+    /// True when the folder held no DNG, no ARW and no orphan backup. It is
+    /// for the text of a front end, and it is not in the JSON, which stays
+    /// the object of design 12.1.
+    public private(set) var folderIsEmpty = false
+
+    private enum CodingKeys: String, CodingKey {
+        case folder, factor, dryRun, converted, set, skipped, blocked, failed, stopped, unconvertedARWs, notes, steps
+    }
 
     init(folder: URL, factor: SqueezeFactor, summary: RunSummary, steps: [RunPlan.Step]?) {
         self.folder = folder.path
@@ -110,6 +118,7 @@ public struct RunReport: Codable, Equatable, Sendable {
         unconvertedARWs = summary.unconvertedARWs
         notes = summary.notes
         self.steps = steps
+        folderIsEmpty = summary.folderIsEmpty
     }
 
     /// The report of a real run.

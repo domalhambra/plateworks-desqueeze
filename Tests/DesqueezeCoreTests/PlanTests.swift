@@ -86,10 +86,18 @@ final class PlanTests: XCTestCase {
     func testAPlanForRemoveConvertsNothingAndReportsNoARW() {
         let state = h.snapshot(dngs: [h.dng("A.dng", at: 1.5), h.dng("B.dng", at: 1), h.dng("C.dng", at: nil)],
                                pending: ["X.ARW"])
-        let plan = h.job().plan(state, factor: .noStretch, convert: false)
+        let plan = h.job().plan(state, factor: .noStretch, convert: false, remove: true)
         XCTAssertEqual(plan.steps, [step("A.dng", .write), step("B.dng", .skip), step("C.dng", .write)])
         XCTAssertEqual(plan.summary.converted, 0)
         XCTAssertEqual(plan.summary.unconvertedARWs, 0)
+    }
+
+    // Remove is an intent. A plan at factor 1 with no conversion is not one.
+    func testAPlanAtFactorOneWithNoConvertStillReportsTheARWFiles() {
+        let state = h.snapshot(dngs: [h.dng("A.dng", at: 1.5)], pending: ["X.ARW"])
+        let plan = h.job().plan(state, factor: .noStretch, convert: false)
+        XCTAssertEqual(plan.steps, [step("A.dng", .write)])
+        XCTAssertEqual(plan.summary.unconvertedARWs, 1)
     }
 
     func testAPlanWithNoConverterOrNoConvertLeavesTheARWFiles() {
@@ -128,6 +136,7 @@ final class PlanTests: XCTestCase {
         let name: String
         let factor: SqueezeFactor
         let convert: Bool
+        var remove = false
         var withConverter = true
         let build: (JobHarness) -> FolderSnapshot
     }
@@ -146,7 +155,8 @@ final class PlanTests: XCTestCase {
             Scenario(name: "apply at factor 1", factor: .noStretch, convert: true, build: mixed),
             Scenario(name: "apply, no convert", factor: factor, convert: false, build: mixed),
             Scenario(name: "apply, no converter", factor: factor, convert: true, withConverter: false, build: mixed),
-            Scenario(name: "remove", factor: .noStretch, convert: false, build: mixed),
+            Scenario(name: "apply at factor 1, no convert", factor: .noStretch, convert: false, build: mixed),
+            Scenario(name: "remove", factor: .noStretch, convert: false, remove: true, build: mixed),
             Scenario(name: "only ARW files", factor: factor, convert: true) { $0.snapshot(pending: ["X.ARW"]) },
             Scenario(name: "only an orphan", factor: factor, convert: true) {
                 $0.snapshot(orphans: ["gone.dng_original"])
@@ -156,7 +166,7 @@ final class PlanTests: XCTestCase {
                 $0.snapshot(dngs: [$0.dng("A.dng")], pending: ["X.ARW"], orphans: ["gone.dng_original"],
                             writable: false)
             },
-            Scenario(name: "read-only remove", factor: .noStretch, convert: false) {
+            Scenario(name: "read-only remove", factor: .noStretch, convert: false, remove: true) {
                 $0.snapshot(dngs: [$0.dng("A.dng", at: 2)], pending: ["X.ARW"], writable: false)
             },
         ]
@@ -166,10 +176,12 @@ final class PlanTests: XCTestCase {
         for scenario in scenarios {
             let planned = JobHarness()
             let plan = planned.job(withConverter: scenario.withConverter)
-                .plan(scenario.build(planned), factor: scenario.factor, convert: scenario.convert)
+                .plan(scenario.build(planned), factor: scenario.factor, convert: scenario.convert,
+                      remove: scenario.remove)
             let real = JobHarness()
             let summary = real.job(withConverter: scenario.withConverter)
-                .run(scenario.build(real), factor: scenario.factor, convert: scenario.convert)
+                .run(scenario.build(real), factor: scenario.factor, convert: scenario.convert,
+                     remove: scenario.remove)
 
             XCTAssertEqual(plan.summary, summary, scenario.name)
             XCTAssertEqual(planned.log.entries, [], scenario.name)
@@ -182,10 +194,12 @@ final class PlanTests: XCTestCase {
         for scenario in scenarios {
             let planned = JobHarness()
             let plan = planned.job(withConverter: scenario.withConverter)
-                .plan(scenario.build(planned), factor: scenario.factor, convert: scenario.convert)
+                .plan(scenario.build(planned), factor: scenario.factor, convert: scenario.convert,
+                      remove: scenario.remove)
             let real = JobHarness()
             _ = real.job(withConverter: scenario.withConverter)
-                .run(scenario.build(real), factor: scenario.factor, convert: scenario.convert)
+                .run(scenario.build(real), factor: scenario.factor, convert: scenario.convert,
+                     remove: scenario.remove)
 
             let expected = plan.steps.compactMap { step -> String? in
                 switch step.action {
@@ -206,7 +220,8 @@ final class PlanTests: XCTestCase {
         for scenario in scenarios {
             let h = JobHarness()
             let plan = h.job(withConverter: scenario.withConverter)
-                .plan(scenario.build(h), factor: scenario.factor, convert: scenario.convert)
+                .plan(scenario.build(h), factor: scenario.factor, convert: scenario.convert,
+                      remove: scenario.remove)
             seen.formUnion(plan.steps.map(\.action))
         }
         XCTAssertEqual(seen, Set(RunPlan.Action.allCases))

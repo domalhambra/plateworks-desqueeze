@@ -12,8 +12,35 @@ public struct ProcessResult: Equatable, Sendable {
     }
 }
 
+/// A program that a signal ended, for example `kill` or a crash.
+///
+/// Such a program has no exit code. `Process` reports the signal number in its
+/// place, so a runner that returned it as an exit code would make "ended by
+/// signal 15" read as "returned 15", and a caller that accepts a partial
+/// output would take half a result as a whole one. So the runner throws this,
+/// and each caller turns it into the note for its file with the words of
+/// `errorDescription`.
+public struct ProcessSignalError: Error, LocalizedError, Equatable, Sendable {
+    public let signal: Int32
+    /// What the program wrote before it ended.
+    public let stdout: String
+    public let stderr: String
+
+    public init(signal: Int32, stdout: String, stderr: String) {
+        self.signal = signal
+        self.stdout = stdout
+        self.stderr = stderr
+    }
+
+    public var errorDescription: String? { "The program was ended by signal \(signal)." }
+}
+
 /// Starts a program with arguments and waits for it. No shell is involved, so
 /// a path with spaces is one argument.
+///
+/// - Throws: when the program cannot start, and `ProcessSignalError` when a
+///   signal ended it. A program that ran and exited gives a `ProcessResult`,
+///   whatever its exit code.
 public protocol ProcessRunner: Sendable {
     func run(_ executable: URL, _ arguments: [String]) throws -> ProcessResult
 }
@@ -48,11 +75,14 @@ public struct SystemProcessRunner: ProcessRunner {
             group.wait()
             process.waitUntilExit()
 
-            return ProcessResult(
-                exitCode: process.terminationStatus,
-                stdout: String(decoding: outData, as: UTF8.self),
-                stderr: String(decoding: errData.value, as: UTF8.self)
-            )
+            let stdout = String(decoding: outData, as: UTF8.self)
+            let stderr = String(decoding: errData.value, as: UTF8.self)
+            // For a program that a signal ended, `terminationStatus` is the
+            // signal number, not an exit code.
+            if process.terminationReason == .uncaughtSignal {
+                throw ProcessSignalError(signal: process.terminationStatus, stdout: stdout, stderr: stderr)
+            }
+            return ProcessResult(exitCode: process.terminationStatus, stdout: stdout, stderr: stderr)
         }
     }
 }

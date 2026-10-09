@@ -27,6 +27,24 @@ final class ProcessRunnerTests: XCTestCase {
         XCTAssertEqual(result.stderr.count, 200_000)
     }
 
+    // A program that a signal ended has no exit code of its own. The status
+    // that `Process` gives for it is the signal number, and a caller that
+    // read it as an exit code would say "returned 15".
+    func testAProgramThatASignalEndedIsAnErrorThatNamesTheSignal() throws {
+        XCTAssertThrowsError(try runner.run(shell, ["-c", "echo partial; echo noise 1>&2; kill -TERM $$"])) { error in
+            guard let ended = error as? ProcessSignalError else { return XCTFail("\(error)") }
+            XCTAssertEqual(ended.signal, SIGTERM)
+            XCTAssertEqual(ended.stdout, "partial\n")
+            XCTAssertEqual(ended.stderr, "noise\n")
+            XCTAssertEqual(ended.localizedDescription, "The program was ended by signal 15.")
+        }
+    }
+
+    func testAProgramThatExitsWithTheNumberOfASignalIsStillAnExitCode() throws {
+        let result = try runner.run(shell, ["-c", "exit 15"])
+        XCTAssertEqual(result, ProcessResult(exitCode: 15, stdout: "", stderr: ""))
+    }
+
     func testAMissingExecutableThrows() {
         XCTAssertThrowsError(try runner.run(URL(fileURLWithPath: "/nonexistent/exiftool"), []))
     }

@@ -13,8 +13,10 @@ import Foundation
 /// So it counts every pending ARW when there is no converter or `convert` is
 /// false, an ARW whose conversion failed (that one is in `failed` too), and
 /// the ARW files that a stopped run did not reach. Remove is the exception:
-/// it has no ARW work, so it reports 0. Remove is a run at no stretch with
-/// `convert` false, as the design defines it.
+/// it has no ARW work, so it reports 0. A caller says that it means Remove
+/// with `remove: true`. The job never guesses it from the factor and
+/// `convert`: `run` at factor 1 with `convert` false is not Remove, and it
+/// reports the ARW files it left (design 12.1).
 public struct DesqueezeJob: Sendable {
     private let tag: ScaleTagging
     private let converter: RawConverter?
@@ -22,7 +24,10 @@ public struct DesqueezeJob: Sendable {
 
     /// - Parameter converter: nil when Adobe DNG Converter is not installed.
     ///   The DNG files still run.
-    public init(tag: ScaleTagging, converter: RawConverter?, backups: BackupHandling = FileBackups()) {
+    /// - Parameter backups: where a backup goes after a write that passed its
+    ///   check. There is no default, so no caller reaches the Trash by
+    ///   leaving it out. The window and the tool name the Trash themselves.
+    public init(tag: ScaleTagging, converter: RawConverter?, backups: BackupHandling) {
         self.tag = tag
         self.converter = converter
         self.backups = backups
@@ -33,38 +38,45 @@ public struct DesqueezeJob: Sendable {
     /// This is the only public way to run. Each skip is decided on what the
     /// folder holds at the call, never on what a front end read earlier.
     ///
-    /// - Parameter convert: false for Remove, which never converts.
+    /// - Parameters:
+    ///   - convert: false leaves the ARW files alone.
+    ///   - remove: true for Remove, with `factor` at `.noStretch`. Remove
+    ///     never converts, whatever `convert` says, and it reports no ARW
+    ///     files left.
     /// - Throws: only when the scan fails. No file is changed then. A file
     ///   that fails during the run is a note in the summary, not an error.
     public func run(
         folder: URL,
         factor: SqueezeFactor,
         convert: Bool,
+        remove: Bool = false,
         cancel: CancelFlag = CancelFlag(),
         progress: (RunProgress) -> Void = { _ in }
     ) throws -> RunSummary {
         let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
-        return run(snapshot, factor: factor, convert: convert, cancel: cancel, progress: progress)
+        return run(snapshot, factor: factor, convert: convert, remove: remove, cancel: cancel, progress: progress)
     }
 
     /// Scans `folder`, and returns what a run would do. Changes no file.
     ///
     /// The only tool call is the scan's one read of the folder.
     ///
+    /// `convert` and `remove` mean what they mean for `run`.
+    ///
     /// - Throws: only when the scan fails.
-    public func plan(folder: URL, factor: SqueezeFactor, convert: Bool) throws -> RunPlan {
+    public func plan(folder: URL, factor: SqueezeFactor, convert: Bool, remove: Bool = false) throws -> RunPlan {
         let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
-        return plan(snapshot, factor: factor, convert: convert)
+        return plan(snapshot, factor: factor, convert: convert, remove: remove)
     }
 
     // MARK: What the run and the dry run share
 
     /// The summary before the first file: the ARW files to account for, and
     /// the notes about the folder itself.
-    private func opening(_ snapshot: FolderSnapshot, factor: SqueezeFactor, convert: Bool) -> RunSummary {
+    private func opening(_ snapshot: FolderSnapshot, remove: Bool) -> RunSummary {
         var summary = RunSummary()
-        let isRemove = !convert && factor == .noStretch
-        summary.unconvertedARWs = isRemove ? 0 : snapshot.pendingARWs.count
+        summary.folderIsEmpty = snapshot.isEmpty
+        summary.unconvertedARWs = remove ? 0 : snapshot.pendingARWs.count
         guard snapshot.isWritable else {
             summary.notes = [.folderReadOnly(snapshot.folder)]
             return summary
@@ -100,12 +112,12 @@ public struct DesqueezeJob: Sendable {
     ///
     /// It walks the files in the order of `run`, and asks the same questions.
     /// It assumes that each conversion and each write passes.
-    func plan(_ snapshot: FolderSnapshot, factor: SqueezeFactor, convert: Bool) -> RunPlan {
-        var plan = RunPlan(steps: [], summary: opening(snapshot, factor: factor, convert: convert))
+    func plan(_ snapshot: FolderSnapshot, factor: SqueezeFactor, convert: Bool, remove: Bool = false) -> RunPlan {
+        var plan = RunPlan(steps: [], summary: opening(snapshot, remove: remove))
         guard snapshot.isWritable else { return plan }
 
         var dngs = snapshot.dngs
-        for arw in arwsToConvert(snapshot, convert: convert) {
+        for arw in arwsToConvert(snapshot, convert: convert && !remove) {
             plan.steps.append(RunPlan.Step(name: arw.lastPathComponent, action: .convert))
             plan.summary.converted += 1
             plan.summary.unconvertedARWs -= 1
@@ -134,13 +146,14 @@ public struct DesqueezeJob: Sendable {
         _ snapshot: FolderSnapshot,
         factor: SqueezeFactor,
         convert: Bool,
+        remove: Bool = false,
         cancel: CancelFlag = CancelFlag(),
         progress: (RunProgress) -> Void = { _ in }
     ) -> RunSummary {
-        var summary = opening(snapshot, factor: factor, convert: convert)
+        var summary = opening(snapshot, remove: remove)
         guard snapshot.isWritable else { return summary }
 
-        let arws = arwsToConvert(snapshot, convert: convert)
+        let arws = arwsToConvert(snapshot, convert: convert && !remove)
         var dngs = snapshot.dngs
         var total = arws.count * 2 + dngs.count
         var completed = 0

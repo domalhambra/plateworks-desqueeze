@@ -163,7 +163,8 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testRemoveWritesOneOneAndNeverConverts() {
         let files = [dng("A.dng", at: 1.5), dng("B.dng", at: 1)]
-        let summary = job().run(snapshot(dngs: files, pending: ["X.ARW"]), factor: .noStretch, convert: false)
+        let summary = job().run(snapshot(dngs: files, pending: ["X.ARW"]), factor: .noStretch, convert: false,
+                                remove: true)
         XCTAssertEqual(log.entries, ["write 1 1 A.dng", "read A.dng", "trash A.dng"])
         XCTAssertEqual(summary.converted, 0)
         XCTAssertEqual(summary.set, 1)
@@ -264,6 +265,43 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertTrue(summary.cancelled)
         XCTAssertEqual(summary.converted, 1)
         XCTAssertEqual(summary.set, 0)
+    }
+
+    // `cancelled` means the run left work undone (design 12.1). The flag is
+    // read before each file, never after the last one.
+    func testCancelDuringTheLastTagLeavesNothingUndoneSoTheRunIsComplete() {
+        let flag = CancelFlag()
+        tag.onWrite = { if self.log.entries.contains("write 1.5 1 B.dng") { flag.cancel() } }
+        let summary = job().run(snapshot(dngs: [dng("A.dng"), dng("B.dng")]), factor: factor,
+                                convert: true, cancel: flag)
+        XCTAssertTrue(flag.isCancelled, "the cancel did arrive, during the last file")
+        XCTAssertFalse(summary.cancelled)
+        XCTAssertEqual(summary.set, 2)
+        XCTAssertEqual(summary.failed, 0)
+        XCTAssertEqual(log.entries, [
+            "write 1.5 1 A.dng", "read A.dng", "trash A.dng",
+            "write 1.5 1 B.dng", "read B.dng", "trash B.dng",
+        ])
+    }
+
+    func testCancelDuringTheLastTagOfAConvertedFileLeavesNothingUndone() {
+        let flag = CancelFlag()
+        tag.onWrite = { if self.log.entries.contains("write 1.5 1 X.dng") { flag.cancel() } }
+        let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]), factor: factor,
+                                convert: true, cancel: flag)
+        XCTAssertFalse(summary.cancelled)
+        XCTAssertEqual([summary.converted, summary.set, summary.failed, summary.unconvertedARWs], [1, 2, 0, 0])
+    }
+
+    func testCancelDuringTheLastConversionWithDNGFilesToTagIsStopped() {
+        let flag = CancelFlag()
+        converter.onConvert = { if self.log.entries.contains("convert Y.ARW") { flag.cancel() } }
+        let summary = job().run(snapshot(dngs: [dng("A.dng"), dng("B.dng")], pending: ["X.ARW", "Y.ARW"]),
+                                factor: factor, convert: true, cancel: flag)
+        XCTAssertTrue(summary.cancelled)
+        XCTAssertEqual(summary.converted, 2)
+        XCTAssertEqual(summary.set, 0, "every DNG was still to tag")
+        XCTAssertEqual(log.entries, ["convert X.ARW", "convert Y.ARW"])
     }
 
     func testTheJobDoesNotTouchAnOrphanBackup() {

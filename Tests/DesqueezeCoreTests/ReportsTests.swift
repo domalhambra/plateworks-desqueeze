@@ -148,6 +148,18 @@ final class ReportsTests: XCTestCase {
         }
     }
 
+    // An empty folder changes the text, not the JSON (design 12.1).
+    func testTheJSONOfARunOnAnEmptyFolderHasTheSameKeys() throws {
+        var empty = RunSummary()
+        empty.folderIsEmpty = true
+        let report = RunReport(folder: folder, factor: factor, summary: empty)
+        XCTAssertTrue(report.folderIsEmpty)
+        XCTAssertEqual(keys(try object(report)), keys(try object(RunReport(folder: folder, factor: factor,
+                                                                           summary: summary()))))
+        XCTAssertTrue(RunReport(folder: folder, factor: factor, plan: RunPlan(steps: [], summary: empty)).folderIsEmpty)
+        XCTAssertFalse(RunReport(folder: folder, factor: factor, summary: RunSummary()).folderIsEmpty)
+    }
+
     func testTheRunReportCarriesTheSummary() throws {
         let json = try object(RunReport(folder: folder, factor: factor, summary: summary()))
         XCTAssertEqual(json, try parsed("""

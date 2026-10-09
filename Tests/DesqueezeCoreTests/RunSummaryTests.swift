@@ -99,6 +99,29 @@ final class RunSummaryTests: XCTestCase {
         XCTAssertEqual(summary.blocked, 0)
     }
 
+    // MARK: An empty folder
+
+    // A front end shows `FolderText.noPhotos` for it. A folder with an orphan
+    // backup or a pending ARW is not empty, also when the run has no work
+    // for it: Remove reports no ARW file, and a stopped run counts nothing.
+    func testTheSummaryKnowsWhetherTheFolderWasEmpty() {
+        let cases: [(String, FolderSnapshot, Bool)] = [
+            ("empty", h.snapshot(), true),
+            ("an orphan only", h.snapshot(orphans: ["gone.dng_original"]), false),
+            ("an ARW only", h.snapshot(pending: ["X.ARW"]), false),
+            ("a DNG only", h.snapshot(dngs: [h.dng("A.dng")]), false),
+        ]
+        for (name, state, empty) in cases {
+            for remove in [false, true] {
+                XCTAssertEqual(h.job().run(state, factor: remove ? .noStretch : factor, convert: !remove,
+                                           remove: remove).folderIsEmpty, empty, "run \(name) \(remove)")
+                XCTAssertEqual(h.job().plan(state, factor: remove ? .noStretch : factor, convert: !remove,
+                                            remove: remove).summary.folderIsEmpty, empty, "plan \(name) \(remove)")
+            }
+        }
+        XCTAssertEqual(h.job().run(h.snapshot(writable: false), factor: factor, convert: true).folderIsEmpty, true)
+    }
+
     // MARK: The ARW files a run left
 
     func testARunThatConvertsEveryPendingARWLeavesNone() {
@@ -126,9 +149,26 @@ final class RunSummaryTests: XCTestCase {
 
     func testRemoveNeverConvertsAndReportsNoARW() {
         let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng", at: 1.5)], pending: ["X.ARW", "Y.ARW"]),
-                                  factor: .noStretch, convert: false)
+                                  factor: .noStretch, convert: false, remove: true)
         XCTAssertEqual(summary.unconvertedARWs, 0)
         XCTAssertEqual(summary.set, 1)
+    }
+
+    // Remove is an intent (design 12.1). The same arguments with no intent
+    // are a run at factor 1, and it reports the ARW files it left.
+    func testARunAtFactorOneWithNoConvertIsNotRemoveAndReportsTheARWFiles() {
+        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng", at: 1.5)], pending: ["X.ARW", "Y.ARW"]),
+                                  factor: .noStretch, convert: false)
+        XCTAssertEqual(summary.unconvertedARWs, 2)
+        XCTAssertEqual(summary.set, 1)
+    }
+
+    func testRemoveNeverConvertsEvenWhenToldToConvert() {
+        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng", at: 1.5)], pending: ["X.ARW"]),
+                                  factor: .noStretch, convert: true, remove: true)
+        XCTAssertEqual(summary.converted, 0)
+        XCTAssertEqual(summary.unconvertedARWs, 0)
+        XCTAssertEqual(h.log.entries, ["write 1 1 A.dng", "read A.dng", "trash A.dng"])
     }
 
     // The ARW is in `failed`, with a note. It also has no DNG, so it is left.
@@ -153,7 +193,7 @@ final class RunSummaryTests: XCTestCase {
     func testAReadOnlyFolderLeavesEveryPendingARWAndRemoveStillReportsNone() {
         let state = h.snapshot(dngs: [h.dng("A.dng")], pending: ["X.ARW"], writable: false)
         XCTAssertEqual(h.job().run(state, factor: factor, convert: true).unconvertedARWs, 1)
-        XCTAssertEqual(h.job().run(state, factor: .noStretch, convert: false).unconvertedARWs, 0)
+        XCTAssertEqual(h.job().run(state, factor: .noStretch, convert: false, remove: true).unconvertedARWs, 0)
         XCTAssertEqual(h.log.entries, [])
     }
 

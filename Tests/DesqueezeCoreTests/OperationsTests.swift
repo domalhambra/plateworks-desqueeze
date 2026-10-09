@@ -21,7 +21,12 @@ final class OperationsTests: XCTestCase {
         ]
     }
 
-    override func tearDown() { removeTemporaryFolder(shoot) }
+    var scripts: [URL] = []
+
+    override func tearDown() {
+        removeTemporaryFolder(shoot)
+        scripts.forEach(removeTemporaryFolder)
+    }
 
     func operations(withConverter: Bool = true) -> DesqueezeOperations {
         DesqueezeOperations(exiftool: exiftool, dngConverter: withConverter ? converterTool : nil,
@@ -82,6 +87,25 @@ final class OperationsTests: XCTestCase {
         XCTAssertEqual(missing.steps?.map(\.action).contains(.convert), false)
     }
 
+    // Remove is an intent, not a guess from the arguments (design 12.1).
+    // `run` at factor 1 with no conversion is not Remove: it reports the ARW
+    // files it left. Only `remove` leaves that line out.
+    func testRunAtFactorOneWithNoConvertReportsTheARWFilesAndRemoveDoesNot() throws {
+        let one = SqueezeFactor.noStretch
+        let run = try operations().run(shoot, factor: one, convert: false)
+        XCTAssertEqual(run.unconvertedARWs, 1)
+        XCTAssertEqual(run.converted, 0)
+
+        let dryRun = try operations().run(shoot, factor: one, convert: false, dryRun: true)
+        XCTAssertEqual(dryRun.unconvertedARWs, 1)
+
+        h.log.entries = []
+        let remove = try operations().remove(shoot)
+        XCTAssertEqual(remove.unconvertedARWs, 0)
+        XCTAssertEqual(try operations().remove(shoot, dryRun: true).unconvertedARWs, 0)
+        XCTAssertEqual(remove.factor, run.factor, "the two differ in their intent only")
+    }
+
     func testRemoveWritesNoStretchConvertsNothingAndReportsFactorOne() throws {
         let dry = try operations().remove(shoot, dryRun: true)
         XCTAssertEqual(h.log.entries, ["readFolder"])
@@ -122,6 +146,42 @@ final class OperationsTests: XCTestCase {
         XCTAssertThrowsError(try operations().remove(missing))
         XCTAssertThrowsError(try operations().remove(missing, dryRun: true))
         XCTAssertEqual(h.log.entries, [])
+    }
+
+    // MARK: A program that a signal ended
+
+    /// A shell script that stands in for a tool. The real runner starts it.
+    func script(_ body: String) throws -> URL {
+        let folder = try makeTemporaryFolder(named: "tools")
+        scripts.append(folder)
+        let file = folder.appendingPathComponent("tool.sh")
+        try Data("#!/bin/sh\n\(body)\n".utf8).write(to: file)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path)
+        return file
+    }
+
+    func testAnExiftoolThatASignalEndedMakesTheFileFailedWithTheSignalInTheDetail() throws {
+        // It reads the folder, and is ended at the first write.
+        let fake = try script(#"case "$*" in *" -T "*) printf 'A.dng\t1 1\t-\n';; *) kill -TERM $$;; esac"#)
+        let operations = DesqueezeOperations(exiftool: fake, dngConverter: nil, backups: h.backups)
+        let report = try operations.run(shoot, factor: factor)
+        XCTAssertEqual(report.failed, 2, "A.dng, and B.dng whose scale the script does not give")
+        XCTAssertEqual(report.set, 0)
+        let note = try XCTUnwrap(report.notes.first { $0.kind == .failed && $0.name == "A.dng" })
+        XCTAssertEqual(note.message, "Not changed.")
+        XCTAssertEqual(note.detail, "The program was ended by signal 15.")
+        XCTAssertFalse(h.log.entries.contains("trash A.dng"), "a file that failed discards no backup")
+    }
+
+    func testAConverterThatASignalEndedMakesTheARWNotConvertedWithTheSignalInTheDetail() throws {
+        let fake = try script("kill -TERM $$")
+        let operations = DesqueezeOperations(exiftool: exiftool, dngConverter: fake,
+                                             tag: h.tag, converter: AdobeConverter(executable: fake), backups: h.backups)
+        let report = try operations.run(shoot, factor: factor)
+        let note = try XCTUnwrap(report.notes.first { $0.kind == .notConverted })
+        XCTAssertEqual(note.name, "X.ARW")
+        XCTAssertEqual(note.detail, "The program was ended by signal 15.")
+        XCTAssertEqual(report.unconvertedARWs, 1)
     }
 
     // The public way in: one runner starts both tools.

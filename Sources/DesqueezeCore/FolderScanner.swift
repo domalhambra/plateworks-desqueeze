@@ -33,7 +33,7 @@ public struct FolderScanner: Sendable {
     private let tag: ScaleTagging
     private let backups: BackupHandling
 
-    public init(tag: ScaleTagging, backups: BackupHandling = FileBackups()) {
+    public init(tag: ScaleTagging, backups: BackupHandling) {
         self.tag = tag
         self.backups = backups
     }

@@ -19,8 +19,10 @@ public struct DesqueezeOperations: Sendable {
     ///   - runner: starts exiftool and the converter. Wrap it in a
     ///     `LoggingProcessRunner` to see each command.
     ///   - backups: where a backup goes after a write that passed its check.
+    ///     There is no default, so no caller reaches the Trash by leaving it
+    ///     out. The window and the tool name the Trash themselves.
     public init(exiftool: URL, dngConverter: URL?, runner: ProcessRunner = SystemProcessRunner(),
-                backups: BackupHandling = FileBackups()) {
+                backups: BackupHandling) {
         self.init(exiftool: exiftool, dngConverter: dngConverter,
                   tag: ScaleTag(exiftool: exiftool, runner: runner),
                   converter: dngConverter.map { AdobeConverter(executable: $0, runner: runner) },
@@ -48,7 +50,9 @@ public struct DesqueezeOperations: Sendable {
     /// Design 4.3 at `factor`. With `dryRun`, the report of
     /// `DesqueezeJob.plan`, and no file changes.
     ///
-    /// - Parameter convert: false leaves the ARW files alone.
+    /// - Parameter convert: false leaves the ARW files alone. The report
+    ///   still counts them in `unconvertedARWs`, also at factor 1. Only
+    ///   `remove` leaves that count out.
     /// - Throws: only when the folder cannot be scanned. No file is changed
     ///   then. A file that fails is a note in the report.
     public func run(
@@ -59,22 +63,32 @@ public struct DesqueezeOperations: Sendable {
         cancel: CancelFlag = CancelFlag(),
         progress: (RunProgress) -> Void = { _ in }
     ) throws -> RunReport {
-        if dryRun {
-            return RunReport(folder: folder, factor: factor,
-                             plan: try job.plan(folder: folder, factor: factor, convert: convert))
-        }
-        let summary = try job.run(folder: folder, factor: factor, convert: convert, cancel: cancel,
-                                  progress: progress)
-        return RunReport(folder: folder, factor: factor, summary: summary)
+        try perform(folder, factor: factor, convert: convert, remove: false, dryRun: dryRun, cancel: cancel,
+                    progress: progress)
     }
 
-    /// Design 4.3 with factor 1 and no conversion.
+    /// Design 4.3 with factor 1 and no conversion. It reports no ARW files
+    /// left: Remove has no ARW work.
     public func remove(
         _ folder: URL,
         dryRun: Bool = false,
         cancel: CancelFlag = CancelFlag(),
         progress: (RunProgress) -> Void = { _ in }
     ) throws -> RunReport {
-        try run(folder, factor: .noStretch, convert: false, dryRun: dryRun, cancel: cancel, progress: progress)
+        try perform(folder, factor: .noStretch, convert: false, remove: true, dryRun: dryRun, cancel: cancel,
+                    progress: progress)
+    }
+
+    private func perform(
+        _ folder: URL, factor: SqueezeFactor, convert: Bool, remove: Bool, dryRun: Bool, cancel: CancelFlag,
+        progress: (RunProgress) -> Void
+    ) throws -> RunReport {
+        if dryRun {
+            return RunReport(folder: folder, factor: factor,
+                             plan: try job.plan(folder: folder, factor: factor, convert: convert, remove: remove))
+        }
+        let summary = try job.run(folder: folder, factor: factor, convert: convert, remove: remove, cancel: cancel,
+                                  progress: progress)
+        return RunReport(folder: folder, factor: factor, summary: summary)
     }
 }

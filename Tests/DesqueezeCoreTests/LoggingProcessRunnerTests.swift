@@ -75,6 +75,22 @@ final class LoggingProcessRunnerTests: XCTestCase {
         XCTAssertEqual(lines.lines, ["$ '/no/such tool' 'a b'", "  did not start: The file does not exist."])
     }
 
+    // The program started, so "did not start" would be wrong. The output it
+    // wrote before the signal is still worth reading.
+    func testAProgramThatASignalEndedIsLoggedWithTheSignalAndItsOutput() {
+        final class Ended: ProcessRunner {
+            func run(_ executable: URL, _ arguments: [String]) throws -> ProcessResult {
+                throw ProcessSignalError(signal: 9, stdout: "half\n", stderr: "")
+            }
+        }
+        let box = lines!
+        let ended = LoggingProcessRunner(wrapping: Ended()) { box.lines.append($0) }
+        XCTAssertThrowsError(try ended.run(tool, ["-ver"])) {
+            XCTAssertEqual($0 as? ProcessSignalError, ProcessSignalError(signal: 9, stdout: "half\n", stderr: ""))
+        }
+        XCTAssertEqual(lines.lines, ["$ /opt/homebrew/bin/exiftool -ver", "  ended by signal 9", "  stdout: half"])
+    }
+
     // Each argument reads back as one argument: a reader, or a shell, cannot
     // split it at a space.
     func testAnArgumentIsQuotedOnlyWhenItNeedsIt() {

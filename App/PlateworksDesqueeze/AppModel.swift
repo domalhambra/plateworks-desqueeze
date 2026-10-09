@@ -211,7 +211,8 @@ final class AppModel: ObservableObject {
         scanNumber += 1
         let number = scanNumber
         isScanning = true
-        let scanner = FolderScanner(tag: ScaleTag(exiftool: exiftool))
+        // A scan only asks whether a backup is there. It moves none.
+        let scanner = FolderScanner(tag: ScaleTag(exiftool: exiftool), backups: FileBackups())
         return Task {
             let result = try? await Task.detached { try scanner.snapshot(of: folder) }.value
             guard number == scanNumber else { return }
@@ -231,12 +232,12 @@ final class AppModel: ObservableObject {
         }
         customError = nil
         UserDefaults.standard.set(factor.label, forKey: Self.factorKey)
-        start(factor: factor, convert: true)
+        start(factor: factor, convert: true, remove: false)
     }
 
     func remove() {
         guard canRemove else { return }
-        start(factor: .noStretch, convert: false)
+        start(factor: .noStretch, convert: false, remove: true)
     }
 
     /// Stops the run after its current file. The click is acknowledged at
@@ -270,11 +271,15 @@ final class AppModel: ObservableObject {
         _ = await job.work.result
     }
 
-    private func start(factor: SqueezeFactor, convert: Bool) {
+    /// - Parameter remove: the intent of the Remove button. The job does not
+    ///   guess it from the factor and `convert`.
+    private func start(factor: SqueezeFactor, convert: Bool, remove: Bool) {
         guard let folder, let exiftool else { return }
         let runner = DesqueezeJob(
             tag: ScaleTag(exiftool: exiftool),
-            converter: converter.map { AdobeConverter(executable: $0) }
+            converter: converter.map { AdobeConverter(executable: $0) },
+            // The window moves a backup to the Trash.
+            backups: FileBackups()
         )
         let flag = CancelFlag()
         // The job reports progress from its own thread. A stream keeps the
@@ -283,7 +288,7 @@ final class AppModel: ObservableObject {
         let work = Task.detached {
             defer { updatesEnd.finish() }
             // The job scans the folder itself. It gets no counts from here.
-            return try runner.run(folder: folder, factor: factor, convert: convert, cancel: flag) {
+            return try runner.run(folder: folder, factor: factor, convert: convert, remove: remove, cancel: flag) {
                 updatesEnd.yield($0)
             }
         }

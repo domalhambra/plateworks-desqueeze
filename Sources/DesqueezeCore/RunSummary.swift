@@ -106,6 +106,10 @@ public struct RunSummary: Equatable, Sendable {
     public var unconvertedARWs = 0
     public var notes: [FileNote] = []
     public var cancelled = false
+    /// True when the folder held no DNG, no ARW and no orphan backup, as
+    /// `FolderSnapshot.isEmpty` says. A front end then shows
+    /// `FolderText.noPhotos`. A folder with an orphan backup is not empty.
+    public var folderIsEmpty = false
 
     public init() {}
 }

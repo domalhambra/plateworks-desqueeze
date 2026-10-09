@@ -24,6 +24,11 @@ public struct LoggingProcessRunner: ProcessRunner {
         let result: ProcessResult
         do {
             result = try runner.run(executable, arguments)
+        } catch let ended as ProcessSignalError {
+            sink("  ended by signal \(ended.signal)")
+            for line in Self.lines(ended.stdout) { sink("  stdout: \(line)") }
+            for line in Self.lines(ended.stderr) { sink("  stderr: \(line)") }
+            throw ended
         } catch {
             sink("  did not start: \(error.localizedDescription)")
             throw error
