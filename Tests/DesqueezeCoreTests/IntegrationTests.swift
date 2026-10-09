@@ -203,4 +203,33 @@ final class IntegrationTests: XCTestCase {
         XCTAssertEqual(try scaleOnDisk("good.dng"), .noStretch)
         XCTAssertEqual(try imageDataHash(good), hashBefore)
     }
+
+    // exiftool stopped between its two renames: the backup is there and the
+    // DNG is not. A real run must say so, in Apply and in Remove, and must
+    // leave the backup as it is.
+    func testARealRunReportsAnOrphanBackupAndLeavesItAsItWas() throws {
+        _ = try copyFixture("sample.dng", as: "good.dng")
+        let orphan = try copyFixture("sample.dng", as: "lost.dng_original")
+        let orphanBefore = try Data(contentsOf: orphan)
+        let note = FileNote(
+            name: "lost.dng_original",
+            message: "A backup with no DNG beside it. Rename it to lost.dng to get the photo back.", detail: nil)
+
+        let applied = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+        XCTAssertEqual(applied.notes, [note])
+        XCTAssertEqual(applied.set, 1)
+        XCTAssertEqual(applied.converted, 0)
+        XCTAssertEqual(applied.skipped, 0)
+        XCTAssertEqual(applied.failed, 0)
+
+        let removed = try job.run(folder: folder, factor: .noStretch, convert: false)
+        XCTAssertEqual(removed.notes, [note])
+        XCTAssertEqual(removed.set, 1)
+        XCTAssertEqual(removed.failed, 0)
+
+        XCTAssertEqual(try Data(contentsOf: orphan), orphanBefore)
+        XCTAssertEqual(try names(withSuffix: "_original"), ["lost.dng_original"])
+        XCTAssertEqual(try names(withSuffix: ".dng"), ["good.dng"], "the job must not do the rename itself")
+        XCTAssertEqual(try scaleOnDisk("good.dng"), .noStretch)
+    }
 }

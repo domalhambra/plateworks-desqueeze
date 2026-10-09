@@ -8,7 +8,8 @@ public struct FolderSnapshot: Equatable, Sendable {
     public var pendingARWs: [URL]
     /// Each `<name>.dng_original` whose DNG is not beside it. exiftool leaves
     /// one when it stops between its two renames. It may be the only copy of
-    /// a photo. It is in no count, and a run does not touch it.
+    /// a photo. It is in no count. A run does not touch it, and names it in
+    /// a note.
     public var orphanBackups: [URL]
     public var isWritable: Bool
 

@@ -57,6 +57,9 @@ public final class CancelFlag: @unchecked Sendable {
 ///
 /// Order: scan the folder, convert every pending ARW, then tag every DNG, the
 /// new ones last. One file at a time. Cancel is honored between files.
+///
+/// The notes of a run start with one note for each orphan backup in the
+/// folder, so every front end reports them.
 public struct DesqueezeJob: Sendable {
     private let tag: ScaleTagging
     private let converter: RawConverter?
@@ -107,6 +110,17 @@ public struct DesqueezeJob: Sendable {
             summary.notes.append(FileNote(name: snapshot.folder.lastPathComponent,
                                           message: "This folder is read-only. No file was changed.", detail: nil))
             return summary
+        }
+
+        // An orphan backup may be the only copy of a photo, and it is in no
+        // count. The run does not touch it. The run names it first, before
+        // any file, so a cancelled run names it too.
+        summary.notes = snapshot.orphanBackups.map { backup in
+            let name = backup.lastPathComponent
+            return FileNote(
+                name: name,
+                message: "A backup with no DNG beside it. Rename it to \(name.dropLast("_original".count)) to get the photo back.",
+                detail: nil)
         }
 
         // Remove never converts. With no converter the ARW files wait.

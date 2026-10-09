@@ -302,6 +302,77 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(updates.map(\.name), ["X.ARW", "Y.ARW", "A.dng", "Y.dng"])
     }
 
+    // MARK: Orphan backups in the result
+
+    func orphanNote(_ backup: String, dng: String) -> FileNote {
+        FileNote(name: backup,
+                 message: "A backup with no DNG beside it. Rename it to \(dng) to get the photo back.",
+                 detail: nil)
+    }
+
+    func testARunReportsEachOrphanBackupFirstAndTouchesNone() {
+        tag.failWrites = ["A.dng"]
+        let summary = job().run(
+            snapshot(dngs: [dng("A.dng"), dng("B.dng")], pending: ["X.ARW"],
+                     orphans: ["gone.dng_original", "LOUD.DNG_ORIGINAL"]),
+            factor: factor, convert: true)
+
+        XCTAssertEqual(summary.notes, [
+            orphanNote("gone.dng_original", dng: "gone.dng"),
+            orphanNote("LOUD.DNG_ORIGINAL", dng: "LOUD.DNG"),
+            FileNote(name: "A.dng", message: "Not changed.", detail: "Error: write failed"),
+        ], "the orphans first, in the snapshot's order, then the files")
+        XCTAssertEqual(log.entries, [
+            "convert X.ARW",
+            "write 1.5 1 A.dng",
+            "write 1.5 1 B.dng", "read B.dng", "trash B.dng",
+            "write 1.5 1 X.dng", "read X.dng", "trash X.dng",
+        ], "no call names an orphan")
+        XCTAssertEqual(summary.converted, 1)
+        XCTAssertEqual(summary.set, 2)
+        XCTAssertEqual(summary.skipped, 0)
+        XCTAssertEqual(summary.failed, 1)
+    }
+
+    func testARemoveRunReportsAnOrphanBackupAndCountsNothingForIt() {
+        let summary = job().run(snapshot(dngs: [dng("A.dng", at: 1)], orphans: ["gone.dng_original"]),
+                                factor: .noStretch, convert: false)
+        XCTAssertEqual(summary.notes, [orphanNote("gone.dng_original", dng: "gone.dng")])
+        XCTAssertEqual(log.entries, [])
+        XCTAssertEqual(summary.converted, 0)
+        XCTAssertEqual(summary.set, 0)
+        XCTAssertEqual(summary.skipped, 1)
+        XCTAssertEqual(summary.failed, 0)
+    }
+
+    func testAFolderWithOnlyAnOrphanBackupStillReportsIt() {
+        let summary = job().run(snapshot(dngs: [], orphans: ["gone.dng_original"]), factor: factor, convert: true)
+        var expected = RunSummary()
+        expected.notes = [orphanNote("gone.dng_original", dng: "gone.dng")]
+        XCTAssertEqual(summary, expected)
+        XCTAssertEqual(log.entries, [])
+    }
+
+    // The notes are added before the first file, so a cancel cannot lose them.
+    func testACancelledRunStillReportsTheOrphanBackups() {
+        let flag = CancelFlag()
+        flag.cancel()
+        let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"], orphans: ["gone.dng_original"]),
+                                factor: factor, convert: true, cancel: flag)
+        XCTAssertTrue(summary.cancelled)
+        XCTAssertEqual(summary.notes, [orphanNote("gone.dng_original", dng: "gone.dng")])
+        XCTAssertEqual(log.entries, [])
+    }
+
+    func testAReadOnlyFolderKeepsItsOneNoteAndNamesNoOrphan() {
+        let summary = job().run(
+            snapshot(dngs: [dng("A.dng")], orphans: ["gone.dng_original"], writable: false),
+            factor: factor, convert: true)
+        XCTAssertEqual(summary.notes, [FileNote(name: "Shoot 1", message: "This folder is read-only. No file was changed.",
+                                                detail: nil)])
+        XCTAssertEqual(log.entries, [])
+    }
+
     // MARK: A run from a folder
 
     // A window that kept an old snapshot made Remove report "skipped" while
