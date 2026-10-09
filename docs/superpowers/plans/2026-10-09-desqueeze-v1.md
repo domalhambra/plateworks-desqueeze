@@ -594,8 +594,9 @@ git commit -m "core: ProcessRunner and ToolLocator"
 - [ ] Extensions match in any letter case: `a.dng`, `B.DNG`, `c.ARW`, `d.arw`.
 - [ ] A name that starts with a period is absent. A `.dng_original` file is absent. A folder named `x.dng` is absent.
 - [ ] An ARW is pending only when no DNG has its base name and no DNG names it in `originalRawFileName`. Both comparisons ignore letter case.
+- [ ] A symlink is absent from the scan. A base name with dots is compared whole.
 
-**Verify:** `swift test --filter FolderScanTests` → `Executed 6 tests, with 0 failures`
+**Verify:** `swift test --filter FolderScanTests` → `Executed 9 tests, with 0 failures`
 
 **Steps:**
 
@@ -667,6 +668,30 @@ final class FolderScanTests: XCTestCase {
         let renamed = dng("261004 Backyard Photos 0022.dng", original: "dsc05680.arw")
         let pending = FolderScan.pending(arws: arws, dngs: [renamed])
         XCTAssertEqual(pending.map(\.lastPathComponent), ["DSC05681.ARW"])
+    }
+
+    // The input every real folder produces: the converter records the name in
+    // the camera's own letter case.
+    func testOriginalRawFileNameInTheCamerasOwnCaseClaimsItsARW() {
+        let arws = ["DSC05680.ARW", "DSC05681.ARW"].map { folder.appendingPathComponent($0) }
+        let renamed = dng("261004 Backyard Photos 0022.dng", original: "DSC05680.ARW")
+        let pending = FolderScan.pending(arws: arws, dngs: [renamed])
+        XCTAssertEqual(pending.map(\.lastPathComponent), ["DSC05681.ARW"])
+    }
+
+    func testABaseNameWithDotsIsComparedWhole() {
+        let arws = ["2026.10.04 a.ARW", "2026.10.04 b.ARW"].map { folder.appendingPathComponent($0) }
+        let pending = FolderScan.pending(arws: arws, dngs: [dng("2026.10.04 a.dng")])
+        XCTAssertEqual(pending.map(\.lastPathComponent), ["2026.10.04 b.ARW"])
+    }
+
+    func testASymlinkIsNotAFile() throws {
+        try touch("real.dng")
+        try FileManager.default.createSymbolicLink(
+            at: folder.appendingPathComponent("link.dng"),
+            withDestinationURL: folder.appendingPathComponent("real.dng"))
+        let contents = try FolderScan.contents(of: folder)
+        XCTAssertEqual(contents.dngs.map(\.lastPathComponent), ["real.dng"])
     }
 }
 ```
@@ -741,6 +766,11 @@ public enum FolderScan {
     /// DNG's `originalRawFileName` equals the ARW's file name. Letter case is
     /// ignored. The second rule protects a folder whose DNG files were renamed
     /// on import: without it, a rerun would convert each ARW again.
+    ///
+    /// Either claim blocks conversion, on purpose. The converter never
+    /// overwrites, so a wrong "pending" writes a `_1.dng` duplicate, and a
+    /// wrong "claimed" only leaves one ARW waiting. Known limit: a DNG that
+    /// was renamed to another shot's base name claims that shot's ARW too.
     public static func pending(arws: [URL], dngs: [DNGFile]) -> [URL] {
         var claimedBaseNames = Set<String>()
         var claimedFileNames = Set<String>()
@@ -759,7 +789,7 @@ public enum FolderScan {
 - [ ] **Step 4: Run the test to see it pass**
 
 Run: `swift test --filter FolderScanTests`
-Expected: `Executed 6 tests, with 0 failures`
+Expected: `Executed 9 tests, with 0 failures`
 
 - [ ] **Step 5: Break it, then restore it**
 
@@ -2041,7 +2071,7 @@ git add scripts/make_fixtures.sh Tests
 git commit -m "tests: integration run on the real exiftool and Adobe DNG Converter"
 ```
 
-Expected from `swift test`: `Executed 57 tests, with 0 failures`.
+Expected from `swift test`: `Executed 60 tests, with 0 failures`.
 
 ---
 
@@ -2912,7 +2942,7 @@ python3 scripts/docs_check.py . --require docs/decisions.md --known-absent fixtu
 swift test 2>&1 | tail -2
 ```
 
-Expected: `exit 0`, then `Executed 58 tests, with 0 failures`.
+Expected: `exit 0`, then `Executed 61 tests, with 0 failures`.
 
 If the check reports a `dead-path`, correct the path in the document. Add no new `--known-absent` entry: the only path that is legitimately absent is `fixtures/`.
 
@@ -3378,4 +3408,4 @@ The spec's "known limitation" about Finder previews is a fact, not a behavior. I
 
 **Type check.** `SqueezeFactor`, `ProcessResult`, `ProcessRunner`, `SystemProcessRunner`, `ToolLocator`, `DNGFile`, `FolderContents`, `FolderScan`, `TagRow`, `TagError`, `ScaleTagging`, `ScaleTag`, `BackupHandling`, `FileBackups`, `ConvertError`, `RawConverter`, `AdobeConverter`, `FolderSnapshot`, `FolderScanner`, `FileNote`, `RunSummary`, `RunProgress`, `CancelFlag`, `DesqueezeJob`: each is defined in one task and used with the same signature in later tasks.
 
-**Test counts.** Task 1: 7. Task 2: 12. Task 3: 6. Task 4: 8. Task 5: 7. Task 6: 15 (3 scanner, 12 job). Task 7: 2. Task 9: 1. Total: 58.
+**Test counts.** Task 1: 7. Task 2: 12. Task 3: 9. Task 4: 8. Task 5: 7. Task 6: 15 (3 scanner, 12 job). Task 7: 2. Task 9: 1. Total: 61.
