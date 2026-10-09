@@ -176,9 +176,19 @@ Then the run does these steps in order. One file at a time.
 
    The conversion passes when the exit code is 0 and `<base>.dng` exists. Both
    conditions are needed: the converter returns 0 on a file it cannot read, and
-   makes no DNG. The app never changes, moves, or deletes an ARW. If
-   `<base>.dng` appeared after the scan, the app does not start the converter
-   for that ARW, and reports it.
+   makes no DNG. A DNG with no bytes is not a DNG: that conversion failed.
+   The app never changes, moves, or deletes an ARW. If `<base>.dng` appeared
+   after the scan, the app does not start the converter for that ARW, and
+   reports it.
+
+   A converter that is ended before it completes can leave a `<base>.dng`
+   with no bytes (tested 2026-10-09: the terminate and kill signals at 0.30 s
+   of a 0.37 s conversion). Left there, that file would claim the ARW in every
+   later scan, and the photo would never convert. So when a conversion fails
+   after the converter started, and `<base>.dng` is there, the app moves that
+   file to the Trash and says so on the note's detail line. The app made the
+   file in this run: the check before the start proved that no DNG had that
+   name. If the Trash refuses, the note names the file to delete by hand.
 
    The command line ignores the converter's window preferences. With `-c` it
    writes DNG 1.4, lossless raw, JPEG previews. That is the format of every DNG
@@ -362,7 +372,8 @@ and publishes progress to the view. Only one job runs at a time.
 | exiftool is missing | A message in the window with the install command. Run and Remove do nothing else. |
 | Adobe DNG Converter is missing | The summary line says the ARW files cannot be converted. DNG files still run. |
 | The folder has no DNG and no ARW | "No DNG or ARW files in this folder." |
-| A conversion fails | The ARW is listed as failed. The run continues. |
+| A conversion fails | The ARW is listed as failed. The run continues. A partial DNG that the converter left goes to the Trash, and the note says so. |
+| exiftool or the converter is ended by a signal | That file is listed as failed, with the signal number on the detail line. The run continues. |
 | A write or check fails | The backup is restored. The DNG is listed as failed. The run continues. |
 | A DNG has an existing backup | The DNG is listed as blocked, with the reason. Its note starts "Blocked." |
 | The Trash refuses a backup | The DNG is listed as done, with a note that its backup stayed beside it. |
@@ -484,6 +495,11 @@ desqueeze --help
   Control-C that arrives during the last file leaves nothing undone: the
   result is the complete result, `stopped` is false, and the exit code is the
   one the complete run gives. The window's Cancel follows the same rule.
+- exiftool and the converter normally do not get the Control-C: each starts
+  in a process group of its own. A program that is only just starting can
+  still get it (seen once in 27 test runs under load). That one file is then
+  reported as failed, with "ended by signal 2" on its detail line, and it is
+  left as it was. Run again to complete it.
 - A pipe that closes early (`desqueeze run … | head`) does not stop a run. The
   tool ignores `SIGPIPE`, completes the run, and loses only the output.
 - `run --factor 1 --no-convert` is not `remove`: it reports the ARW files it
