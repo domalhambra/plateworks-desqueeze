@@ -2223,6 +2223,8 @@ Expected from `swift test`: `Executed 70 tests, with 0 failures`.
 - [ ] A folder dropped on the window shows its name and counts in the form `2 DNG · 1 ARW to convert`.
 - [ ] A file dropped on the window shows `Drop a folder`.
 - [ ] Started with `-simulateMissingTools YES`, the window shows the exiftool install message.
+- [ ] Started with `-openFolder <path>`, the window shows that folder's name and counts.
+- [ ] At launch no text field has a focus ring, so exactly one factor looks selected.
 - [ ] `App/` imports no type from `Process`, and `Sources/DesqueezeCore/` imports neither AppKit nor SwiftUI.
 
 **Verify:** `xcodegen generate && xcodebuild -project PlateworksDesqueeze.xcodeproj -scheme PlateworksDesqueeze -configuration Debug -derivedDataPath build build 2>&1 | tail -1` → `** BUILD SUCCEEDED **`
@@ -2359,6 +2361,13 @@ final class AppModel: ObservableObject {
             choice = .custom
             customText = saved.label
         }
+
+        // `-openFolder <path>` on the command line loads a folder at launch.
+        // The standard Open panel runs in another process that a test script
+        // cannot drive, so checks by hand and by script start here.
+        if let path = UserDefaults.standard.string(forKey: "openFolder") {
+            load(URL(fileURLWithPath: path))
+        }
     }
 
     // MARK: What the view reads
@@ -2494,6 +2503,7 @@ final class AppModel: ObservableObject {
 - [ ] **Step 4: Write `App/PlateworksDesqueeze/ContentView.swift`**
 
 ```swift
+import AppKit
 import DesqueezeCore
 import SwiftUI
 
@@ -2519,6 +2529,13 @@ struct ContentView: View {
         }
         .padding(16)
         .frame(width: 440)
+        .onAppear {
+            // AppKit gives the custom field the keyboard focus when the window
+            // opens. Its focus ring then reads as a second selected factor.
+            DispatchQueue.main.async {
+                NSApp.windows.first(where: { $0.isVisible })?.makeFirstResponder(nil)
+            }
+        }
     }
 
     // MARK: Parts

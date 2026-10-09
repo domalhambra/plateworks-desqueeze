@@ -322,7 +322,9 @@ a detail line below the plain sentence.
 - **Acceptance, by hand:** a scratch copy of a real shoot folder. All four
   presets, a custom factor, a second run (every file skipped), Remove, a path
   with spaces, a start with the launch argument `-simulateMissingTools YES`
-  (this Mac has exiftool in two places, so a rename proves nothing). Then one file opened in
+  (this Mac has exiftool in two places, so a rename proves nothing). The launch argument
+  `-openFolder <path>` loads a folder at launch, because the standard Open
+  panel runs in another process that a script cannot drive. Then one file opened in
   Lightroom at each factor. Dom's photo folders are never the test target.
 
 ## 10. Documentation and filing
