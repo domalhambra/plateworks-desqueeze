@@ -26,9 +26,9 @@ public enum Usage {
           remove   Sets every DNG back to no stretch. Converts nothing.
 
         Options:
-          --factor <number>  The squeeze factor of the lens: a number from 1 to 4,
-                             with at most four decimal places. For run only, and
-                             run needs it. There is no default.
+          --factor <number>  The squeeze factor of the lens:
+                             \(SqueezeFactor.ruleText).
+                             For run only, and run needs it. There is no default.
           --no-convert       For run: leaves the ARW files alone.
           --dry-run          For run and remove: shows what the run would do, file
                              by file. Changes no file.

@@ -112,8 +112,7 @@ public enum Arguments {
         default:
             guard let factorText else { throw UsageError("run needs --factor <number>. There is no default.") }
             guard let factor = SqueezeFactor(text: factorText) else {
-                throw UsageError(
-                    "The factor must be a number from 1 to 4, with at most four decimal places. Got: \(factorText)")
+                throw UsageError("The factor must be \(SqueezeFactor.ruleText). Got: \(factorText)")
             }
             command = .run(folder: folder, factor: factor, convert: !given.contains("--no-convert"), dryRun: dryRun)
         }

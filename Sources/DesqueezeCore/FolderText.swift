@@ -11,8 +11,17 @@ import Foundation
 public enum FolderText {
     public static let noPhotos = "No DNG or ARW files in this folder."
     public static let readOnly = "This folder is read-only. Desqueeze cannot change its files."
+    /// For a folder whose scan failed, and for a path that names no folder
+    /// (design, section 8).
+    public static let unreadable = "This folder could not be read."
     /// The window names this many orphan backups. The others are a count.
     public static let namedOrphanLimit = 5
+
+    /// `unreadable` with the path after it, as the command line tool prints
+    /// it: `This folder could not be read: /Volumes/Card/Shoot 1`.
+    public static func unreadable(path: String) -> String {
+        "\(unreadable.dropLast()): \(path)"
+    }
 
     /// The label of the run button for `count` photos.
     public static func runLabel(count: Int) -> String {

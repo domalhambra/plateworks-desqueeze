@@ -9,6 +9,11 @@ public struct ToolLocator: Sendable {
     public static let converterBinary = "/Contents/MacOS/Adobe DNG Converter"
     public static let standardConverterApp = "/Applications/Adobe DNG Converter.app"
 
+    /// What a front end says when `exiftool()` gives nil (design, sections 6
+    /// and 8). The install command follows it, in the front end's own layout.
+    public static let exiftoolMissing = "Desqueeze needs exiftool, and it is not installed."
+    public static let exiftoolInstallCommand = "brew install exiftool"
+
     public let exiftoolCandidates: [String]
     public let converterApps: [String]
     private let isExecutable: @Sendable (String) -> Bool

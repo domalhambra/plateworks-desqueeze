@@ -9,6 +9,11 @@ public struct SqueezeFactor: Equatable, Hashable, Sendable {
     /// How close a read-back value must be to count as this factor: less than
     /// half of the smallest step between two factors, so neighbors never match.
     public static let tolerance = 0.00005
+    /// The rule for a factor in words, made from `range`. It is a part of a
+    /// sentence: a front end puts its own first words before it, and a
+    /// period after it. `init?(text:)` holds the four decimal places.
+    public static let ruleText = "a number from \(SqueezeFactor(range.lowerBound)!.label) to "
+        + "\(SqueezeFactor(range.upperBound)!.label), with at most four decimal places"
     public static let presets: [SqueezeFactor] = [1.33, 1.5, 1.8, 2].compactMap { SqueezeFactor($0) }
     /// No stretch. Remove writes this. Not named `none`: on a `SqueezeFactor?`,
     /// `.none` would mean nil.

@@ -122,6 +122,20 @@ final class FolderTextTests: XCTestCase {
         XCTAssertEqual(h.snapshot(orphans: orphans(6), writable: false).messages.count, 7)
     }
 
+    // MARK: A folder that could not be read
+
+    // The window and the command line tool both say this sentence (design,
+    // section 8).
+    func testTheSentenceForAFolderThatCouldNotBeRead() {
+        XCTAssertEqual(FolderText.unreadable, "This folder could not be read.")
+    }
+
+    // The command line tool names the path after the sentence.
+    func testTheSentenceWithThePathEndsWithThePathAndHasNoPeriod() {
+        XCTAssertEqual(FolderText.unreadable(path: "/Volumes/Card/Shoot 1"),
+                       "This folder could not be read: /Volumes/Card/Shoot 1")
+    }
+
     // The command line tool prints a list, so it asks for every name.
     func testWithNoLimitEveryOrphanBackupIsNamed() {
         let messages = FolderText.messages(isWritable: true, orphanBackups: orphans(7), namedOrphanLimit: nil)

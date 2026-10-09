@@ -34,6 +34,11 @@ final class SqueezeFactorTests: XCTestCase {
         }
     }
 
+    // Each front end puts its own first words before this, and a period after.
+    func testTheRuleInWords() {
+        XCTAssertEqual(SqueezeFactor.ruleText, "a number from 1 to 4, with at most four decimal places")
+    }
+
     func testMatchesTellsAdjacentFactorsApart() {
         let factor = SqueezeFactor(1.5)!
         XCTAssertTrue(factor.matches(horizontal: 1.5, vertical: 1))

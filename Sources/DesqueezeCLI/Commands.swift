@@ -43,8 +43,10 @@ public struct ToolEnvironment: Sendable {
 /// exactly one JSON object. Progress, `--verbose` and every message go to
 /// standard error. All file work is in `DesqueezeOperations`.
 public enum DesqueezeTool {
+    /// The sentence and the command are the core's, so the window says the
+    /// same words.
     static let missingExiftool =
-        "Desqueeze needs exiftool, and it is not installed. Install it with: brew install exiftool"
+        "\(ToolLocator.exiftoolMissing) Install it with: \(ToolLocator.exiftoolInstallCommand)"
 
     /// - Parameter arguments: the command line with no program name.
     /// - Returns: the exit code. 0, 1 or 2, as the design defines them.
@@ -121,8 +123,7 @@ public enum DesqueezeTool {
         // file, and a package such as an app or a photo library, are not
         // folders.
         guard let url = FolderChoice.folder(at: named) else {
-            return fail("This folder could not be read: \(named.path)", detail: whyNotAFolder(named), invocation,
-                        environment)
+            return fail(FolderText.unreadable(path: named.path), detail: whyNotAFolder(named), invocation, environment)
         }
         var runner = environment.runner
         if invocation.verbose {
@@ -136,8 +137,7 @@ public enum DesqueezeTool {
             return result.exitCode
         } catch {
             // Only a scan throws. No file was tried.
-            return fail("This folder could not be read: \(url.path)", detail: describe(error), invocation,
-                        environment)
+            return fail(FolderText.unreadable(path: url.path), detail: describe(error), invocation, environment)
         }
     }
 

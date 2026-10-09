@@ -41,6 +41,13 @@ final class ToolLocatorTests: XCTestCase {
         ])
     }
 
+    // The window and the command line tool both say these words (design,
+    // sections 6 and 8).
+    func testTheWordsForAMissingExiftool() {
+        XCTAssertEqual(ToolLocator.exiftoolMissing, "Desqueeze needs exiftool, and it is not installed.")
+        XCTAssertEqual(ToolLocator.exiftoolInstallCommand, "brew install exiftool")
+    }
+
     func testTheStandardConverterAppIsListedOnce() {
         let registered = URL(fileURLWithPath: "/Applications/Adobe DNG Converter.app/")
         XCTAssertEqual(locator(registered: registered, present: []).converterApps,

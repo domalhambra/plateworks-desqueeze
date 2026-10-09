@@ -37,6 +37,12 @@ final class CommandsTests: XCTestCase {
         XCTAssertFalse(h.out.text.contains(FileBackups.testFolderVariable), "the test variable is in no help text")
     }
 
+    // The rule is one sentence in the core. The help shows it on one line.
+    func testHelpStatesTheFactorRuleOfTheCore() {
+        h.run("--help")
+        XCTAssertTrue(h.out.text.contains("  \(SqueezeFactor.ruleText).\n"), h.out.text)
+    }
+
     func testHelpIsPlain() {
         h.run("--help")
         XCTAssertFalse(h.out.text.contains("!"))
