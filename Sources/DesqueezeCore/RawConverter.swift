@@ -35,13 +35,17 @@ public struct AdobeConverter: RawConverter {
     /// `-c` is lossless compression. `-d` is the output folder. The command
     /// line ignores the converter's window preferences.
     ///
-    /// Call this only for a pending ARW. When `<base>.dng` exists already, the
-    /// converter writes `<base>_1.dng`, and this method reports success for
-    /// the old file.
+    /// Only a pending ARW converts. When `<base>.dng` exists already, the real
+    /// converter writes `<base>_1.dng`, so this method refuses to start it.
     ///
     /// Never pass `-h`: it opens a window and the process never returns.
     public func convert(_ arw: URL) throws -> URL {
         let output = Self.outputURL(for: arw)
+        // The scan sends only pending files. This guard holds the rule at the
+        // last moment, for a DNG that appeared after the scan.
+        guard !fileExists(output.path) else {
+            throw ConvertError.failed("A DNG with this name exists already. Not converted.")
+        }
         let result = try runner.run(executable, ["-c", "-d", arw.deletingLastPathComponent().path, arw.path])
         guard result.exitCode == 0 else {
             throw ConvertError.failed("Adobe DNG Converter returned \(result.exitCode).")

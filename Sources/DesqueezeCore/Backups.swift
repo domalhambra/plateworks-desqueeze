@@ -32,7 +32,13 @@ public struct FileBackups: BackupHandling {
         try trash(Self.backupURL(for: dng))
     }
 
+    /// One atomic `rename`. The restored file is the backup itself, with its
+    /// own creation date and permissions. `FileManager.replaceItemAt` keeps the
+    /// replaced file's creation date, which is the time of the failed write.
+    /// With no backup this throws and leaves the DNG as it is.
     public func restoreBackup(for dng: URL) throws {
-        _ = try FileManager.default.replaceItemAt(dng, withItemAt: Self.backupURL(for: dng))
+        guard rename(Self.backupURL(for: dng).path, dng.path) == 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
     }
 }
