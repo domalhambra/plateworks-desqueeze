@@ -58,6 +58,11 @@ public enum FolderScan {
     /// DNG's `originalRawFileName` equals the ARW's file name. Letter case is
     /// ignored. The second rule protects a folder whose DNG files were renamed
     /// on import: without it, a rerun would convert each ARW again.
+    ///
+    /// Either claim blocks conversion, on purpose. The converter never
+    /// overwrites, so a wrong "pending" writes a `_1.dng` duplicate, and a
+    /// wrong "claimed" only leaves one ARW waiting. Known limit: a DNG that
+    /// was renamed to another shot's base name claims that shot's ARW too.
     public static func pending(arws: [URL], dngs: [DNGFile]) -> [URL] {
         var claimedBaseNames = Set<String>()
         var claimedFileNames = Set<String>()

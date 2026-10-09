@@ -62,4 +62,28 @@ final class FolderScanTests: XCTestCase {
         let pending = FolderScan.pending(arws: arws, dngs: [renamed])
         XCTAssertEqual(pending.map(\.lastPathComponent), ["DSC05681.ARW"])
     }
+
+    // The input every real folder produces: the converter records the name in
+    // the camera's own letter case.
+    func testOriginalRawFileNameInTheCamerasOwnCaseClaimsItsARW() {
+        let arws = ["DSC05680.ARW", "DSC05681.ARW"].map { folder.appendingPathComponent($0) }
+        let renamed = dng("261004 Backyard Photos 0022.dng", original: "DSC05680.ARW")
+        let pending = FolderScan.pending(arws: arws, dngs: [renamed])
+        XCTAssertEqual(pending.map(\.lastPathComponent), ["DSC05681.ARW"])
+    }
+
+    func testABaseNameWithDotsIsComparedWhole() {
+        let arws = ["2026.10.04 a.ARW", "2026.10.04 b.ARW"].map { folder.appendingPathComponent($0) }
+        let pending = FolderScan.pending(arws: arws, dngs: [dng("2026.10.04 a.dng")])
+        XCTAssertEqual(pending.map(\.lastPathComponent), ["2026.10.04 b.ARW"])
+    }
+
+    func testASymlinkIsNotAFile() throws {
+        try touch("real.dng")
+        try FileManager.default.createSymbolicLink(
+            at: folder.appendingPathComponent("link.dng"),
+            withDestinationURL: folder.appendingPathComponent("real.dng"))
+        let contents = try FolderScan.contents(of: folder)
+        XCTAssertEqual(contents.dngs.map(\.lastPathComponent), ["real.dng"])
+    }
 }
