@@ -28,7 +28,7 @@
     {
       "id": 4,
       "subject": "Task 4: `ScaleTag`",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Read the tag for a whole folder in one exiftool call, write it to one file, and read it back from one file.\n\n**Files:**\n- Create: `Sources/DesqueezeCore/ScaleTag.swift`\n- Test: `Tests/DesqueezeCoreTests/ScaleTagTests.swift`\n\n**Acceptance Criteria:**\n- [ ] The folder read passes exactly `-m -T -filename -SubIFD:DefaultScale -OriginalRawFileName -ext dng <folder>`.\n- [ ] The parser drops a row whose file name starts with a period, reads `-` as 1 and 1, and reads `-` in the third column as no original name.\n- [ ] The write passes exactly `-m`, `-SubIFD:DefaultScale=<factor> 1`, `<file>` as three arguments.\n- [ ] The write throws unless the exit code is 0 and the output contains `1 image files updated`.\n- [ ] The error text ignores the `Error copying hidden data` warning and prefers a line that starts with `Error`.\n- [ ] The single-file read passes exactly `-s3 -SubIFD:DefaultScale <file>`.\n- [ ] The folder read throws when exiftool fails and prints no row. It keeps the rows when one file fails.\n- [ ] The error text has no ` - <path>` suffix.\n\n**Verify:** `swift test --filter ScaleTagTests` \u2192 `Executed 13 tests, with 0 failures`\n\n**Steps:**\n- Step 1: Write the failing test\n- Step 2: Run the test to see it fail\n- Step 3: Write the implementation\n- Step 4: Run the test to see it pass\n- Step 5: Break it, then restore it\n- Step 6: Commit\n\n```json:metadata\n{\"files\": [\"Sources/DesqueezeCore/ScaleTag.swift\", \"Tests/DesqueezeCoreTests/ScaleTagTests.swift\"], \"verifyCommand\": \"swift test --filter ScaleTagTests\", \"acceptanceCriteria\": [\"The folder read passes exactly `-m -T -filename -SubIFD:DefaultScale -OriginalRawFileName -ext dng <folder>`.\", \"The parser drops a row whose file name starts with a period, reads `-` as 1 and 1, and reads `-` in the third column as no original name.\", \"The write passes exactly `-m`, `-SubIFD:DefaultScale=<factor> 1`, `<file>` as three arguments.\", \"The write throws unless the exit code is 0 and the output contains `1 image files updated`.\", \"The error text ignores the `Error copying hidden data` warning and prefers a line that starts with `Error`.\", \"The single-file read passes exactly `-s3 -SubIFD:DefaultScale <file>`.\", \"The folder read throws when exiftool fails and prints no row. It keeps the rows when one file fails.\", \"The error text has no ` - <path>` suffix.\"]}\n```",
       "blockedBy": [
         2
@@ -110,5 +110,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-10-09T13:55:48-07:00"
+  "lastUpdated": "2026-10-09T13:56:51-07:00"
 }
