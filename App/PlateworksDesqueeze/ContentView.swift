@@ -1,4 +1,3 @@
-import AppKit
 import DesqueezeCore
 import SwiftUI
 
@@ -6,6 +5,11 @@ struct ContentView: View {
     @EnvironmentObject private var model: AppModel
     @State private var isTargeted = false
     @State private var notesHeight: CGFloat = 0
+    /// True while the custom field has the keyboard focus.
+    @FocusState private var customFocused: Bool
+    /// False until the window has opened. A focus before that is AppKit's,
+    /// not the person's.
+    @State private var windowHasOpened = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -13,23 +17,20 @@ struct ContentView: View {
             dropZone
             factorRow
             actionRow
-            if let progress = model.progress {
-                ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
-                Text(progress.name)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
+            if model.isRunning { runProgress }
             if let summary = model.summary { result(summary) }
         }
         .padding(16)
         .frame(width: 440)
         .onAppear {
-            // AppKit gives the custom field the keyboard focus when the window
-            // opens. Its focus ring then reads as a second selected factor.
+            // AppKit gives the custom field the keyboard focus when the
+            // window opens. Nobody chose that, so the field gives the focus
+            // up here. That first focus arrives before this block runs, so
+            // `windowHasOpened` keeps it from selecting the custom factor.
+            // `@FocusState` does all of it: no AppKit call is needed.
             DispatchQueue.main.async {
-                NSApp.windows.first(where: { $0.isVisible })?.makeFirstResponder(nil)
+                customFocused = false
+                windowHasOpened = true
             }
         }
     }
@@ -38,7 +39,7 @@ struct ContentView: View {
 
     private var missingExiftool: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Desqueeze needs exiftool, and it is not installed.")
+            SymbolLine(.attention, "Desqueeze needs exiftool, and it is not installed.")
                 .font(.callout.weight(.medium))
             Text("Install it in Terminal, then open Desqueeze again:")
                 .font(.callout)
@@ -56,6 +57,7 @@ struct ContentView: View {
             Image(systemName: "folder")
                 .font(.title)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             if let name = model.folderName {
                 Text(name)
                     .font(.headline)
@@ -68,11 +70,19 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             } else if model.isScanning {
-                ProgressView().controlSize(.small)
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel("Reading the folder")
             }
-            ForEach(model.folderMessages, id: \.self) { zoneMessage($0) }
-            // A wrong drop gets its own line. It never hides a line above.
-            if let message = model.dropMessage { zoneMessage(message) }
+            if !model.folderMessages.isEmpty || model.dropMessage != nil {
+                // One block with one left edge, so the symbols make a column.
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(model.folderMessages, id: \.self) { zoneMessage($0) }
+                    // A wrong drop gets its own line. It never hides a line above.
+                    if let message = model.dropMessage { zoneMessage(message) }
+                }
+                .padding(.vertical, 2)
+            }
             Button("Choose folder") { model.chooseFolder() }
                 .disabled(model.isRunning)
             Text("or drag a folder here")
@@ -87,7 +97,7 @@ struct ContentView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(isTargeted ? Color.accentColor : Color.secondary.opacity(0.5),
-                              style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                              style: StrokeStyle(lineWidth: isTargeted ? 2 : 1, dash: [5, 4]))
         }
         .dropDestination(for: URL.self) { urls, _ in
             model.handleDrop(urls)
@@ -96,12 +106,11 @@ struct ContentView: View {
         }
     }
 
+    /// A message about the folder. The symbol says "look at this", so the
+    /// text needs no colour.
     private func zoneMessage(_ text: String) -> some View {
-        Text(text)
+        SymbolLine(.attention, text)
             .font(.callout)
-            .foregroundStyle(.red)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var factorRow: some View {
@@ -113,49 +122,88 @@ struct ContentView: View {
                 ForEach(SqueezeFactor.presets, id: \.self) { preset in
                     presetButton(preset)
                 }
-                TextField("1.6", text: $model.customText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 64)
-                    .overlay {
-                        if model.choice == .custom {
-                            RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accentColor, lineWidth: 2)
-                        }
-                    }
-                    .onChange(of: model.customText) {
-                        model.choice = .custom
-                        model.customError = nil
-                    }
-                    .accessibilityLabel("Custom factor")
+                customField
             }
             .disabled(model.isRunning)
             if let error = model.customError {
-                Text(error)
+                SymbolLine(.attention, error)
                     .font(.caption)
-                    .foregroundStyle(.red)
             }
         }
     }
 
-    @ViewBuilder
+    /// One button for each preset, selected or not. The selection is a
+    /// parameter of its style, not a second button: a second button is a new
+    /// view, and the keyboard focus would not follow the selection to it.
     private func presetButton(_ preset: SqueezeFactor) -> some View {
-        let select = {
-            model.choice = .preset(preset)
-            model.customError = nil
+        let isSelected = model.choice == .preset(preset)
+        return Button {
+            model.select(preset)
+            // The field gives up the focus, so a later click into it is a
+            // change of focus, and selects the custom factor again.
+            customFocused = false
+        } label: {
+            Text(preset.label).frame(maxWidth: .infinity)
         }
-        if model.choice == .preset(preset) {
-            Button(action: select) { Text(preset.label).frame(maxWidth: .infinity) }
-                .buttonStyle(.borderedProminent)
-        } else {
-            Button(action: select) { Text(preset.label).frame(maxWidth: .infinity) }
-                .buttonStyle(.bordered)
-        }
+        .buttonStyle(FactorButtonStyle(isSelected: isSelected))
+        .accessibilityLabel("Squeeze factor \(preset.label)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var customField: some View {
+        let isSelected = model.choice == .custom
+        // The example has its own colour. With the system's colour, a field
+        // that is off during a run shows the example as dark as a value.
+        return TextField("Custom squeeze factor", text: $model.customText,
+                         prompt: Text("1.6").foregroundStyle(.tertiary))
+            .textFieldStyle(.roundedBorder)
+            .focused($customFocused)
+            .frame(width: 72)
+            // The selected field gets a check mark and a border in the text
+            // colour. The accent colour stays off it: on a Mac whose accent
+            // is red, an accent border reads as an error. The system's focus
+            // ring has the accent colour too, so it is off. The field with
+            // the focus is always the selected one, so the border shows it.
+            .focusEffectDisabled()
+            .overlay(alignment: .trailing) {
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.bold))
+                        .padding(.trailing, 7)
+                        .accessibilityHidden(true)
+                }
+            }
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.75), lineWidth: 1.5)
+                }
+            }
+            .onChange(of: model.customText) {
+                model.choice = .custom
+                model.customError = nil
+            }
+            // A click into the field, or a Tab to it, selects the custom
+            // factor. A change of the text alone would come too late: the
+            // field would have the caret while a preset still looked selected.
+            .onChange(of: customFocused) { _, isFocused in
+                if isFocused, windowHasOpened { model.selectCustom() }
+            }
+            .accessibilityLabel("Custom squeeze factor")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var actionRow: some View {
         HStack(spacing: 8) {
             if model.isRunning {
-                Button(action: model.cancel) { Text("Cancel").frame(maxWidth: .infinity) }
-                    .controlSize(.large)
+                // One button for Cancel and for "Finishing…". After the
+                // click, and after the job has returned, it is off: a second
+                // click on the same spot finds no Run button under it.
+                Button(action: model.cancel) {
+                    Text(model.isFinishing ? "Finishing…" : "Cancel").frame(maxWidth: .infinity)
+                }
+                .controlSize(.large)
+                .keyboardShortcut(.cancelAction)
+                .disabled(model.isFinishing)
             } else {
                 Button(action: model.run) {
                     Text(model.runLabel).frame(maxWidth: .infinity)
@@ -171,14 +219,42 @@ struct ContentView: View {
         }
     }
 
+    /// The bar has no value before the job completes its first step: the
+    /// run's own scan comes first, and can take seconds.
+    private var runProgress: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Two views, on purpose. One view whose value goes from nil to a
+            // number stays indeterminate on macOS.
+            if let progress = model.progress {
+                ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
+                    .accessibilityLabel("Progress of the run")
+                    .accessibilityValue("\(progress.completed) of \(progress.total)")
+            } else {
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .accessibilityLabel("Progress of the run")
+            }
+            Text(model.progressLine)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+
     private func result(_ summary: RunSummary) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             // One line from the core, so the window and the command line
-            // tool show the same counts. It shows "blocked" when it is not zero.
-            Text(summary.countsLine)
+            // tool show the same counts. It shows "blocked" when it is not
+            // zero. The symbol carries the outcome, and the counts stay in
+            // the text colour.
+            SymbolLine(summary.needsAttention ? .attention : (summary.cancelled ? .stopped : .done),
+                       summary.countsLine)
                 .font(.callout.weight(.medium))
-                .foregroundStyle(summary.failed == 0 ? Color.green : Color.red)
-            Text("Photos already in Lightroom: Metadata › Read Metadata from File.")
+            if let left = model.unconvertedLine(summary) {
+                Text(left).font(.callout)
+            }
+            Text(RunSummary.lightroomHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if !summary.notes.isEmpty {
@@ -207,6 +283,87 @@ struct ContentView: View {
                 // height of its rows, up to a limit.
                 .frame(height: min(notesHeight, 160))
             }
+        }
+    }
+}
+
+/// One line of text behind a symbol. The symbol carries the meaning, so no
+/// meaning is in a colour alone: the Mac's accent colour can be the red of
+/// an error. VoiceOver reads the symbol's meaning, then the text.
+private struct SymbolLine: View {
+    enum Meaning {
+        case attention, done, stopped
+
+        var symbol: String {
+            switch self {
+            case .attention: return "exclamationmark.triangle.fill"
+            case .done: return "checkmark.circle.fill"
+            case .stopped: return "stop.circle.fill"
+            }
+        }
+
+        var spoken: String {
+            switch self {
+            case .attention: return "Needs attention"
+            case .done: return "Done"
+            case .stopped: return "Stopped"
+            }
+        }
+
+        var colour: Color {
+            switch self {
+            case .attention: return .orange
+            case .done: return .green
+            case .stopped: return .secondary
+            }
+        }
+    }
+
+    private let meaning: Meaning
+    private let text: String
+
+    init(_ meaning: Meaning, _ text: String) {
+        self.meaning = meaning
+        self.text = text
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            Image(systemName: meaning.symbol)
+                .foregroundStyle(meaning.colour)
+                .accessibilityLabel(meaning.spoken)
+            Text(text)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The look of a preset: filled with the accent colour when it is the
+/// selected factor, grey when it is not.
+private struct FactorButtonStyle: ButtonStyle {
+    let isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        Face(configuration: configuration, isSelected: isSelected)
+    }
+
+    private struct Face: View {
+        let configuration: Configuration
+        let isSelected: Bool
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            let shape = RoundedRectangle(cornerRadius: 6)
+            configuration.label
+                .padding(.vertical, 3)
+                .foregroundStyle(isSelected ? Color.white : Color.primary)
+                .background(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary.opacity(0.08)),
+                            in: shape)
+                .overlay { if configuration.isPressed { shape.fill(Color.black.opacity(0.12)) } }
+                .opacity(isEnabled ? 1 : 0.5)
+                .contentShape(shape)
         }
     }
 }

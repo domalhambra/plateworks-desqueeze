@@ -11,6 +11,18 @@ final class AppModel: ObservableObject {
         case custom
     }
 
+    /// Where the one job is, from the click on Run or Remove until the scan
+    /// after the run has landed.
+    enum RunPhase: Equatable {
+        case idle
+        /// The job is at work, and Cancel can stop it.
+        case running
+        /// Cancel was clicked. The job completes its current file.
+        case stopping
+        /// The job has returned. The scan after the run is in flight.
+        case rescanning
+    }
+
     /// The loaded folder. Set at the moment of a load, before its scan.
     @Published private(set) var folder: URL?
     /// What the newest scan of `folder` found. Nil until that scan lands.
@@ -25,11 +37,10 @@ final class AppModel: ObservableObject {
     @Published var choice: Choice
     @Published var customText: String
     @Published var customError: String?
+    /// The newest step that the job completed. Nil before its first step.
     @Published private(set) var progress: RunProgress?
     @Published private(set) var summary: RunSummary?
-    /// True from the click on Run or Remove until the scan after the run has
-    /// landed. So no click can act on counts from before the run.
-    @Published private(set) var isRunning = false
+    @Published private(set) var phase = RunPhase.idle
 
     let exiftool: URL?
     let converter: URL?
@@ -42,13 +53,18 @@ final class AppModel: ObservableObject {
     /// True after a quit has stopped a run. The app is about to end.
     private var isQuitting = false
     private static let factorKey = "lastFactor"
+    private static let notAFolder = "Drop a folder"
 
     init() {
         let registered = NSWorkspace.shared.urlForApplication(withBundleIdentifier: ToolLocator.converterBundleID)
         let locator = ToolLocator(registeredConverterApp: registered)
+        // The two launch hooks are read from the launch arguments only. A
+        // value that `defaults write` saved must never hide the tools or
+        // load a folder (design, section 9).
+        let arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
         // `-simulateMissingTools YES` on the command line shows the window as
         // it is on a Mac with neither tool. For checks by hand only.
-        let simulateMissing = UserDefaults.standard.bool(forKey: "simulateMissingTools")
+        let simulateMissing = (arguments["simulateMissingTools"] as? NSString)?.boolValue ?? false
         exiftool = simulateMissing ? nil : locator.exiftool()
         converter = simulateMissing ? nil : locator.dngConverter()
 
@@ -65,8 +81,8 @@ final class AppModel: ObservableObject {
         // `-openFolder <path>` on the command line loads a folder at launch.
         // The standard Open panel runs in another process that a test script
         // cannot drive, so checks by hand and by script start here.
-        if let path = UserDefaults.standard.string(forKey: "openFolder") {
-            load(URL(fileURLWithPath: path))
+        if let path = arguments["openFolder"] as? String {
+            open(URL(fileURLWithPath: path))
         }
     }
 
@@ -81,52 +97,53 @@ final class AppModel: ObservableObject {
 
     var folderName: String? { folder?.lastPathComponent }
 
+    // The words and the counts about the folder are made in `DesqueezeCore`
+    // (`FolderText`), so the window and the command line tool cannot say
+    // different things. This type only hands them to the view.
+
+    private var converterAvailable: Bool { converter != nil }
+
     /// For example `216 DNG · 12 ARW to convert`.
-    var countsLine: String? {
-        guard let snapshot else { return nil }
-        // A folder that holds only an orphan backup is not empty: its counts
-        // show, and `folderMessages` names the backup.
-        if snapshot.isEmpty { return "No DNG or ARW files in this folder." }
-        var parts = ["\(snapshot.dngs.count) DNG"]
-        if !snapshot.pendingARWs.isEmpty {
-            parts.append(converter == nil
-                ? "\(snapshot.pendingARWs.count) ARW cannot be converted: Adobe DNG Converter is not installed"
-                : "\(snapshot.pendingARWs.count) ARW to convert")
-        }
-        return parts.joined(separator: " · ")
-    }
+    var countsLine: String? { snapshot?.countsLine(converterAvailable: converterAvailable) }
 
     /// The messages about the loaded folder. All come from the newest scan.
     var folderMessages: [String] {
         if scanFailed { return ["This folder could not be read."] }
-        guard let snapshot else { return [] }
-        var messages: [String] = []
-        if !snapshot.isWritable {
-            messages.append("This folder is read-only. Desqueeze cannot change its files.")
-        }
-        let orphans = snapshot.orphanBackups
-        if orphans.count == 1 {
-            let backup = orphans[0].lastPathComponent
-            let photo = backup.dropLast("_original".count)
-            messages.append("1 backup file has no DNG beside it. Rename \(backup) to \(photo) to get the photo back.")
-        } else if orphans.count > 1 {
-            messages.append("\(orphans.count) backup files have no DNG beside them. "
-                + "Rename each one from <name>.dng_original to <name>.dng to get the photos back.")
-        }
-        return messages
+        return snapshot?.messages ?? []
     }
 
     /// The count in the run button: DNG files, plus ARW files that can convert.
-    var runCount: Int {
-        guard let snapshot else { return 0 }
-        return snapshot.dngs.count + (converter == nil ? 0 : snapshot.pendingARWs.count)
+    private var runCount: Int { snapshot?.runCount(converterAvailable: converterAvailable) ?? 0 }
+
+    var runLabel: String { FolderText.runLabel(count: runCount) }
+
+    /// The sentence about the ARW files a run left, with the reason when the
+    /// converter is missing. Nil when the run left none.
+    func unconvertedLine(_ summary: RunSummary) -> String? {
+        summary.unconvertedARWsLine(converterAvailable: converterAvailable)
     }
 
-    var runLabel: String {
-        switch runCount {
-        case 0: return "Desqueeze"
-        case 1: return "Desqueeze 1 photo"
-        default: return "Desqueeze \(runCount) photos"
+    /// True from the click on Run or Remove until the scan after the run has
+    /// landed. So no click can act on counts from before the run.
+    var isRunning: Bool { phase != .idle }
+
+    /// True when Cancel has nothing left to do: it was clicked, or the job
+    /// has returned. The button then reads "Finishing…" and is off, so a
+    /// second click on the same spot cannot start a run.
+    var isFinishing: Bool { phase == .stopping || phase == .rescanning }
+
+    /// The line under the progress bar. The job reports a file when its step
+    /// is complete, so the name is the last file finished, not the one in
+    /// work.
+    var progressLine: String {
+        switch phase {
+        // Before the first step the job is in its scan or in its first
+        // file, and this type cannot know which.
+        case .stopping: return progress == nil ? "Stopping…" : "Stopping after the current file…"
+        case .rescanning: return "Reading the folder…"
+        case .idle, .running:
+            guard let progress else { return "Starting…" }
+            return "\(progress.completed) of \(progress.total) · last finished: \(progress.name)"
         }
     }
 
@@ -148,24 +165,35 @@ final class AppModel: ObservableObject {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.prompt = "Choose"
-        if panel.runModal() == .OK, let url = panel.url { load(url) }
+        if panel.runModal() == .OK, let url = panel.url { open(url) }
     }
 
     func handleDrop(_ urls: [URL]) -> Bool {
         guard !isRunning else { return false }
-        guard urls.count == 1, let url = urls.first,
-              (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
-            dropMessage = "Drop a folder"
+        guard urls.count == 1, let url = urls.first else {
+            dropMessage = Self.notAFolder
             return false
         }
-        load(url)
+        return open(url)
+    }
+
+    /// The one way in for a drop, the Open panel, and `-openFolder`. A link
+    /// to a folder is that folder. A file, or a package such as an app or a
+    /// photo library, is refused with a message, and the loaded folder stays.
+    @discardableResult
+    private func open(_ url: URL) -> Bool {
+        guard !isRunning else { return false }
+        guard let folder = FolderChoice.folder(at: url) else {
+            dropMessage = Self.notAFolder
+            return false
+        }
+        load(folder)
         return true
     }
 
     /// Makes `url` the loaded folder. Everything about the previous folder is
     /// gone at once, so the window never shows its counts under the new name.
-    func load(_ url: URL) {
-        guard !isRunning else { return }
+    private func load(_ url: URL) {
         folder = url
         snapshot = nil
         scanFailed = false
@@ -211,8 +239,24 @@ final class AppModel: ObservableObject {
         start(factor: .noStretch, convert: false)
     }
 
+    /// Stops the run after its current file. The click is acknowledged at
+    /// once: the phase changes here, not when the job returns.
     func cancel() {
-        job?.cancel.cancel()
+        guard phase == .running, let job else { return }
+        job.cancel.cancel()
+        phase = .stopping
+    }
+
+    /// Makes the custom field the selected factor.
+    func selectCustom() {
+        guard choice != .custom else { return }
+        choice = .custom
+        customError = nil
+    }
+
+    func select(_ preset: SqueezeFactor) {
+        choice = .preset(preset)
+        customError = nil
     }
 
     /// For a quit during a run. Cancels the run and returns when its current
@@ -222,6 +266,7 @@ final class AppModel: ObservableObject {
         isQuitting = true
         guard let job else { return }
         job.cancel.cancel()
+        if phase == .running { phase = .stopping }
         _ = await job.work.result
     }
 
@@ -243,7 +288,7 @@ final class AppModel: ObservableObject {
             }
         }
         job = (flag, work)
-        isRunning = true
+        phase = .running
         summary = nil
         progress = nil
 
@@ -254,6 +299,8 @@ final class AppModel: ObservableObject {
             // No scan for a window that is about to close: the scan would
             // leave an exiftool process behind the app.
             guard !isQuitting else { return }
+            // The job has returned. Cancel has nothing to stop now.
+            phase = .rescanning
             if result == nil {
                 // The job's own scan failed, so no file was tried.
                 snapshot = nil
@@ -264,7 +311,7 @@ final class AppModel: ObservableObject {
             // The result and the new counts arrive together.
             summary = result
             progress = nil
-            isRunning = false
+            phase = .idle
         }
     }
 }
