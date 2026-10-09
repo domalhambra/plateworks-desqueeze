@@ -819,8 +819,10 @@ git commit -m "core: FolderScan and the pending rule"
 - [ ] The write throws unless the exit code is 0 and the output contains `1 image files updated`.
 - [ ] The error text ignores the `Error copying hidden data` warning and prefers a line that starts with `Error`.
 - [ ] The single-file read passes exactly `-s3 -SubIFD:DefaultScale <file>`.
+- [ ] The folder read throws when exiftool fails and prints no row. It keeps the rows when one file fails.
+- [ ] The error text has no ` - <path>` suffix.
 
-**Verify:** `swift test --filter ScaleTagTests` → `Executed 8 tests, with 0 failures`
+**Verify:** `swift test --filter ScaleTagTests` → `Executed 13 tests, with 0 failures`
 
 **Steps:**
 
@@ -881,8 +883,7 @@ final class ScaleTagTests: XCTestCase {
                           stderr: "Error: Not a valid DNG (looks more like a TXT) - /tmp/Shoot 1/junk.dng\n")
         }
         XCTAssertThrowsError(try tag.write(SqueezeFactor(1.5)!, to: folder.appendingPathComponent("junk.dng"))) {
-            XCTAssertEqual($0 as? TagError,
-                           .toolFailed("Error: Not a valid DNG (looks more like a TXT) - /tmp/Shoot 1/junk.dng"))
+            XCTAssertEqual($0 as? TagError, .toolFailed("Error: Not a valid DNG (looks more like a TXT)"))
         }
     }
 
@@ -902,6 +903,49 @@ final class ScaleTagTests: XCTestCase {
     func testReadReturnsNilWhenTheTagIsAbsent() throws {
         runner.handler = { _ in ProcessResult(exitCode: 0, stdout: "", stderr: "") }
         XCTAssertNil(try tag.read(folder.appendingPathComponent("one.dng")))
+    }
+
+    func testWriteThrowsWhenTheExitCodeIsNotZeroEvenWithTheUpdatedText() {
+        runner.handler = { _ in ProcessResult(exitCode: 1, stdout: "    1 image files updated\n", stderr: "") }
+        XCTAssertThrowsError(try tag.write(SqueezeFactor(2)!, to: folder.appendingPathComponent("one.dng")))
+    }
+
+    func testReadFolderThrowsWhenExiftoolFailsWithNoRows() {
+        runner.handler = { _ in
+            ProcessResult(exitCode: 1, stdout: "", stderr: "Error: File not found - /tmp/Shoot 1\n")
+        }
+        XCTAssertThrowsError(try tag.readFolder(folder)) {
+            XCTAssertEqual($0 as? TagError, .toolFailed("Error: File not found"))
+        }
+    }
+
+    // One junk file makes the whole call exit 1. The other rows are valid.
+    func testReadFolderKeepsTheRowsWhenOneFileFails() throws {
+        runner.handler = { _ in
+            ProcessResult(exitCode: 1, stdout: "good.dng\t1.5 1\ta.ARW\njunk.dng\t-\t-\n", stderr: "")
+        }
+        XCTAssertEqual(try tag.readFolder(folder).map(\.fileName), ["good.dng", "junk.dng"])
+    }
+
+    func testParseScaleRejectsValuesThatAreNotFinite() {
+        XCTAssertNil(ScaleTag.parseScale("inf 1"))
+        XCTAssertNil(ScaleTag.parseScale("nan 1"))
+        XCTAssertEqual(ScaleTag.parseScale("2 1")?.horizontal, 2)
+    }
+
+    func testDetailPrefersAnErrorThenAWarningThenTheLastLine() {
+        let hiddenOnly = ProcessResult(exitCode: 1, stdout: "",
+                                       stderr: "Warning: Error copying hidden data - /tmp/Shoot 1/one.dng\n")
+        XCTAssertEqual(ScaleTag.detail(hiddenOnly), "exiftool returned 1.")
+
+        let warning = ProcessResult(
+            exitCode: 1, stdout: "    0 image files updated\n    1 image files unchanged\n",
+            stderr: "Warning: Not enough values specified (2 required) - /tmp/Shoot 1/one.dng\n")
+        XCTAssertEqual(ScaleTag.detail(warning), "Warning: Not enough values specified (2 required)")
+
+        let summary = ProcessResult(exitCode: 0, stdout: "    0 image files updated\n    1 image files unchanged\n",
+                                    stderr: "")
+        XCTAssertEqual(ScaleTag.detail(summary), "1 image files unchanged")
     }
 }
 ```
@@ -958,6 +1002,11 @@ public struct ScaleTag: ScaleTagging {
         let result = try runner.run(exiftool, [
             "-m", "-T", "-filename", Self.tagName, "-OriginalRawFileName", "-ext", "dng", folder.path,
         ])
+        // exiftool exits 1 when any one file is unreadable, and the other rows
+        // are still valid. Only a failure with no rows at all is a failed read.
+        if result.stdout.isEmpty, result.exitCode != 0 {
+            throw TagError.toolFailed(Self.detail(result))
+        }
         return Self.parseRows(result.stdout)
     }
 
@@ -979,7 +1028,9 @@ public struct ScaleTag: ScaleTagging {
     /// Parses `1.5 1`. Returns nil for `-`, an empty string, or anything else.
     static func parseScale(_ text: String) -> (horizontal: Double, vertical: Double)? {
         let parts = text.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" })
-        guard parts.count == 2, let horizontal = Double(parts[0]), let vertical = Double(parts[1]) else {
+        // `Double` parses "inf" and "nan", and exiftool will write and print them.
+        guard parts.count == 2, let horizontal = Double(parts[0]), let vertical = Double(parts[1]),
+              horizontal.isFinite, vertical.isFinite else {
             return nil
         }
         return (horizontal, vertical)
@@ -1004,8 +1055,14 @@ public struct ScaleTag: ScaleTagging {
             .split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && !$0.contains("Error copying hidden data") }
-        return lines.first(where: { $0.hasPrefix("Error") }) ?? lines.last
+        let line = lines.first(where: { $0.hasPrefix("Error") })
+            ?? lines.first(where: { $0.hasPrefix("Warning") })
+            ?? lines.last
             ?? "exiftool returned \(result.exitCode)."
+        // exiftool ends a message with " - <full path>". The window shows the
+        // file name beside the message already.
+        if let cut = line.range(of: " - /") { return String(line[..<cut.lowerBound]) }
+        return line
     }
 }
 ```
@@ -1013,7 +1070,7 @@ public struct ScaleTag: ScaleTagging {
 - [ ] **Step 4: Run the test to see it pass**
 
 Run: `swift test --filter ScaleTagTests`
-Expected: `Executed 8 tests, with 0 failures`
+Expected: `Executed 13 tests, with 0 failures`
 
 - [ ] **Step 5: Break it, then restore it**
 
@@ -2071,7 +2128,7 @@ git add scripts/make_fixtures.sh Tests
 git commit -m "tests: integration run on the real exiftool and Adobe DNG Converter"
 ```
 
-Expected from `swift test`: `Executed 60 tests, with 0 failures`.
+Expected from `swift test`: `Executed 65 tests, with 0 failures`.
 
 ---
 
@@ -2942,7 +2999,7 @@ python3 scripts/docs_check.py . --require docs/decisions.md --known-absent fixtu
 swift test 2>&1 | tail -2
 ```
 
-Expected: `exit 0`, then `Executed 61 tests, with 0 failures`.
+Expected: `exit 0`, then `Executed 66 tests, with 0 failures`.
 
 If the check reports a `dead-path`, correct the path in the document. Add no new `--known-absent` entry: the only path that is legitimately absent is `fixtures/`.
 
@@ -3408,4 +3465,4 @@ The spec's "known limitation" about Finder previews is a fact, not a behavior. I
 
 **Type check.** `SqueezeFactor`, `ProcessResult`, `ProcessRunner`, `SystemProcessRunner`, `ToolLocator`, `DNGFile`, `FolderContents`, `FolderScan`, `TagRow`, `TagError`, `ScaleTagging`, `ScaleTag`, `BackupHandling`, `FileBackups`, `ConvertError`, `RawConverter`, `AdobeConverter`, `FolderSnapshot`, `FolderScanner`, `FileNote`, `RunSummary`, `RunProgress`, `CancelFlag`, `DesqueezeJob`: each is defined in one task and used with the same signature in later tasks.
 
-**Test counts.** Task 1: 7. Task 2: 12. Task 3: 9. Task 4: 8. Task 5: 7. Task 6: 15 (3 scanner, 12 job). Task 7: 2. Task 9: 1. Total: 61.
+**Test counts.** Task 1: 7. Task 2: 12. Task 3: 9. Task 4: 13. Task 5: 7. Task 6: 15 (3 scanner, 12 job). Task 7: 2. Task 9: 1. Total: 66.
