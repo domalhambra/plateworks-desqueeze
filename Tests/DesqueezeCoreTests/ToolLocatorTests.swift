@@ -33,4 +33,17 @@ final class ToolLocatorTests: XCTestCase {
         XCTAssertNil(found.exiftool())
         XCTAssertNil(found.dngConverter())
     }
+
+    func testRelativePathEntriesAreNotCandidates() {
+        let found = locator(path: "bin:.:~/bin::/opt/tools", present: [])
+        XCTAssertEqual(found.exiftoolCandidates, [
+            "/opt/homebrew/bin/exiftool", "/usr/local/bin/exiftool", "/opt/tools/exiftool",
+        ])
+    }
+
+    func testTheStandardConverterAppIsListedOnce() {
+        let registered = URL(fileURLWithPath: "/Applications/Adobe DNG Converter.app/")
+        XCTAssertEqual(locator(registered: registered, present: []).converterApps,
+                       ["/Applications/Adobe DNG Converter.app"])
+    }
 }

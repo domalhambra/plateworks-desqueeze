@@ -21,7 +21,8 @@ public struct ToolLocator: Sendable {
         isExecutable: @escaping @Sendable (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
     ) {
         var tools = ["/opt/homebrew/bin/exiftool", "/usr/local/bin/exiftool"]
-        for folder in (pathVariable ?? "").split(separator: ":") where !folder.isEmpty {
+        // A relative entry would resolve against the app's working folder.
+        for folder in (pathVariable ?? "").split(separator: ":") where folder.hasPrefix("/") {
             let candidate = "\(folder)/exiftool"
             if !tools.contains(candidate) { tools.append(candidate) }
         }

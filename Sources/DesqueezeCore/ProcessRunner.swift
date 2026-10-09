@@ -22,32 +22,38 @@ public struct SystemProcessRunner: ProcessRunner {
     public init() {}
 
     public func run(_ executable: URL, _ arguments: [String]) throws -> ProcessResult {
-        let process = Process()
-        process.executableURL = executable
-        process.arguments = arguments
-        let out = Pipe()
-        let err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        process.standardInput = FileHandle.nullDevice
-        try process.run()
+        // Foundation autoreleases the pipe handles. Without this pool, a caller
+        // that loops holds two descriptors for each call until its own pool drains.
+        try autoreleasepool {
+            let process = Process()
+            process.executableURL = executable
+            process.arguments = arguments
+            let out = Pipe()
+            let err = Pipe()
+            process.standardOutput = out
+            process.standardError = err
+            process.standardInput = FileHandle.nullDevice
+            try process.run()
 
-        // Read both pipes at the same time. A program that fills one pipe
-        // while this code waits on the other would block forever.
-        let outData = DataBox()
-        let errData = DataBox()
-        let group = DispatchGroup()
-        let queue = DispatchQueue(label: "org.plateworks.desqueeze.pipes", attributes: .concurrent)
-        queue.async(group: group) { outData.value = out.fileHandleForReading.readDataToEndOfFile() }
-        queue.async(group: group) { errData.value = err.fileHandleForReading.readDataToEndOfFile() }
-        group.wait()
-        process.waitUntilExit()
+            // Read both pipes at the same time. A program that fills one pipe
+            // while this code waits on the other would block forever. A serial
+            // queue always gets a thread of its own, also when every thread of
+            // the Swift concurrency pool is blocked in this method.
+            let errData = DataBox()
+            let group = DispatchGroup()
+            DispatchQueue(label: "org.plateworks.desqueeze.stderr").async(group: group) {
+                errData.value = err.fileHandleForReading.readDataToEndOfFile()
+            }
+            let outData = out.fileHandleForReading.readDataToEndOfFile()
+            group.wait()
+            process.waitUntilExit()
 
-        return ProcessResult(
-            exitCode: process.terminationStatus,
-            stdout: String(decoding: outData.value, as: UTF8.self),
-            stderr: String(decoding: errData.value, as: UTF8.self)
-        )
+            return ProcessResult(
+                exitCode: process.terminationStatus,
+                stdout: String(decoding: outData, as: UTF8.self),
+                stderr: String(decoding: errData.value, as: UTF8.self)
+            )
+        }
     }
 }
 
