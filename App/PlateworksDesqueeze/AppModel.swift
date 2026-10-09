@@ -44,6 +44,13 @@ final class AppModel: ObservableObject {
             choice = .custom
             customText = saved.label
         }
+
+        // `-openFolder <path>` on the command line loads a folder at launch.
+        // The standard Open panel runs in another process that a test script
+        // cannot drive, so checks by hand and by script start here.
+        if let path = UserDefaults.standard.string(forKey: "openFolder") {
+            load(URL(fileURLWithPath: path))
+        }
     }
 
     // MARK: What the view reads

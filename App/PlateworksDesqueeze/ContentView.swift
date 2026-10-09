@@ -1,3 +1,4 @@
+import AppKit
 import DesqueezeCore
 import SwiftUI
 
@@ -23,6 +24,13 @@ struct ContentView: View {
         }
         .padding(16)
         .frame(width: 440)
+        .onAppear {
+            // AppKit gives the custom field the keyboard focus when the window
+            // opens. Its focus ring then reads as a second selected factor.
+            DispatchQueue.main.async {
+                NSApp.windows.first(where: { $0.isVisible })?.makeFirstResponder(nil)
+            }
+        }
     }
 
     // MARK: Parts
