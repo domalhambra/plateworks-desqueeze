@@ -1,6 +1,8 @@
 # Desqueeze design
 
-Date: 2026-10-05. Status: approved by Dom in session, pending his read of this file.
+Date: 2026-10-05. Red-teamed 2026-10-09; section 2.1 holds the findings and
+each one's fix is in the body. Status: approved by Dom in session, pending his
+read of this file.
 
 ## 1. Purpose
 
@@ -31,8 +33,49 @@ Converter 18.7.
 
 Conclusion: the tag works only in a DNG. An ARW must be converted first.
 
-Not tested: Lightroom or Camera Raw opening a tagged ARW directly, and Capture
-One with a tagged DNG.
+Not tested: Lightroom or Camera Raw opening a tagged ARW directly. Capture One
+is out of scope: Dom's workflow is moving to Lightroom (2026-10-09).
+
+### 2.1 Red team, 2026-10-09
+
+Each claim below was tested on scratch copies. The fix for each is in the
+section named.
+
+| Finding | Where it lands |
+|---|---|
+| Adobe DNG Converter returns exit code 0 on a junk file and makes no DNG. | 4.3 step 1: the two-part pass rule. |
+| When `one.dng` exists, the converter writes `one_1.dng`. It never overwrites. | 4.1 pending rule, and a test in 9. |
+| `exiftool -ext dng` includes files whose names start with a period. | 4.1: the app filters them. |
+| A failed write (read-only folder) exits 1, leaves the file unchanged, and makes no backup. | 4.3 step 4: restore only when a backup exists. |
+| exiftool never replaces an existing `_original`. A second write keeps the old backup. | 4.1 and 4.3 step 2: the skip rule. |
+| The converter's command line ignores its window preferences. `-h` opens a window and never returns. | 4.3 step 1: the output format, and never call `-h`. |
+| Both converters write `OriginalRawFileName` into the DNG. | 4.1: the pending rule reads it. |
+| Finder and Quick Look ignore `DefaultScale`. Previews stay squeezed. | 4.4: a known limitation. |
+| Camera Raw honors the tag: a 4240-wide DNG opened at 6360 wide at 1.5, from both converters. | Confirms section 1. |
+| One tag write takes 0.10 s. One conversion takes 0.37 s, or 0.52 s with the converter's window open. A 228-file folder takes about 30 s. | 3: parallel writes are not needed. |
+| Trash on an external volume is untested. No volume was mounted. | 4.3 step 4 and 8: keep the backup and report. |
+
+**dnglab against Adobe DNG Converter.** dnglab 0.8.0 is an open-source
+converter (`brew install dnglab`). It read the A7S III file. Both outputs went
+through Camera Raw with default settings and were compared pixel by pixel.
+
+| | dnglab | Adobe |
+|---|---|---|
+| Time for one file | 0.07 s | 0.37 s |
+| `exiftool -validate` | OK | 5 warnings |
+| DNG version, raw compression | 1.6, lossless | 1.4, lossless |
+| Size, no embedded raw | 12.1 MB | 11.5 MB |
+| Render, mean luminance | 0.055 stops darker, slightly cooler | reference |
+| Pixels that differ by more than 1/255 | 66%, as a uniform offset | |
+| Embedded camera profile, BaselineExposure | none | Adobe Standard, 0.15 |
+| WhiteLevel | 15360 | 16383 |
+
+The two renders look the same to the eye. Two facts decide the choice. The raw
+data of the test frame holds 89 samples above 15360, so dnglab's white point
+clips about 0.09 stops of highlight headroom that Adobe keeps. And Adobe's
+converter is the same engine as Lightroom's "Copy as DNG", so its output is the
+file Dom gets today. Adding `BaselineExposure 0.15` to a dnglab file overshoots
+by 0.077 stops, so no tag fix closes the gap. Decision: section 11.
 
 ## 3. Scope
 
@@ -51,14 +94,16 @@ until Dom asks for it.
 | Item | Why it waits |
 |---|---|
 | Bundled exiftool | Dom's Mac has exiftool. A shipped app must carry its own. |
+| dnglab as the converter | Adobe DNG Converter cannot be bundled. dnglab can. Its white point clips 0.09 stops of highlight headroom on the A7S III (2.1), so it waits for a release, or for a dnglab fix. `RawConverter` is a protocol so the swap is one type. |
 | Code signing and notarization | Needed only for other people's Macs. |
 | Brand marks, accent color, app icon art | `00_Resources/brand-marks.md` and `00_Resources/color-standards.md` govern them. Version 1 uses system colors and the system font. |
 | Register row in `00_Resources/plateworks-principles.md` | A register belongs to a published property. |
 | Privacy page | Same reason. |
 | Subfolder scan | Shoot folders hold `Exports` and `CaptureOne` subfolders that must stay untouched. |
 | Folder drop on the Dock icon | The window drop does the job. |
-| Parallel writes | One file at a time is simpler. Measure first. |
+| Parallel writes | A 228-file folder takes about 30 s one file at a time (2.1). |
 | Vertical squeeze | No lens Dom owns needs it. |
+| Capture One support | Dom's workflow is moving to Lightroom. |
 
 ## 4. Behavior
 
@@ -69,19 +114,26 @@ The app reads the top level of the folder only. It does not enter subfolders.
 - A **DNG** is a file whose extension is `dng`, in any letter case.
 - An **ARW** is a file whose extension is `arw`, in any letter case.
 - The app ignores names that start with a period, and every other file type.
-- An ARW is **pending** when no DNG in the folder has the same base name. The
-  comparison ignores letter case.
+  exiftool does not skip hidden files, so the app drops them from the scan
+  output itself.
+- A DNG **claims** an ARW when the two have the same base name, or when the
+  DNG's `OriginalRawFileName` tag equals the ARW's file name. Both comparisons
+  ignore letter case. Both converters write that tag, so a DNG that was renamed
+  on import still claims its ARW.
+- An ARW is **pending** when no DNG in the folder claims it.
 - A DNG has an **existing backup** when a file named `<name>.dng_original` is
-  beside it before the run starts.
+  beside it before the run starts. exiftool never replaces an existing
+  `_original`, so a write over one would leave a backup of the wrong state.
 
-The app then reads the current `DefaultScale` of every DNG with one exiftool
-call:
+The app then reads the current `DefaultScale` and `OriginalRawFileName` of
+every DNG with one exiftool call:
 
 ```
-exiftool -m -T -filename -DefaultScale -ext dng <folder>
+exiftool -m -T -filename -SubIFD:DefaultScale -OriginalRawFileName -ext dng <folder>
 ```
 
-A missing tag (`-` in the output) counts as `1 1`.
+A missing tag (`-` in the output) counts as `1 1`. The group `SubIFD` is named
+on every read and write, because that is the IFD Camera Raw reads.
 
 The window shows the folder name and the counts, for example
 `216 DNG · 12 ARW to convert`.
@@ -104,8 +156,14 @@ A run does these steps in order. One file at a time.
    "<Adobe DNG Converter>" -c -d <folder> <file.ARW>
    ```
 
-   The conversion passes when the exit code is 0 and `<base>.dng` exists. The
-   app never changes, moves, or deletes an ARW.
+   The conversion passes when the exit code is 0 and `<base>.dng` exists. Both
+   conditions are needed: the converter returns 0 on a file it cannot read, and
+   makes no DNG. The app never changes, moves, or deletes an ARW.
+
+   The command line ignores the converter's window preferences. With `-c` it
+   writes DNG 1.4, lossless raw, JPEG previews. That is the format of every DNG
+   this app makes. Never pass `-h`: it opens a window and the process never
+   returns.
 
 2. **Tag.** For each DNG, including the new ones:
    - Skip it when its current value equals the chosen factor.
@@ -115,7 +173,7 @@ A run does these steps in order. One file at a time.
      `<name>.dng_original`.
 
      ```
-     exiftool -m -DefaultScale=<factor> 1 <file.dng>
+     exiftool -m -SubIFD:DefaultScale=<factor> 1 <file.dng>
      ```
 
      The app passes each argument as its own array element, with no shell. The
@@ -126,16 +184,20 @@ A run does these steps in order. One file at a time.
 3. **Check.** Read the tag back from the file:
 
    ```
-   exiftool -s3 -DefaultScale <file.dng>
+   exiftool -s3 -SubIFD:DefaultScale <file.dng>
    ```
 
    The check passes when the first number is within 0.0001 of the factor and
    the second number is 1.
 
 4. **Clear the backup.**
-   - Check passed: move `<name>.dng_original` to the Trash.
-   - Write or check failed: restore `<name>.dng_original` as `<name>.dng`, and
-     report the file as failed.
+   - Check passed: move `<name>.dng_original` to the Trash. If the Trash
+     refuses the file, which can happen on an external volume, keep the backup
+     and report the file with the reason.
+   - Write or check failed, and a backup exists: restore `<name>.dng_original`
+     as `<name>.dng`, and report the file as failed.
+   - Write failed with no backup: the file is unchanged. A failed write makes
+     no backup. Report the file as failed.
 
 **Remove** runs steps 2 to 4 with factor 1. It does not convert ARW files.
 
@@ -146,6 +208,12 @@ tagged.
 
 The window shows one line of counts: converted, set, skipped, failed. Below it,
 each failed or reported file has its name and one plain sentence that says why.
+
+Under the counts, one fixed line: "Photos already in Lightroom: Metadata ›
+Read Metadata from File." Lightroom caches the tag at import.
+
+Known limitation: Finder and Quick Look ignore the tag, so their previews stay
+squeezed. Lightroom and Camera Raw render the correct shape.
 
 ## 5. The window
 
@@ -169,6 +237,8 @@ Copy is sentence case, with no exclamation marks.
 |---|---|---|
 | exiftool | `/opt/homebrew/bin/exiftool`, then `/usr/local/bin/exiftool`, then each folder in `PATH` | The app cannot run. The window says so and gives `brew install exiftool`. |
 | Adobe DNG Converter | The app with bundle identifier `com.adobe.DNGConverter`, then `/Applications/Adobe DNG Converter.app` | The app still tags DNG files. The summary says the ARW files cannot be converted, and why. |
+
+The converter runs correctly while its own window is open (2.1).
 
 The app holds no path that is specific to Dom's Mac.
 
@@ -202,7 +272,7 @@ project.yml                       XcodeGen spec
 | `ProcessRunner` | A protocol with one method: run a program with arguments, return exit code, output, and error text. The real one wraps `Process`. | nothing |
 | `ToolLocator` | Finds exiftool and Adobe DNG Converter. Returns a typed error that names the missing tool. | the file system |
 | `ScaleTag` | Reads the tag for a folder, writes it for one file, checks it, clears or restores the backup. | `ProcessRunner` |
-| `RawConverter` | Converts one ARW and confirms the DNG exists. | `ProcessRunner` |
+| `RawConverter` | A protocol: convert one ARW and confirm the DNG exists. Version 1 has one implementation, `AdobeConverter`. A dnglab one is the planned swap (section 3). | `ProcessRunner` |
 | `DesqueezeJob` | Runs section 4.3 in order, reports progress for each file, honors Cancel, returns the result. | the units above |
 
 **In the app:** one view, and one observable model that owns the folder, the
@@ -219,7 +289,8 @@ and publishes progress to the view. Only one job runs at a time.
 | A conversion fails | The ARW is listed as failed. The run continues. |
 | A write or check fails | The backup is restored. The DNG is listed as failed. The run continues. |
 | A DNG has an existing backup | The DNG is listed as skipped, with the reason. |
-| The folder is not writable | One message for the folder. No file is tried. |
+| The Trash refuses a backup | The DNG is listed as done, with a note that its backup stayed beside it. |
+| The folder is not writable | One message for the folder. No file is tried. A read-only file inside a writable folder still writes, because exiftool replaces the file. |
 
 The app never shows raw tool output as the only message. The raw output goes in
 a detail line below the plain sentence.
@@ -228,9 +299,12 @@ a detail line below the plain sentence.
 
 - **Unit tests** (`swift test`) use a fake `ProcessRunner`. They assert the
   exact arguments for each call, the parsing of each output, the skip rules,
-  the backup rules, and the order of a run.
+  the backup rules, and the order of a run. One test asserts that the converter
+  is never called for an ARW that a DNG claims: a call there would make a
+  `_1.dng` duplicate.
 - **`FolderScan` tests** build temporary folders: mixed case extensions, a
-  subfolder, a hidden file, an ARW with and without its DNG, an existing backup.
+  subfolder, a hidden file, an ARW with and without its DNG, a renamed DNG that
+  claims its ARW through `OriginalRawFileName`, an existing backup.
 - **Integration tests** run the real exiftool and the real converter against
   `fixtures/`, a gitignored folder that holds one DNG and one ARW. The tests
   copy each fixture to a temporary folder first. They skip when `fixtures/` or
@@ -262,6 +336,8 @@ a detail line below the plain sentence.
 | Top level only | Subfolders hold exports and Capture One data. |
 | Backup kept until the check passes, then moved to the Trash | In a folder with no ARW files, the DNG is the only copy. |
 | Skip a DNG that has an existing backup | The app must not remove or replace a backup it did not make. |
-| One exiftool call for each write | Clear progress and a failure that stays with one file. |
+| One exiftool call for each write | Clear progress and a failure that stays with one file. At 0.10 s a file, speed is not a reason to batch. |
+| Adobe DNG Converter in version 1, behind a protocol | Its output is the file Lightroom's "Copy as DNG" makes, and it keeps 0.09 stops of highlight headroom that dnglab clips (2.1). dnglab is the swap for a release, because Adobe's converter cannot be bundled. |
+| Pending rule reads `OriginalRawFileName` | A DNG renamed on import still claims its ARW, so a rerun never converts it twice. |
 | Not sandboxed | The app must start two external tools. |
 | Built for Dom's Mac first, shaped to ship later | Dom chose this. Section 3 lists what waits. |

@@ -26,6 +26,8 @@ None yet. A register belongs to a published property. If Desqueeze ships, it tak
 
 Design approved. No code yet. The method is proven by hand: the tag wrote and read back at four factors, and Adobe DNG Converter ran from the command line (design, section 2).
 
+**Red-teamed 2026-10-09** (design, section 2.1). Eleven claims tested on scratch copies, each with a fix in the spec. dnglab, an open-source converter, was measured against Adobe's through Camera Raw: the renders look the same, but dnglab's white point clips 0.09 stops of highlight headroom on the A7S III. Adobe's converter stays for version 1, behind a protocol, so dnglab can take its place for a release. Capture One left the scope: Dom's workflow is moving to Lightroom.
+
 ## Location & filing
 
 - **Repo folder:** `20-29 Properties/27 Plateworks Desqueeze/`
@@ -49,6 +51,7 @@ Design approved. No code yet. The method is proven by hand: the tag wrote and re
 
 - [x] Method proven by hand on scratch copies — 2026-10-05
 - [x] Design approved; charter filed — 2026-10-05
+- [x] Spec red-teamed; converter decision made — 2026-10-09
 - [ ] Implementation plan written
 - [ ] `DesqueezeCore` green under `swift test`
 - [ ] The window builds and runs on Dom's Mac
