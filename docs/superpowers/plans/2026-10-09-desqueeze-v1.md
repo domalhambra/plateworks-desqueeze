@@ -12,6 +12,33 @@
 
 **Revisions after review, 2026-10-09.** The code blocks in Tasks 1 to 8 are the first version of each file. Each task's quality review changed the code, and the changes for Tasks 6 to 8 were designed by the fix implementers from review requirements, not from this plan. The repo and the design are the source of truth. Tasks 9 and 10 (the command line tool and the MCP server) were added at Dom's request and are requirement-driven. The documents task is now Task 11, workspace registration Task 12, acceptance Task 13, and the GitHub repo Task 14.
 
+## Status at the pause, 2026-10-09 evening
+
+Branch `build/v1`, last code commit `236a3b8`. `swift test`: 226 core tests and 78 tool tests, 0 failures. The app builds in Swift 6 mode with no warning.
+
+| Task | State |
+|---|---|
+| 1 to 7 | Complete. Each passed spec review and quality review. |
+| 8, the window | Two rounds of review fixes are committed (`546ffff`, `236a3b8`). **Next:** one spec re-review and one quality re-review of `236a3b8` against the design. |
+| 9, core support and `desqueeze` | Built (`c4f3d2e`, `cff4c96`, `5e5b94d`, then `a8b4baf`, `4dd9a0a`). Both reviews are back. **Next:** the fix list below, then re-review. |
+| 10, `desqueeze-mcp` | Not started. |
+| 11 to 14 | Not started. Task 11's document texts in this plan predate the command line tool and the MCP server, and must cover them. Task 13 also installs both tools, registers the MCP server on Dom's yes, and needs Dom for the Lightroom check and one real drag from Finder. |
+
+**Task 9 fix list, from its two reviews**
+
+1. Important: ignore `SIGPIPE` at the start of `DesqueezeTool.main()`, with an end-to-end test that closes standard error early. Today `desqueeze run … | head` kills the tool in the middle of a run.
+2. Pass the Remove intent from `DesqueezeOperations.remove`. Do not infer it from `convert == false && factor == 1`: `run --factor 1 --no-convert` must report its unconverted ARW files.
+3. `run` and `remove` print "No DNG or ARW files in this folder." for an empty folder, from the core's one sentence.
+4. The tool accepts a symbolic link to a folder (the core has `FolderChoice.folder(at:)`).
+5. Remove the `FileBackups()` default arguments from `DesqueezeJob` and `DesqueezeOperations`, so no test can reach the real Trash through an omitted argument. The app and the tool name the Trash themselves.
+6. A program that a signal ended is reported as its own error (`terminationReason`), and the comment about process groups is corrected.
+7. A wrong `DESQUEEZE_TEST_BACKUP_FOLDER` value prints the JSON error object with `--json`.
+8. Control-C during the last file: decide and state whether `stopped` is true.
+
+**For Task 10, from the reviews:** call `DesqueezeOperations` and print with `ReportJSON.text`. Run one tool call at a time. Check the folder in the server: an absolute path that exists. Pass `backups:` explicitly. Standard output is the protocol, so every log goes to standard error. Ignore `SIGPIPE`. The exit-code rule lives only in the tool today: move it to the core as one "outcome" function if the server needs it. Progress totals can shrink by one when a conversion fails.
+
+**Not yet seen by anyone:** the window in the foreground at launch (focus), and a real drag from Finder. Every app check so far ran with the window in the background.
+
 **Rules for every task**
 
 - The repo root is `/Users/dom/Documents/Claude/20-29 Properties/27 Plateworks Desqueeze`. Run every command from it unless the step names another folder. The path has spaces. Quote it.
