@@ -459,7 +459,14 @@ desqueeze --help
 - When Adobe DNG Converter is missing, `run` still tags the DNG files, says
   how many ARW files it left, and exits 0.
 - Control-C stops the run after the current file, prints the result so far,
-  and exits 1.
+  and exits 1. `stopped` is true only when the run left work undone. A
+  Control-C that arrives during the last file leaves nothing undone: the
+  result is the complete result, `stopped` is false, and the exit code is the
+  one the complete run gives. The window's Cancel follows the same rule.
+- A pipe that closes early (`desqueeze run … | head`) does not stop a run. The
+  tool ignores `SIGPIPE`, completes the run, and loses only the output.
+- `run --factor 1 --no-convert` is not `remove`: it reports the ARW files it
+  left, as every `run` does. Only `remove` leaves that line out.
 
 JSON shapes. `scale` is the tag value as text, or `null` when it is unknown.
 
