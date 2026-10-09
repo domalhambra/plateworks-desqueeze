@@ -37,7 +37,7 @@
     {
       "id": 5,
       "subject": "Task 5: `Backups` and `AdobeConverter`",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** The two file-side helpers: handle exiftool's `_original` backup, and convert one ARW with Adobe DNG Converter.\n\n**Files:**\n- Create: `Sources/DesqueezeCore/Backups.swift`\n- Create: `Sources/DesqueezeCore/RawConverter.swift`\n- Test: `Tests/DesqueezeCoreTests/BackupsTests.swift`\n- Test: `Tests/DesqueezeCoreTests/RawConverterTests.swift`\n\n**Acceptance Criteria:**\n- [ ] The backup of `a.dng` is `a.dng_original` in the same folder.\n- [ ] `restoreBackup` replaces the DNG with the backup's bytes, and the backup file is gone after it. The restored file has the backup's creation date.\n- [ ] `restoreBackup` with no backup throws and leaves the DNG unchanged. It works when the DNG is missing.\n- [ ] `trashBackup` calls the injected trash function with the backup's URL. Unit tests never move a file to the real Trash.\n- [ ] `AdobeConverter` passes exactly `-c -d <folder> <file.ARW>`.\n- [ ] `AdobeConverter` throws when the exit code is not 0.\n- [ ] `AdobeConverter` throws when the exit code is 0 and no `<base>.dng` exists. The real converter does this on a file it cannot read.\n- [ ] `AdobeConverter` does not start the converter when `<base>.dng` exists already.\n\n**Verify:** `swift test --filter \"BackupsTests|RawConverterTests\"` \u2192 `Executed 12 tests, with 0 failures`\n\n**Steps:**\n- Step 1: Write the failing tests\n- Step 2: Run the tests to see them fail\n- Step 3: Write `Backups.swift`\n- Step 4: Write `RawConverter.swift`\n- Step 5: Run the tests to see them pass\n- Step 6: Break it, then restore it\n- Step 7: Commit\n\n```json:metadata\n{\"files\": [\"Sources/DesqueezeCore/Backups.swift\", \"Sources/DesqueezeCore/RawConverter.swift\", \"Tests/DesqueezeCoreTests/BackupsTests.swift\", \"Tests/DesqueezeCoreTests/RawConverterTests.swift\"], \"verifyCommand\": \"swift test --filter \\\"BackupsTests|RawConverterTests\\\"\", \"acceptanceCriteria\": [\"The backup of `a.dng` is `a.dng_original` in the same folder.\", \"`restoreBackup` replaces the DNG with the backup's bytes, and the backup file is gone after it. The restored file has the backup's creation date.\", \"`restoreBackup` with no backup throws and leaves the DNG unchanged. It works when the DNG is missing.\", \"`trashBackup` calls the injected trash function with the backup's URL. Unit tests never move a file to the real Trash.\", \"`AdobeConverter` passes exactly `-c -d <folder> <file.ARW>`.\", \"`AdobeConverter` throws when the exit code is not 0.\", \"`AdobeConverter` throws when the exit code is 0 and no `<base>.dng` exists. The real converter does this on a file it cannot read.\", \"`AdobeConverter` does not start the converter when `<base>.dng` exists already.\"]}\n```",
       "blockedBy": [
         2
@@ -110,5 +110,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-10-09T13:58:42-07:00"
+  "lastUpdated": "2026-10-09T14:01:46-07:00"
 }
