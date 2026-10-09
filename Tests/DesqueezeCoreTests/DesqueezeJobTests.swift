@@ -68,13 +68,14 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(summary.notes, [])
     }
 
-    func testAFileWithAnExistingBackupIsSkippedWithANote() {
+    func testAFileWithAnExistingBackupIsBlockedWithANote() {
         backups.existing = ["A.dng"]
         let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true)
         XCTAssertEqual(log.entries, [])
-        XCTAssertEqual(summary.skipped, 1)
+        XCTAssertEqual(summary.blocked, 1)
+        XCTAssertEqual(summary.skipped, 0, "skipped means only: already at this value")
         XCTAssertEqual(summary.notes.map(\.name), ["A.dng"])
-        XCTAssertTrue(summary.notes[0].message.hasPrefix("Skipped."))
+        XCTAssertTrue(summary.notes[0].message.hasPrefix("Blocked."))
         XCTAssertTrue(backups.existing.contains("A.dng"), "the old backup must stay")
     }
 
@@ -88,7 +89,8 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(summary.skipped, 2)
         XCTAssertEqual(summary.failed, 0)
         XCTAssertEqual(summary.notes, [FileNote(
-            name: "A.dng", message: "Already set. A backup, A.dng_original, is beside this file.", detail: nil)])
+            name: "A.dng", kind: .leftoverBackup,
+            message: "Already at this value. A backup, A.dng_original, is beside this file.", detail: nil)])
         XCTAssertTrue(backups.existing.contains("A.dng"), "the backup must stay")
     }
 
@@ -101,7 +103,7 @@ final class DesqueezeJobTests: XCTestCase {
         ])
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(summary.set, 1)
-        XCTAssertEqual(summary.notes, [FileNote(name: "A.dng", message: "Not changed.", detail: "Error: write failed")])
+        XCTAssertEqual(summary.notes, [FileNote(name: "A.dng", kind: .failed, message: "Not changed.", detail: "Error: write failed")])
     }
 
     func testAFailedCheckRestoresTheBackup() {
@@ -121,7 +123,7 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(summary.set, 0)
         XCTAssertEqual(summary.notes, [FileNote(
-            name: "A.dng",
+            name: "A.dng", kind: .failed,
             message: "The change failed, and the backup could not be restored. The backup is A.dng_original.",
             detail: "The tag did not read back as 1.5 1.\nRestore: The volume refused the rename.")])
         XCTAssertTrue(backups.existing.contains("A.dng"), "the backup must stay")
@@ -133,7 +135,7 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(log.entries, ["write 1.5 1 A.dng", "read A.dng", "restore A.dng"])
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(summary.set, 0)
-        XCTAssertEqual(summary.notes, [FileNote(name: "A.dng", message: "Not changed. The backup was restored.",
+        XCTAssertEqual(summary.notes, [FileNote(name: "A.dng", kind: .failed, message: "Not changed. The backup was restored.",
                                                 detail: "Error: read failed")])
         XCTAssertFalse(backups.existing.contains("A.dng"), "the restore consumes the backup")
     }
@@ -144,7 +146,7 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(log.entries, ["write 1.5 1 A.dng", "read A.dng", "restore A.dng"])
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(summary.set, 0)
-        XCTAssertEqual(summary.notes, [FileNote(name: "A.dng", message: "Not changed. The backup was restored.",
+        XCTAssertEqual(summary.notes, [FileNote(name: "A.dng", kind: .failed, message: "Not changed. The backup was restored.",
                                                 detail: "The tag did not read back as 1.5 1.")])
         XCTAssertFalse(backups.existing.contains("A.dng"), "the restore consumes the backup")
     }
@@ -184,7 +186,7 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(log.entries, ["write 1 1 junk.dng"])
         XCTAssertEqual(summary.skipped, 0)
         XCTAssertEqual(summary.failed, 1)
-        XCTAssertEqual(summary.notes, [FileNote(name: "junk.dng", message: "Not changed.",
+        XCTAssertEqual(summary.notes, [FileNote(name: "junk.dng", kind: .failed, message: "Not changed.",
                                                 detail: "Error: write failed")])
     }
 
@@ -198,7 +200,7 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(summary.set, 1)
         XCTAssertEqual(summary.skipped, 0)
         XCTAssertEqual(summary.failed, 1)
-        XCTAssertEqual(summary.notes, [FileNote(name: "junk.dng", message: "Not changed.",
+        XCTAssertEqual(summary.notes, [FileNote(name: "junk.dng", kind: .failed, message: "Not changed.",
                                                 detail: "Error: write failed")])
     }
 
@@ -221,7 +223,7 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(summary.converted, 1)
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(summary.set, 2)
-        XCTAssertEqual(summary.notes, [FileNote(name: "X.ARW", message: "Not converted.", detail: "made no DNG")])
+        XCTAssertEqual(summary.notes, [FileNote(name: "X.ARW", kind: .notConverted, message: "Not converted.", detail: "made no DNG")])
     }
 
     func testWithNoConverterTheARWFilesWaitAndTheDNGFilesRun() {
@@ -305,7 +307,7 @@ final class DesqueezeJobTests: XCTestCase {
     // MARK: Orphan backups in the result
 
     func orphanNote(_ backup: String, dng: String) -> FileNote {
-        FileNote(name: backup,
+        FileNote(name: backup, kind: .orphanBackup,
                  message: "A backup with no DNG beside it. Rename it to \(dng) to get the photo back.",
                  detail: nil)
     }
@@ -320,7 +322,7 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(summary.notes, [
             orphanNote("gone.dng_original", dng: "gone.dng"),
             orphanNote("LOUD.DNG_ORIGINAL", dng: "LOUD.DNG"),
-            FileNote(name: "A.dng", message: "Not changed.", detail: "Error: write failed"),
+            FileNote(name: "A.dng", kind: .failed, message: "Not changed.", detail: "Error: write failed"),
         ], "the orphans first, in the snapshot's order, then the files")
         XCTAssertEqual(log.entries, [
             "convert X.ARW",
@@ -368,7 +370,8 @@ final class DesqueezeJobTests: XCTestCase {
         let summary = job().run(
             snapshot(dngs: [dng("A.dng")], orphans: ["gone.dng_original"], writable: false),
             factor: factor, convert: true)
-        XCTAssertEqual(summary.notes, [FileNote(name: "Shoot 1", message: "This folder is read-only. No file was changed.",
+        XCTAssertEqual(summary.notes, [FileNote(name: "Shoot 1", kind: .folderReadOnly,
+                                                message: "This folder is read-only. No file was changed.",
                                                 detail: nil)])
         XCTAssertEqual(log.entries, [])
     }

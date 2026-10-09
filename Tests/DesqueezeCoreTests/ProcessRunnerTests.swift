@@ -44,4 +44,14 @@ final class ProcessRunnerTests: XCTestCase {
         for _ in 0..<20 { _ = try? runner.run(URL(fileURLWithPath: "/nonexistent/tool"), []) }
         XCTAssertLessThanOrEqual(try openDescriptors(), before + 4)
     }
+
+    // A terminal sends Control-C to every process of the foreground group.
+    // The command line tool stops a run after its current file, and that
+    // needs exiftool and the converter to be out of the tool's group. An
+    // exiftool that stops between its two renames leaves an orphan backup.
+    func testAProgramStartsInAProcessGroupOfItsOwn() throws {
+        let result = try runner.run(shell, ["-c", "ps -o pgid= -p $$"])
+        let childGroup = try XCTUnwrap(Int32(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)))
+        XCTAssertNotEqual(childGroup, getpgrp(), "the child must not be in the group of this process")
+    }
 }

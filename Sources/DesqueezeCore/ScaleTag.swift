@@ -13,6 +13,19 @@ public struct Scale: Equatable, Sendable {
         self.horizontal = horizontal
         self.vertical = vertical
     }
+
+    /// The tag value as text, the way exiftool prints it: `1.5 1`.
+    ///
+    /// Each number is the shortest text that reads back as the same number,
+    /// with no `.0` on a whole number. Nothing is rounded: a value that this
+    /// app did not write shows as it is. For each valid factor, this is
+    /// `SqueezeFactor.tagValue`.
+    public var text: String { "\(Self.text(horizontal)) \(Self.text(vertical))" }
+
+    private static func text(_ number: Double) -> String {
+        let text = "\(number)"
+        return text.hasSuffix(".0") ? String(text.dropLast(2)) : text
+    }
 }
 
 /// One row of the folder read: a DNG and its current tag.

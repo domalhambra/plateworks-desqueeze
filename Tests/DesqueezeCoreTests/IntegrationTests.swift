@@ -163,13 +163,14 @@ final class IntegrationTests: XCTestCase {
         XCTAssertEqual(applied.converted, 0)
         XCTAssertEqual(applied.set, 1)
         XCTAssertEqual(applied.failed, 1)
-        XCTAssertEqual(applied.skipped, 1)
+        XCTAssertEqual(applied.blocked, 1)
+        XCTAssertEqual(applied.skipped, 0)
         XCTAssertEqual(applied.notes.map(\.name), ["junk.dng", "planted.dng"])
         XCTAssertEqual(applied.notes.first?.message, "Not changed.")
         XCTAssertEqual(applied.notes.first?.detail?.hasPrefix("Error"), true, "exiftool's own reason")
         XCTAssertEqual(applied.notes.last, FileNote(
-            name: "planted.dng",
-            message: "Skipped. An older backup, planted.dng_original, is beside this file. Move it away, then run again.",
+            name: "planted.dng", kind: .blockedByBackup,
+            message: "Blocked. An older backup, planted.dng_original, is beside this file. Move it away, then run again.",
             detail: nil))
 
         // The junk file: the same bytes, and no backup of it.
@@ -194,7 +195,8 @@ final class IntegrationTests: XCTestCase {
         XCTAssertEqual(removed.notes.map(\.name), ["junk.dng", "planted.dng"])
         XCTAssertEqual(removed.notes.first?.message, "Not changed.")
         XCTAssertEqual(removed.notes.last, FileNote(
-            name: "planted.dng", message: "Already set. A backup, planted.dng_original, is beside this file.",
+            name: "planted.dng", kind: .leftoverBackup,
+            message: "Already at this value. A backup, planted.dng_original, is beside this file.",
             detail: nil))
         XCTAssertEqual(try Data(contentsOf: junk), junkBytes)
         XCTAssertEqual(try Data(contentsOf: planted), plantedBefore)
@@ -212,7 +214,7 @@ final class IntegrationTests: XCTestCase {
         let orphan = try copyFixture("sample.dng", as: "lost.dng_original")
         let orphanBefore = try Data(contentsOf: orphan)
         let note = FileNote(
-            name: "lost.dng_original",
+            name: "lost.dng_original", kind: .orphanBackup,
             message: "A backup with no DNG beside it. Rename it to lost.dng to get the photo back.", detail: nil)
 
         let applied = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
@@ -231,5 +233,66 @@ final class IntegrationTests: XCTestCase {
         XCTAssertEqual(try names(withSuffix: "_original"), ["lost.dng_original"])
         XCTAssertEqual(try names(withSuffix: ".dng"), ["good.dng"], "the job must not do the rename itself")
         XCTAssertEqual(try scaleOnDisk("good.dng"), .noStretch)
+    }
+
+    // Found with the real tools: the run converted frame.ARW while frame.dng
+    // was waiting as a backup, and gave two notes that said opposite things
+    // about one photo.
+    func testARealRunDoesNotConvertAnARWWhoseDNGIsWaitingAsAnOrphanBackup() throws {
+        let orphan = try copyFixture("sample.dng", as: "frame.dng_original")
+        let arw = try copyFixture("sample.ARW", as: "frame.ARW")
+        let orphanBefore = try Data(contentsOf: orphan)
+        let arwBefore = try Data(contentsOf: arw)
+
+        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+
+        var expected = RunSummary()
+        expected.notes = [FileNote(
+            name: "frame.dng_original", kind: .orphanBackup,
+            message: "A backup with no DNG beside it. Rename it to frame.dng to get the photo back.", detail: nil)]
+        XCTAssertEqual(summary, expected, "nothing converted, nothing set, and one note for the photo")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted(),
+                       ["frame.ARW", "frame.dng_original"], "no DNG was made")
+        XCTAssertEqual(try Data(contentsOf: orphan), orphanBefore)
+        XCTAssertEqual(try Data(contentsOf: arw), arwBefore)
+    }
+
+    // MARK: The dry run, with the real tools
+
+    /// Every file in the folder: its bytes, and when it was last changed.
+    func folderState() throws -> [String: [String]] {
+        var state: [String: [String]] = [:]
+        for name in try FileManager.default.contentsOfDirectory(atPath: folder.path) {
+            let url = folder.appendingPathComponent(name)
+            let changed = try url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+            state[name] = [try Data(contentsOf: url).base64EncodedString(), String(describing: changed)]
+        }
+        return state
+    }
+
+    func testARealPlanChangesNoFileAndAgreesWithTheRunThatFollows() throws {
+        _ = try copyFixture("sample.dng", as: "already here.dng")
+        _ = try copyFixture("sample.dng", as: "held.dng")
+        _ = try copyFixture("sample.ARW", as: "frame.ARW")
+        try Data("an older backup".utf8).write(to: folder.appendingPathComponent("held.dng_original"))
+        try Data("a lost photo".utf8).write(to: folder.appendingPathComponent("lost.dng_original"))
+        let before = try folderState()
+        XCTAssertEqual(before.count, 5)
+        let factor = SqueezeFactor(1.5)!
+
+        let plan = try job.plan(folder: folder, factor: factor, convert: true)
+
+        XCTAssertEqual(try folderState(), before, "a plan must change no byte, no date, and no name")
+        XCTAssertEqual(plan.steps, [
+            RunPlan.Step(name: "frame.ARW", action: .convert),
+            RunPlan.Step(name: "already here.dng", action: .write),
+            RunPlan.Step(name: "held.dng", action: .blocked),
+            RunPlan.Step(name: "frame.dng", action: .write),
+        ])
+        XCTAssertEqual(plan.summary.notes.map(\.kind), [.orphanBackup, .blockedByBackup])
+
+        let summary = try job.run(folder: folder, factor: factor, convert: true)
+        XCTAssertEqual(summary, plan.summary, "the run that follows gives the counts and notes of the plan")
+        XCTAssertNotEqual(try folderState(), before, "the premise: a real run does change the folder")
     }
 }

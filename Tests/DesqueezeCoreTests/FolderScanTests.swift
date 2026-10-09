@@ -52,14 +52,14 @@ final class FolderScanTests: XCTestCase {
 
     func testAnARWIsPendingOnlyWhenNoDNGHasItsBaseName() {
         let arws = ["DSC1.ARW", "dsc2.arw", "DSC3.ARW"].map { folder.appendingPathComponent($0) }
-        let pending = FolderScan.pending(arws: arws, dngs: [dng("DSC1.dng"), dng("DSC2.DNG")])
+        let pending = FolderScan.pending(arws: arws, dngs: [dng("DSC1.dng"), dng("DSC2.DNG")], orphanBackups: [])
         XCTAssertEqual(pending.map(\.lastPathComponent), ["DSC3.ARW"])
     }
 
     func testARenamedDNGClaimsItsARWThroughOriginalRawFileName() {
         let arws = ["DSC05680.ARW", "DSC05681.ARW"].map { folder.appendingPathComponent($0) }
         let renamed = dng("261004 Backyard Photos 0022.dng", original: "dsc05680.arw")
-        let pending = FolderScan.pending(arws: arws, dngs: [renamed])
+        let pending = FolderScan.pending(arws: arws, dngs: [renamed], orphanBackups: [])
         XCTAssertEqual(pending.map(\.lastPathComponent), ["DSC05681.ARW"])
     }
 
@@ -68,14 +68,31 @@ final class FolderScanTests: XCTestCase {
     func testOriginalRawFileNameInTheCamerasOwnCaseClaimsItsARW() {
         let arws = ["DSC05680.ARW", "DSC05681.ARW"].map { folder.appendingPathComponent($0) }
         let renamed = dng("261004 Backyard Photos 0022.dng", original: "DSC05680.ARW")
-        let pending = FolderScan.pending(arws: arws, dngs: [renamed])
+        let pending = FolderScan.pending(arws: arws, dngs: [renamed], orphanBackups: [])
         XCTAssertEqual(pending.map(\.lastPathComponent), ["DSC05681.ARW"])
     }
 
     func testABaseNameWithDotsIsComparedWhole() {
         let arws = ["2026.10.04 a.ARW", "2026.10.04 b.ARW"].map { folder.appendingPathComponent($0) }
-        let pending = FolderScan.pending(arws: arws, dngs: [dng("2026.10.04 a.dng")])
+        let pending = FolderScan.pending(arws: arws, dngs: [dng("2026.10.04 a.dng")], orphanBackups: [])
         XCTAssertEqual(pending.map(\.lastPathComponent), ["2026.10.04 b.ARW"])
+    }
+
+    // The DNG of this ARW is waiting as a backup. A conversion would make a
+    // second DNG of the same photo.
+    func testAnOrphanBackupClaimsItsARWByBaseName() {
+        let arws = ["frame.ARW", "LOUD.arw", "other.ARW"].map { folder.appendingPathComponent($0) }
+        let orphans = ["frame.dng_original", "loud.DNG_ORIGINAL"].map { folder.appendingPathComponent($0) }
+        let pending = FolderScan.pending(arws: arws, dngs: [], orphanBackups: orphans)
+        XCTAssertEqual(pending.map(\.lastPathComponent), ["other.ARW"])
+    }
+
+    func testAnOrphanBackupClaimsByItsWholeBaseNameOnly() {
+        let arws = ["2026.10.04 a.ARW", "2026.10.04 b.ARW", "frame.ARW"].map { folder.appendingPathComponent($0) }
+        let orphans = ["2026.10.04 a.dng_original", "fram.dng_original", "frame2.dng_original"]
+            .map { folder.appendingPathComponent($0) }
+        let pending = FolderScan.pending(arws: arws, dngs: [], orphanBackups: orphans)
+        XCTAssertEqual(pending.map(\.lastPathComponent), ["2026.10.04 b.ARW", "frame.ARW"])
     }
 
     func testASymlinkIsNotAFile() throws {

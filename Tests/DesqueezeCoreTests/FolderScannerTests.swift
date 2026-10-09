@@ -86,12 +86,44 @@ final class FolderScannerTests: XCTestCase {
     }
 
     // The only thing in the folder is a backup: no photo to run, and still
-    // something the user must see.
-    func testAFolderWithOnlyAnOrphanBackupIsEmptyAndStillReportsIt() throws {
+    // something the user must see. So the folder is not "empty".
+    func testAFolderWithOnlyAnOrphanBackupIsNotEmptyAndReportsIt() throws {
         try touch("gone.dng_original")
         let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
-        XCTAssertTrue(snapshot.isEmpty)
+        XCTAssertFalse(snapshot.isEmpty)
+        XCTAssertEqual(snapshot.photoCount, 0)
         XCTAssertEqual(snapshot.orphanBackups.map(\.lastPathComponent), ["gone.dng_original"])
         XCTAssertEqual(log.entries, [], "no DNG, so no exiftool call")
+    }
+
+    func testAFolderWithNothingToReportIsEmpty() throws {
+        try touch("notes.txt")
+        let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
+        XCTAssertTrue(snapshot.isEmpty)
+    }
+
+    // exiftool stopped between its two renames. The photo's DNG is waiting as
+    // frame.dng_original, so frame.ARW must not go to the converter.
+    func testAnOrphanBackupKeepsItsARWOutOfThePendingList() throws {
+        for name in ["frame.dng_original", "frame.ARW", "other.ARW"] { try touch(name) }
+        let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
+        XCTAssertEqual(snapshot.orphanBackups.map(\.lastPathComponent), ["frame.dng_original"])
+        XCTAssertEqual(snapshot.pendingARWs.map(\.lastPathComponent), ["other.ARW"])
+    }
+
+    // One photo, one note. The run converts nothing and counts no ARW as left:
+    // the ARW is claimed, so it is not pending.
+    func testARunOnAnOrphanBackupAndItsARWConvertsNothingAndGivesOneNote() throws {
+        for name in ["frame.dng_original", "frame.ARW"] { try touch(name) }
+        let job = DesqueezeJob(tag: tag, converter: FakeConverter(log: log), backups: backups)
+
+        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+
+        XCTAssertEqual(log.entries, [], "no conversion, and no exiftool call")
+        var expected = RunSummary()
+        expected.notes = [FileNote(
+            name: "frame.dng_original", kind: .orphanBackup,
+            message: "A backup with no DNG beside it. Rename it to frame.dng to get the photo back.", detail: nil)]
+        XCTAssertEqual(summary, expected)
     }
 }

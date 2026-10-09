@@ -13,8 +13,12 @@ public struct FolderSnapshot: Equatable, Sendable {
     public var orphanBackups: [URL]
     public var isWritable: Bool
 
+    /// The photos a run can work on. An orphan backup is not one of them.
     public var photoCount: Int { dngs.count + pendingARWs.count }
-    public var isEmpty: Bool { photoCount == 0 }
+    /// True when the folder holds nothing to report: no DNG, no pending ARW,
+    /// and no orphan backup. A folder that holds only an orphan backup is not
+    /// empty, so no front end can drop the backup with an "empty folder" line.
+    public var isEmpty: Bool { photoCount == 0 && orphanBackups.isEmpty }
 
     public init(folder: URL, dngs: [DNGFile], pendingARWs: [URL], orphanBackups: [URL], isWritable: Bool) {
         self.folder = folder
@@ -52,7 +56,7 @@ public struct FolderScanner: Sendable {
         return FolderSnapshot(
             folder: folder,
             dngs: dngs,
-            pendingARWs: FolderScan.pending(arws: contents.arws, dngs: dngs),
+            pendingARWs: FolderScan.pending(arws: contents.arws, dngs: dngs, orphanBackups: contents.orphanBackups),
             orphanBackups: contents.orphanBackups,
             isWritable: FileManager.default.isWritableFile(atPath: folder.path)
         )

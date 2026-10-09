@@ -73,20 +73,33 @@ public enum FolderScan {
     /// ignored. The second rule protects a folder whose DNG files were renamed
     /// on import: without it, a rerun would convert each ARW again.
     ///
-    /// Either claim blocks conversion, on purpose. The converter never
+    /// An orphan backup claims an ARW by base name, as its DNG would. That
+    /// DNG is waiting to be renamed back. A conversion would make a second
+    /// DNG of the same photo, with an older backup beside it.
+    ///
+    /// Each claim blocks conversion, on purpose. The converter never
     /// overwrites, so a wrong "pending" writes a `_1.dng` duplicate, and a
     /// wrong "claimed" only leaves one ARW waiting. Known limit: a DNG that
     /// was renamed to another shot's base name claims that shot's ARW too.
-    public static func pending(arws: [URL], dngs: [DNGFile]) -> [URL] {
+    public static func pending(arws: [URL], dngs: [DNGFile], orphanBackups: [URL]) -> [URL] {
         var claimedBaseNames = Set<String>()
         var claimedFileNames = Set<String>()
         for dng in dngs {
-            claimedBaseNames.insert(dng.url.deletingPathExtension().lastPathComponent.lowercased())
+            claimedBaseNames.insert(baseName(dng.url))
             if let original = dng.originalRawFileName { claimedFileNames.insert(original.lowercased()) }
         }
-        return arws.filter { arw in
-            !claimedBaseNames.contains(arw.deletingPathExtension().lastPathComponent.lowercased())
-                && !claimedFileNames.contains(arw.lastPathComponent.lowercased())
+        for backup in orphanBackups {
+            // `frame.dng_original` is the backup of `frame.dng`.
+            let dng = String(backup.lastPathComponent.dropLast("_original".count))
+            claimedBaseNames.insert(baseName(URL(fileURLWithPath: dng)))
         }
+        return arws.filter { arw in
+            !claimedBaseNames.contains(baseName(arw)) && !claimedFileNames.contains(arw.lastPathComponent.lowercased())
+        }
+    }
+
+    /// The name with no extension, in lower case.
+    private static func baseName(_ url: URL) -> String {
+        url.deletingPathExtension().lastPathComponent.lowercased()
     }
 }
