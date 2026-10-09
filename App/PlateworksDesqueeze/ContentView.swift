@@ -13,7 +13,7 @@ struct ContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if model.exiftool == nil { missingExiftool }
+            if model.exiftoolMissing { missingExiftool }
             dropZone
             factorRow
             actionRow
@@ -39,11 +39,13 @@ struct ContentView: View {
 
     private var missingExiftool: some View {
         VStack(alignment: .leading, spacing: 4) {
-            SymbolLine(.attention, "Desqueeze needs exiftool, and it is not installed.")
+            // The sentence and the command are the core's, so the command
+            // line tool says the same words.
+            SymbolLine(.attention, ToolLocator.exiftoolMissing)
                 .font(.callout.weight(.medium))
             Text("Install it in Terminal, then open Desqueeze again:")
                 .font(.callout)
-            Text("brew install exiftool")
+            Text(ToolLocator.exiftoolInstallCommand)
                 .font(.callout.monospaced())
                 .textSelection(.enabled)
         }
@@ -65,10 +67,13 @@ struct ContentView: View {
                     .truncationMode(.middle)
             }
             if let counts = model.countsLine {
+                // The line that says why the ARW files wait is longer than
+                // the window is wide. It wraps, and is not cut.
                 Text(counts)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             } else if model.isScanning {
                 ProgressView()
                     .controlSize(.small)
@@ -87,17 +92,17 @@ struct ContentView: View {
                 .disabled(model.isRunning)
             Text("or drag a folder here")
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
         }
         .padding(.vertical, 18)
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity)
-        .background(isTargeted ? Color.accentColor.opacity(0.12) : Color.clear,
+        .background(showsDropTarget ? Color.accentColor.opacity(0.12) : Color.clear,
                     in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(isTargeted ? Color.accentColor : Color.secondary.opacity(0.5),
-                              style: StrokeStyle(lineWidth: isTargeted ? 2 : 1, dash: [5, 4]))
+                .strokeBorder(showsDropTarget ? Color.accentColor : Color.secondary.opacity(0.5),
+                              style: StrokeStyle(lineWidth: showsDropTarget ? 2 : 1, dash: [5, 4]))
         }
         .dropDestination(for: URL.self) { urls, _ in
             model.handleDrop(urls)
@@ -105,6 +110,10 @@ struct ContentView: View {
             isTargeted = $0
         }
     }
+
+    /// True when a drag is over the zone and a drop would be taken. During a
+    /// run a drop is refused, so the zone does not light up.
+    private var showsDropTarget: Bool { isTargeted && model.acceptsDrop }
 
     /// A message about the folder. The symbol says "look at this", so the
     /// text needs no colour.
@@ -177,10 +186,6 @@ struct ContentView: View {
                 if isSelected {
                     RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.75), lineWidth: 1.5)
                 }
-            }
-            .onChange(of: model.customText) {
-                model.choice = .custom
-                model.customError = nil
             }
             // A click into the field, or a Tab to it, selects the custom
             // factor. A change of the text alone would come too late: the

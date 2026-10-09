@@ -34,55 +34,73 @@ final class AppModel: ObservableObject {
     /// "Drop a folder", after a wrong drop. It says nothing about the loaded
     /// folder, so it is apart from `folderMessages`.
     @Published private(set) var dropMessage: String?
-    @Published var choice: Choice
-    @Published var customText: String
-    @Published var customError: String?
+    @Published private(set) var choice: Choice
+    /// What the custom field holds. A change selects the custom factor.
+    @Published var customText: String {
+        didSet { if customText != oldValue { chooseCustom() } }
+    }
+    @Published private(set) var customError: String?
     /// The newest step that the job completed. Nil before its first step.
     @Published private(set) var progress: RunProgress?
     @Published private(set) var summary: RunSummary?
     @Published private(set) var phase = RunPhase.idle
 
-    let exiftool: URL?
-    let converter: URL?
+    /// Reads and writes the tag. Nil when exiftool is not installed.
+    private let tag: ScaleTagging?
+    /// Nil when Adobe DNG Converter is not installed. The DNG files still run.
+    private let converter: RawConverter?
+    private let backups: BackupHandling
+    /// Keeps the factor of a run for the next launch.
+    private let saveFactor: @MainActor (String) -> Void
+    /// The time in seconds, from any fixed start.
+    private let now: @MainActor () -> TimeInterval
+    /// Says one line to VoiceOver.
+    private let announce: @MainActor (String) -> Void
 
-    /// The job that is in flight: how to stop it, and how to wait for it.
-    private var job: (cancel: CancelFlag, work: Task<RunSummary, Error>)?
+    /// The job that is in flight: how to stop it, how to wait for it, and
+    /// the time of the click that started it.
+    private var job: (cancel: CancelFlag, work: Task<RunSummary, Error>, started: TimeInterval)?
     /// The number of the newest scan. A scan that lands with an older number
     /// is discarded.
     private var scanNumber = 0
     /// True after a quit has stopped a run. The app is about to end.
     private var isQuitting = false
-    private static let factorKey = "lastFactor"
     private static let notAFolder = "Drop a folder"
 
-    init() {
-        let registered = NSWorkspace.shared.urlForApplication(withBundleIdentifier: ToolLocator.converterBundleID)
-        let locator = ToolLocator(registeredConverterApp: registered)
-        // The two launch hooks are read from the launch arguments only. A
-        // value that `defaults write` saved must never hide the tools or
-        // load a folder (design, section 9).
-        let arguments = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)
-        // `-simulateMissingTools YES` on the command line shows the window as
-        // it is on a Mac with neither tool. For checks by hand only.
-        let simulateMissing = (arguments["simulateMissingTools"] as? NSString)?.boolValue ?? false
-        exiftool = simulateMissing ? nil : locator.exiftool()
-        converter = simulateMissing ? nil : locator.dngConverter()
+    /// Everything from the outside comes in here, and nothing has a default:
+    /// no caller reaches exiftool, the Trash, or the saved settings by
+    /// leaving an argument out. The app passes the real ones (`live`). A test
+    /// passes its own.
+    ///
+    /// - Parameters:
+    ///   - tag: nil when exiftool is not installed. The window then only
+    ///     says so.
+    ///   - converter: nil when Adobe DNG Converter is not installed.
+    ///   - backups: where a backup goes after a write that passed its check.
+    ///   - savedFactor: the factor of the last run, as `saveFactor` got it.
+    ///     Nil, or text that is no factor, gives 1.5.
+    ///   - saveFactor: keeps the factor of a run for the next launch.
+    ///   - now: the time in seconds, from any fixed start.
+    ///   - announce: says one line to VoiceOver.
+    init(
+        tag: ScaleTagging?, converter: RawConverter?, backups: BackupHandling,
+        savedFactor: String?, saveFactor: @escaping @MainActor (String) -> Void,
+        now: @escaping @MainActor () -> TimeInterval, announce: @escaping @MainActor (String) -> Void
+    ) {
+        self.tag = tag
+        self.converter = converter
+        self.backups = backups
+        self.saveFactor = saveFactor
+        self.now = now
+        self.announce = announce
 
-        let saved = UserDefaults.standard.string(forKey: Self.factorKey).flatMap { SqueezeFactor(text: $0) }
-            ?? SqueezeFactor(1.5)!
+        let saved = savedFactor.flatMap { SqueezeFactor(text: $0) } ?? SqueezeFactor(1.5)!
         if SqueezeFactor.presets.contains(saved) {
             choice = .preset(saved)
             customText = ""
         } else {
             choice = .custom
             customText = saved.label
-        }
-
-        // `-openFolder <path>` on the command line loads a folder at launch.
-        // The standard Open panel runs in another process that a test script
-        // cannot drive, so checks by hand and by script start here.
-        if let path = arguments["openFolder"] as? String {
-            open(URL(fileURLWithPath: path))
         }
     }
 
@@ -97,6 +115,9 @@ final class AppModel: ObservableObject {
 
     var folderName: String? { folder?.lastPathComponent }
 
+    /// True when exiftool is not installed. The window can do nothing then.
+    var exiftoolMissing: Bool { tag == nil }
+
     // The words and the counts about the folder are made in `DesqueezeCore`
     // (`FolderText`), so the window and the command line tool cannot say
     // different things. This type only hands them to the view.
@@ -108,7 +129,7 @@ final class AppModel: ObservableObject {
 
     /// The messages about the loaded folder. All come from the newest scan.
     var folderMessages: [String] {
-        if scanFailed { return ["This folder could not be read."] }
+        if scanFailed { return [FolderText.unreadable] }
         return snapshot?.messages ?? []
     }
 
@@ -168,8 +189,12 @@ final class AppModel: ObservableObject {
         if panel.runModal() == .OK, let url = panel.url { open(url) }
     }
 
+    /// False during a run: a drop is refused then, so the drop zone must not
+    /// show that it would take one.
+    var acceptsDrop: Bool { !isRunning }
+
     func handleDrop(_ urls: [URL]) -> Bool {
-        guard !isRunning else { return false }
+        guard acceptsDrop else { return false }
         guard urls.count == 1, let url = urls.first else {
             dropMessage = Self.notAFolder
             return false
@@ -182,7 +207,7 @@ final class AppModel: ObservableObject {
     /// photo library, is refused with a message, and the loaded folder stays.
     @discardableResult
     private func open(_ url: URL) -> Bool {
-        guard !isRunning else { return false }
+        guard acceptsDrop else { return false }
         guard let folder = FolderChoice.folder(at: url) else {
             dropMessage = Self.notAFolder
             return false
@@ -207,12 +232,12 @@ final class AppModel: ObservableObject {
     /// can load before the first scan lands. Only the newest scan is applied.
     @discardableResult
     private func scan(_ folder: URL) -> Task<Void, Never> {
-        guard let exiftool else { return Task {} }
+        guard let tag else { return Task {} }
         scanNumber += 1
         let number = scanNumber
         isScanning = true
         // A scan only asks whether a backup is there. It moves none.
-        let scanner = FolderScanner(tag: ScaleTag(exiftool: exiftool), backups: FileBackups())
+        let scanner = FolderScanner(tag: tag, backups: backups)
         return Task {
             let result = try? await Task.detached { try scanner.snapshot(of: folder) }.value
             guard number == scanNumber else { return }
@@ -222,16 +247,25 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// For the moment the app becomes active again. Another app can have
+    /// put files in the folder, so the loaded folder is scanned again. The
+    /// result of the last run stays. Nothing starts while a run or a scan is
+    /// in work: each of those ends with new counts.
+    func appBecameActive() {
+        guard let folder, !isRunning, !isScanning else { return }
+        scan(folder)
+    }
+
     // MARK: Run
 
     func run() {
         guard canRun else { return }
         guard let factor else {
-            customError = "Enter a number from 1 to 4, with at most four decimal places."
+            customError = "Enter \(SqueezeFactor.ruleText)."
             return
         }
         customError = nil
-        UserDefaults.standard.set(factor.label, forKey: Self.factorKey)
+        saveFactor(factor.label)
         start(factor: factor, convert: true, remove: false)
     }
 
@@ -242,15 +276,27 @@ final class AppModel: ObservableObject {
 
     /// Stops the run after its current file. The click is acknowledged at
     /// once: the phase changes here, not when the job returns.
+    ///
+    /// A call inside the system's double-click time of the start does
+    /// nothing. The Cancel button is in the place of the Run button, so the
+    /// second click of a double-click on Run lands here. Escape in that time
+    /// does nothing too.
     func cancel() {
         guard phase == .running, let job else { return }
+        guard now() - job.started >= NSEvent.doubleClickInterval else { return }
         job.cancel.cancel()
         phase = .stopping
     }
 
-    /// Makes the custom field the selected factor.
+    /// Makes the custom field the selected factor. For a focus in the field.
     func selectCustom() {
         guard choice != .custom else { return }
+        chooseCustom()
+    }
+
+    /// The custom field is the selected factor, and what it said about the
+    /// text before is gone.
+    private func chooseCustom() {
         choice = .custom
         customError = nil
     }
@@ -258,6 +304,28 @@ final class AppModel: ObservableObject {
     func select(_ preset: SqueezeFactor) {
         choice = .preset(preset)
         customError = nil
+    }
+
+    /// What a quit request must do next.
+    enum QuitAnswer: Equatable {
+        /// No run is in flight. Quit now.
+        case now
+        /// A run is in flight. Call `stopRunForQuit`, then quit.
+        case afterRun
+        /// An earlier request waits for the run already. Start nothing, and
+        /// answer nothing: that request quits the app.
+        case alreadyWaiting
+    }
+
+    /// Answers a quit request. A quit can be asked for a second time while
+    /// the first waits for the run: Command-Q twice, or the close of the
+    /// window and then a quit. Only one request may get `afterRun`, so the
+    /// app gets its one reply.
+    func answerQuit() -> QuitAnswer {
+        guard !isQuitting else { return .alreadyWaiting }
+        guard isRunning else { return .now }
+        isQuitting = true
+        return .afterRun
     }
 
     /// For a quit during a run. Cancels the run and returns when its current
@@ -274,13 +342,8 @@ final class AppModel: ObservableObject {
     /// - Parameter remove: the intent of the Remove button. The job does not
     ///   guess it from the factor and `convert`.
     private func start(factor: SqueezeFactor, convert: Bool, remove: Bool) {
-        guard let folder, let exiftool else { return }
-        let runner = DesqueezeJob(
-            tag: ScaleTag(exiftool: exiftool),
-            converter: converter.map { AdobeConverter(executable: $0) },
-            // The window moves a backup to the Trash.
-            backups: FileBackups()
-        )
+        guard let folder, let tag else { return }
+        let runner = DesqueezeJob(tag: tag, converter: converter, backups: backups)
         let flag = CancelFlag()
         // The job reports progress from its own thread. A stream keeps the
         // updates in order, and ends when the job returns.
@@ -292,7 +355,7 @@ final class AppModel: ObservableObject {
                 updatesEnd.yield($0)
             }
         }
-        job = (flag, work)
+        job = (flag, work, now())
         phase = .running
         summary = nil
         progress = nil
@@ -317,6 +380,76 @@ final class AppModel: ObservableObject {
             summary = result
             progress = nil
             phase = .idle
+            // VoiceOver hears the counts. The result line is new on the
+            // screen, and nothing else says so.
+            if let result { announce(result.countsLine) }
         }
+    }
+}
+
+// MARK: The app's own model
+
+extension AppModel {
+    /// The key of the saved factor in the app's defaults.
+    private static let factorKey = "lastFactor"
+
+    /// The model of the app itself: the tools on this Mac, the Trash, the
+    /// saved factor, the system's clock, and VoiceOver.
+    static func live() -> AppModel {
+        // The launch hooks are read from the launch arguments only. A value
+        // that `defaults write` saved must never hide a tool or load a
+        // folder (design, section 9).
+        let options = LaunchOptions(
+            arguments: UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain))
+        let registered = NSWorkspace.shared.urlForApplication(withBundleIdentifier: ToolLocator.converterBundleID)
+        let locator = ToolLocator(registeredConverterApp: registered)
+        let exiftool = options.hidesExiftool ? nil : locator.exiftool()
+        let converter = options.hidesConverter ? nil : locator.dngConverter()
+        let model = AppModel(
+            tag: exiftool.map { ScaleTag(exiftool: $0) },
+            converter: converter.map { AdobeConverter(executable: $0) },
+            // The window moves a backup to the Trash.
+            backups: FileBackups(),
+            savedFactor: UserDefaults.standard.string(forKey: factorKey),
+            saveFactor: { UserDefaults.standard.set($0, forKey: factorKey) },
+            now: { ProcessInfo.processInfo.systemUptime },
+            announce: announceToVoiceOver
+        )
+        if let path = options.openFolder { model.open(URL(fileURLWithPath: path)) }
+        return model
+    }
+
+    /// An announcement needs an element of the app. The main window is nil
+    /// while another app is in front, and a run can end then.
+    private static func announceToVoiceOver(_ text: String) {
+        guard let app = NSApp else { return }
+        NSAccessibility.post(
+            element: app.mainWindow ?? app.windows.first ?? app, notification: .announcementRequested,
+            userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+    }
+}
+
+/// The launch hooks, for checks by hand only (design, section 9).
+struct LaunchOptions: Equatable {
+    /// `-simulateMissingTools YES` shows the window as it is on a Mac with
+    /// neither tool. A Mac can have exiftool in two places, so a rename of
+    /// one proves nothing.
+    var hidesExiftool: Bool
+    /// `-simulateMissingConverter YES` shows the window as it is on a Mac
+    /// with exiftool and with no Adobe DNG Converter. `-simulateMissingTools`
+    /// hides the converter too.
+    var hidesConverter: Bool
+    /// `-openFolder <path>` loads a folder at launch. The standard Open panel
+    /// runs in another process that a test script cannot drive, so checks by
+    /// hand and by script start here.
+    var openFolder: String?
+
+    /// - Parameter arguments: the argument domain of the defaults, and no
+    ///   other domain.
+    init(arguments: [String: Any]) {
+        func isOn(_ key: String) -> Bool { (arguments[key] as? NSString)?.boolValue ?? false }
+        hidesExiftool = isOn("simulateMissingTools")
+        hidesConverter = hidesExiftool || isOn("simulateMissingConverter")
+        openFolder = arguments["openFolder"] as? String
     }
 }

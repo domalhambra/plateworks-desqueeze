@@ -24,6 +24,7 @@ targets:
         product: DesqueezeCore
     sources:
       - path: App/PlateworksDesqueeze
+    # XcodeGen writes Info.plist from the properties below. A hand edit of Info.plist is lost.
     info:
       path: App/PlateworksDesqueeze/Info.plist
       properties:
@@ -50,3 +51,29 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: NO
+    # The scheme PlateworksDesqueeze builds the app, and its test action runs
+    # the bundle below.
+    scheme:
+      testTargets:
+        - PlateworksDesqueezeTests
+
+  # The unit tests of the window's state (AppModel). The bundle has no app
+  # host: it compiles AppModel.swift itself, so a test run starts no app and
+  # opens no window. Do not add TEST_HOST or BUNDLE_LOADER, and do not make
+  # this target depend on the app target.
+  PlateworksDesqueezeTests:
+    type: bundle.unit-test
+    platform: macOS
+    dependencies:
+      - package: DesqueezeCore
+        product: DesqueezeCore
+    sources:
+      - path: App/PlateworksDesqueezeTests
+      - path: App/PlateworksDesqueeze/AppModel.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.plateworks.desqueeze.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
