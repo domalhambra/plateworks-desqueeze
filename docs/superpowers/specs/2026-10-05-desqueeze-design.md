@@ -312,7 +312,8 @@ a detail line below the plain sentence.
 - **A behavioral test counts only after it fails against a break.**
 - **Acceptance, by hand:** a scratch copy of a real shoot folder. All four
   presets, a custom factor, a second run (every file skipped), Remove, a path
-  with spaces, a run with exiftool renamed away. Then one file opened in
+  with spaces, a start with the launch argument `-simulateMissingTools YES`
+  (this Mac has exiftool in two places, so a rename proves nothing). Then one file opened in
   Lightroom at each factor. Dom's photo folders are never the test target.
 
 ## 10. Documentation and filing
