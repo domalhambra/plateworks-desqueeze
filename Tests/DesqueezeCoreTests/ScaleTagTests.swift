@@ -48,8 +48,7 @@ final class ScaleTagTests: XCTestCase {
                           stderr: "Error: Not a valid DNG (looks more like a TXT) - /tmp/Shoot 1/junk.dng\n")
         }
         XCTAssertThrowsError(try tag.write(SqueezeFactor(1.5)!, to: folder.appendingPathComponent("junk.dng"))) {
-            XCTAssertEqual($0 as? TagError,
-                           .toolFailed("Error: Not a valid DNG (looks more like a TXT) - /tmp/Shoot 1/junk.dng"))
+            XCTAssertEqual($0 as? TagError, .toolFailed("Error: Not a valid DNG (looks more like a TXT)"))
         }
     }
 
@@ -69,5 +68,48 @@ final class ScaleTagTests: XCTestCase {
     func testReadReturnsNilWhenTheTagIsAbsent() throws {
         runner.handler = { _ in ProcessResult(exitCode: 0, stdout: "", stderr: "") }
         XCTAssertNil(try tag.read(folder.appendingPathComponent("one.dng")))
+    }
+
+    func testWriteThrowsWhenTheExitCodeIsNotZeroEvenWithTheUpdatedText() {
+        runner.handler = { _ in ProcessResult(exitCode: 1, stdout: "    1 image files updated\n", stderr: "") }
+        XCTAssertThrowsError(try tag.write(SqueezeFactor(2)!, to: folder.appendingPathComponent("one.dng")))
+    }
+
+    func testReadFolderThrowsWhenExiftoolFailsWithNoRows() {
+        runner.handler = { _ in
+            ProcessResult(exitCode: 1, stdout: "", stderr: "Error: File not found - /tmp/Shoot 1\n")
+        }
+        XCTAssertThrowsError(try tag.readFolder(folder)) {
+            XCTAssertEqual($0 as? TagError, .toolFailed("Error: File not found"))
+        }
+    }
+
+    // One junk file makes the whole call exit 1. The other rows are valid.
+    func testReadFolderKeepsTheRowsWhenOneFileFails() throws {
+        runner.handler = { _ in
+            ProcessResult(exitCode: 1, stdout: "good.dng\t1.5 1\ta.ARW\njunk.dng\t-\t-\n", stderr: "")
+        }
+        XCTAssertEqual(try tag.readFolder(folder).map(\.fileName), ["good.dng", "junk.dng"])
+    }
+
+    func testParseScaleRejectsValuesThatAreNotFinite() {
+        XCTAssertNil(ScaleTag.parseScale("inf 1"))
+        XCTAssertNil(ScaleTag.parseScale("nan 1"))
+        XCTAssertEqual(ScaleTag.parseScale("2 1")?.horizontal, 2)
+    }
+
+    func testDetailPrefersAnErrorThenAWarningThenTheLastLine() {
+        let hiddenOnly = ProcessResult(exitCode: 1, stdout: "",
+                                       stderr: "Warning: Error copying hidden data - /tmp/Shoot 1/one.dng\n")
+        XCTAssertEqual(ScaleTag.detail(hiddenOnly), "exiftool returned 1.")
+
+        let warning = ProcessResult(
+            exitCode: 1, stdout: "    0 image files updated\n    1 image files unchanged\n",
+            stderr: "Warning: Not enough values specified (2 required) - /tmp/Shoot 1/one.dng\n")
+        XCTAssertEqual(ScaleTag.detail(warning), "Warning: Not enough values specified (2 required)")
+
+        let summary = ProcessResult(exitCode: 0, stdout: "    0 image files updated\n    1 image files unchanged\n",
+                                    stderr: "")
+        XCTAssertEqual(ScaleTag.detail(summary), "1 image files unchanged")
     }
 }

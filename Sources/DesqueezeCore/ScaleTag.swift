@@ -40,6 +40,11 @@ public struct ScaleTag: ScaleTagging {
         let result = try runner.run(exiftool, [
             "-m", "-T", "-filename", Self.tagName, "-OriginalRawFileName", "-ext", "dng", folder.path,
         ])
+        // exiftool exits 1 when any one file is unreadable, and the other rows
+        // are still valid. Only a failure with no rows at all is a failed read.
+        if result.stdout.isEmpty, result.exitCode != 0 {
+            throw TagError.toolFailed(Self.detail(result))
+        }
         return Self.parseRows(result.stdout)
     }
 
@@ -61,7 +66,9 @@ public struct ScaleTag: ScaleTagging {
     /// Parses `1.5 1`. Returns nil for `-`, an empty string, or anything else.
     static func parseScale(_ text: String) -> (horizontal: Double, vertical: Double)? {
         let parts = text.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == "\t" })
-        guard parts.count == 2, let horizontal = Double(parts[0]), let vertical = Double(parts[1]) else {
+        // `Double` parses "inf" and "nan", and exiftool will write and print them.
+        guard parts.count == 2, let horizontal = Double(parts[0]), let vertical = Double(parts[1]),
+              horizontal.isFinite, vertical.isFinite else {
             return nil
         }
         return (horizontal, vertical)
@@ -86,7 +93,13 @@ public struct ScaleTag: ScaleTagging {
             .split(separator: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && !$0.contains("Error copying hidden data") }
-        return lines.first(where: { $0.hasPrefix("Error") }) ?? lines.last
+        let line = lines.first(where: { $0.hasPrefix("Error") })
+            ?? lines.first(where: { $0.hasPrefix("Warning") })
+            ?? lines.last
             ?? "exiftool returned \(result.exitCode)."
+        // exiftool ends a message with " - <full path>". The window shows the
+        // file name beside the message already.
+        if let cut = line.range(of: " - /") { return String(line[..<cut.lowerBound]) }
+        return line
     }
 }
