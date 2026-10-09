@@ -1,7 +1,8 @@
 # Desqueeze design
 
 Date: 2026-10-05. Red-teamed 2026-10-09; section 2.1 holds the findings and
-each one's fix is in the body. Status: approved by Dom in session, pending his
+each one's fix is in the body. Revised 2026-10-09 after the code reviews of
+the job and the window, and extended with section 12 (command line and MCP). Status: approved by Dom in session, pending his
 read of this file.
 
 ## 1. Purpose
@@ -123,8 +124,13 @@ The app reads the top level of the folder only. It does not enter subfolders.
   on import still claims its ARW.
 - An ARW is **pending** when no DNG in the folder claims it.
 - A DNG has an **existing backup** when a file named `<name>.dng_original` is
-  beside it before the run starts. exiftool never replaces an existing
-  `_original`, so a write over one would leave a backup of the wrong state.
+  beside it. exiftool never replaces an existing `_original`, so a write over
+  one would leave a backup of the wrong state. The run checks for the backup
+  again at the moment it tags each file.
+- An **orphan backup** is a file named `<name>.dng_original` with no
+  `<name>.dng` beside it. It can exist only if exiftool stopped between its two
+  renames. In a folder with no ARW files it is the only copy of that photo. The
+  app never touches it, and always reports it.
 
 The app then reads the current `DefaultScale` and `OriginalRawFileName` of
 every DNG with one exiftool call:
@@ -133,8 +139,13 @@ every DNG with one exiftool call:
 exiftool -m -T -filename -SubIFD:DefaultScale -OriginalRawFileName -ext dng <folder>
 ```
 
-A missing tag (`-` in the output) counts as `1 1`. The group `SubIFD` is named
-on every read and write, because that is the IFD Camera Raw reads.
+When exiftool prints no value for a DNG (`-` in the output), or no row at all,
+the scale is **unknown**. Unknown is not `1 1`. exiftool prints `-` both for a
+DNG that has no tag and for a file it cannot read, so the app never skips such
+a file: it tries the write, and the write tells the two cases apart.
+
+The group `SubIFD` is named on every read and write, because that is the IFD
+Camera Raw reads.
 
 The window shows the folder name and the counts, for example
 `216 DNG · 12 ARW to convert`.
@@ -149,7 +160,11 @@ The window shows the folder name and the counts, for example
 
 ### 4.3 Run
 
-A run does these steps in order. One file at a time.
+A run starts with its own fresh scan of the folder. No front end can hand the
+run an earlier scan: files and tag values can change between a scan and a
+click, and a run on old values reports "skipped" for a file it never looked at.
+
+Then the run does these steps in order. One file at a time.
 
 1. **Convert.** For each pending ARW, call Adobe DNG Converter:
 
@@ -169,7 +184,9 @@ A run does these steps in order. One file at a time.
    returns.
 
 2. **Tag.** For each DNG, including the new ones:
-   - Skip it when its current value equals the chosen factor.
+   - Skip it when its current value is known and equals the chosen factor. If
+     a backup is beside such a file, report that too: "Already set. A backup,
+     `<name>_original`, is beside this file."
    - Skip it and report it when it has an existing backup. The app does not
      touch a backup that it did not make.
    - Otherwise write the tag. Exiftool keeps the previous file as
@@ -202,6 +219,13 @@ A run does these steps in order. One file at a time.
      as `<name>.dng` with one atomic rename, and report the file as failed.
    - Write failed with no backup: the file is unchanged. A failed write makes
      no backup. Report the file as failed.
+   - The restore itself failed: report "The change failed, and the backup
+     could not be restored. The backup is `<name>_original`." with both error
+     texts in the detail.
+
+Each orphan backup in the folder is reported at the start of the result, with
+the name to give it: "A backup with no DNG beside it. Rename it to `<name>.dng`
+to get the photo back."
 
 **Remove** runs steps 2 to 4 with factor 1. It does not convert ARW files.
 
@@ -210,8 +234,10 @@ tagged.
 
 ### 4.4 Result
 
-The window shows one line of counts: converted, set, skipped, failed. Below it,
-each failed or reported file has its name and one plain sentence that says why.
+The window shows one line of counts: converted (when it is not zero), set,
+skipped, failed, and "stopped" after a Cancel. Below it, each failed or
+reported file has its name, one plain sentence, and the tool's own words on a
+detail line.
 
 Under the counts, one fixed line: "Photos already in Lightroom: Metadata ›
 Read Metadata from File." Lightroom caches the tag at import.
@@ -230,12 +256,13 @@ One fixed-width window, about 440 points wide.
 
 | Part | Behavior |
 |---|---|
-| Drop zone | Accepts one folder. A dropped file that is not a folder shows "Drop a folder". Holds the "Choose folder" button, which opens the standard folder panel. |
-| Folder summary | Folder name and the counts from the scan. |
+| Drop zone | Accepts one folder. A dropped file that is not a folder shows "Drop a folder" until the next folder loads. That message never replaces a message about the loaded folder. Holds the "Choose folder" button, which opens the standard folder panel. |
+| Folder summary | Folder name and the counts from the scan. While a scan runs, the previous folder's counts are gone and Run and Remove are off. A read-only folder and each orphan backup get a message here. |
 | Factor row | Four preset buttons and one custom field. One factor is selected at a time. |
-| Run button | Label: `Desqueeze N photos`. N is the count of DNG files plus pending ARW files. |
-| Remove button | Writes `1 1`. |
-| Progress bar | One step for each file. During a run, the Run button becomes Cancel. |
+| Run button | Label: `Desqueeze N photos`, `Desqueeze 1 photo`, or `Desqueeze` when there is nothing to run. N is the count of DNG files plus the pending ARW files that can convert. When Adobe DNG Converter is missing, the ARW files are not in N. |
+| Remove button | Writes `1 1`. On only when the folder has a DNG. It asks nothing and runs at once: the change is reversible. |
+| Progress bar | One step for each conversion and one for each tag write. During a run, the Run button becomes Cancel. The run stays "running" until the scan after it has landed, so no click can act on old counts. |
+| Quit during a run | The app cancels the run, lets the current file complete, then quits. |
 | Result line and list | Section 4.4. |
 
 Copy is sentence case, with no exclamation marks.
@@ -270,19 +297,24 @@ project.yml                       XcodeGen spec
 
 - App name: Desqueeze. Bundle identifier: `org.plateworks.desqueeze`.
 - Deployment target: macOS 14.
-- No third-party Swift dependencies. No network requests.
+- No network requests.
+- No third-party Swift code in `DesqueezeCore`, in the app, or in the
+  `desqueeze` command line tool. The MCP server target alone links the
+  official Swift MCP library (section 12).
 
 **Units in `DesqueezeCore`**
 
 | Unit | Job | Depends on |
 |---|---|---|
 | `SqueezeFactor` | Validates a factor and formats the tag value. | nothing |
-| `FolderScan` | Turns a folder into lists: DNG files, pending ARW files, existing backups. | the file system |
+| `FolderScan` | Turns a folder into lists: DNG files, ARW files, orphan backups. Decides which ARW files are pending. | the file system |
+| `FolderScanner` | Joins the folder lists, the tag rows, and the backup state into one `FolderSnapshot`. | `ScaleTagging`, `BackupHandling` |
 | `ProcessRunner` | A protocol with one method: run a program with arguments, return exit code, output, and error text. The real one wraps `Process`. | nothing |
 | `ToolLocator` | Finds exiftool and Adobe DNG Converter. Returns a typed error that names the missing tool. | the file system |
-| `ScaleTag` | Reads the tag for a folder, writes it for one file, checks it, clears or restores the backup. | `ProcessRunner` |
+| `ScaleTag` | Behind the `ScaleTagging` protocol: reads the tag for a folder, writes it for one file, reads it back from one file. A `Scale` is two numbers. An unknown scale is `nil`. | `ProcessRunner` |
+| `FileBackups` | Behind the `BackupHandling` protocol: says whether a backup exists, moves it to the Trash, restores it with one rename. | the file system |
 | `RawConverter` | A protocol: convert one ARW and confirm the DNG exists. Version 1 has one implementation, `AdobeConverter`. A dnglab one is the planned swap (section 3). | `ProcessRunner` |
-| `DesqueezeJob` | Runs section 4.3 in order, reports progress for each file, honors Cancel, returns the result. | the units above |
+| `DesqueezeJob` | `run(folder:)` scans, then runs section 4.3 in order, reports progress for each step, honors Cancel, returns the result. `plan(folder:)` returns what a run would do and changes nothing. | the units above |
 
 **In the app:** one view, and one observable model that owns the folder, the
 factor, and the running job. The model calls `DesqueezeJob` off the main thread
@@ -300,6 +332,11 @@ and publishes progress to the view. Only one job runs at a time.
 | A DNG has an existing backup | The DNG is listed as skipped, with the reason. |
 | The Trash refuses a backup | The DNG is listed as done, with a note that its backup stayed beside it. |
 | The folder is not writable | One message for the folder. No file is tried. A read-only file inside a writable folder still writes, because exiftool replaces the file. |
+| A DNG's current value is unknown | The write is tried. A file exiftool cannot read is listed as failed. |
+| A file is already set and a backup is beside it | Listed as skipped, with a note that names the backup. |
+| An orphan backup is in the folder | A message for the folder, and a line in each result, with the name to rename it to. |
+| The restore of a backup fails | Listed as failed, with the backup's name and both error texts. |
+| The scan itself fails | "This folder could not be read." No file is tried. |
 
 The app never shows raw tool output as the only message. The raw output goes in
 a detail line below the plain sentence.
@@ -353,3 +390,110 @@ a detail line below the plain sentence.
 | Pending rule reads `OriginalRawFileName` | A DNG renamed on import still claims its ARW, so a rerun never converts it twice. |
 | Not sandboxed | The app must start two external tools. |
 | Built for Dom's Mac first, shaped to ship later | Dom chose this. Section 3 lists what waits. |
+
+## 12. Command line and MCP
+
+Added 2026-10-09 at Dom's request, so Claude Code and Cowork can do the app's
+job with no window. Both front ends call the same `DesqueezeCore` entry points
+as the window, so every rule in section 4 holds for them.
+
+### 12.1 `desqueeze`, the command line tool
+
+A second executable in the package. Hand-written argument parsing, no
+third-party code.
+
+```
+desqueeze scan <folder> [--json]
+desqueeze run <folder> --factor <number> [--no-convert] [--dry-run] [--json]
+desqueeze remove <folder> [--dry-run] [--json]
+desqueeze --version
+desqueeze --help
+```
+
+| Command | Does | Changes files |
+|---|---|---|
+| `scan` | Prints each DNG with its current scale, the pending ARW files, the orphan backups, whether the folder is writable, and where the two tools are. | No |
+| `run` | Section 4.3 at the given factor. `--no-convert` leaves ARW files alone. | Yes |
+| `remove` | Section 4.3 with factor 1 and no conversion. | Yes |
+| `--dry-run` | On `run` and `remove`: prints what the run would do, file by file, from `DesqueezeJob.plan(folder:)`. | No |
+
+- `--factor` takes the same values as the window: 1 to 4, at most four decimal
+  places. `run` with no `--factor` is a usage error. There is no default.
+- Text output is for a person. `--json` prints one JSON object on standard
+  output and nothing else there. Progress lines go to standard error in both
+  modes.
+- A relative folder path is resolved against the working folder.
+- Exit code 0: the command completed and no file failed. Exit code 1: a file
+  failed, the run was stopped, the folder could not be scanned, or exiftool is
+  missing. Exit code 2: a usage error.
+- When Adobe DNG Converter is missing, `run` still tags the DNG files, says
+  how many ARW files it left, and exits 0.
+- Control-C stops the run after the current file, prints the result so far,
+  and exits 1.
+
+JSON shapes. `scale` is the tag value as text, or `null` when it is unknown.
+
+```json
+{ "folder": "/path", "writable": true,
+  "exiftool": "/opt/homebrew/bin/exiftool", "dngConverter": "/Applications/…",
+  "dngs": [ { "name": "a.dng", "scale": "1.5 1", "originalRawFileName": "a.ARW", "hasBackup": false } ],
+  "pendingARWs": ["b.ARW"], "orphanBackups": [] }
+```
+
+```json
+{ "folder": "/path", "factor": "1.5", "dryRun": false,
+  "converted": 1, "set": 2, "skipped": 0, "failed": 0, "stopped": false,
+  "unconvertedARWs": 0,
+  "notes": [ { "name": "x.dng", "message": "…", "detail": null } ] }
+```
+
+A dry run prints the same object with `"dryRun": true`, the counts a real run
+would give if every step passed, and a `"steps"` list of
+`{ "name", "action" }`, where action is `convert`, `write`, `skip`, or
+`blocked`.
+
+The report types are `Codable` structs in `DesqueezeCore`, so the tool and the
+MCP server print the same JSON.
+
+### 12.2 `desqueeze-mcp`, the MCP server
+
+A third executable. It speaks MCP over standard input and output and links the
+official Swift MCP library, `modelcontextprotocol/swift-sdk`, pinned to one
+minor version because the library is not yet at 1.0. No other target links it.
+
+| Tool | Arguments | Result | Changes files |
+|---|---|---|---|
+| `desqueeze_scan` | `folder` | The scan JSON | No. Marked read-only. |
+| `desqueeze_run` | `folder`, `factor`, `convert` (default true), `dry_run` (default false) | The run JSON | Yes, unless `dry_run` |
+| `desqueeze_remove` | `folder`, `dry_run` (default false) | The run JSON | Yes, unless `dry_run` |
+
+- `folder` must be an absolute path to a folder that exists. The server
+  rejects anything else with a tool error and changes nothing.
+- A tool result that has failed files is still a successful tool call: the
+  JSON carries the failures. A scan that cannot run is a tool error.
+- When the client sends a progress token, the server sends one progress
+  message for each step of the run.
+- Each tool's description tells the model what the tool changes, that the
+  change is reversible with `desqueeze_remove`, and to call `desqueeze_scan`
+  first.
+
+### 12.3 Install
+
+Both executables build with `swift build -c release`. For Dom's Mac they are
+copied to `~/.local/bin/`. The MCP server is registered with Claude Code by its
+absolute path. Registering it is a change to Dom's Claude configuration, so it
+is done only on his yes.
+
+### 12.4 Testing
+
+- The report types and `plan(folder:)` are unit-tested in `DesqueezeCore`.
+- The argument parser is unit-tested: every command, every flag, each usage
+  error.
+- The command line tool is tested end to end by starting the built executable
+  against a temporary folder with the fixtures: `scan --json`, `run --dry-run`
+  (no file changes), `run`, a second `run` (all skipped), `remove`, and the
+  exit codes.
+- The MCP server is tested end to end by starting the built executable and
+  speaking MCP to it over its standard input and output: initialize, list the
+  tools, call each tool against a temporary folder.
+
