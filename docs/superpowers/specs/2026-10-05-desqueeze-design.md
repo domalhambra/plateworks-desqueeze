@@ -279,6 +279,24 @@ One fixed-width window, about 440 points wide.
 
 Copy is sentence case, with no exclamation marks.
 
+Settled in the last review of the window:
+
+- When the app becomes active again and no run or scan is in work, the window
+  scans the loaded folder again, so files added from another app show in the
+  counts.
+- A second click within the system's double-click time of a Run click does
+  not cancel the run that the first click started.
+- At the end of a run, VoiceOver hears the result counts line.
+
+Known limits of the window:
+
+- Keyboard focus in the custom field selects the custom factor, also when the
+  focus came from Tab. The check mark on the field shows it. Look at the
+  selected factor before a run from the keyboard.
+- If exiftool or the converter never returns, the window stays at
+  "Finishing…". Force Quit is the way out. No file is harmed: a write that
+  did not complete leaves the DNG as it was.
+
 ## 6. Dependencies
 
 | Tool | How the app finds it | When it is missing |
@@ -440,7 +458,10 @@ desqueeze --help
 - Text output is for a person. `--json` prints one JSON object on standard
   output and nothing else there. Progress lines go to standard error in both
   modes.
-- A relative folder path is resolved against the working folder.
+- A relative folder path is resolved against the working folder. A symbolic
+  link to a folder counts as that folder, by the same rule as the window
+  (`FolderChoice`), and the report names the folder the link points to. A
+  file, or a package such as an app, is not a folder: exit 1.
 - Exit code 0: the command completed, no file failed, and no file was
   blocked. Exit code 1: a file failed or was blocked, the run was stopped, the
   folder could not be scanned, a run or a dry run met a read-only folder, or
@@ -506,7 +527,15 @@ reports the orphan.
 
 A third executable. It speaks MCP over standard input and output and links the
 official Swift MCP library, `modelcontextprotocol/swift-sdk`, pinned to one
-minor version because the library is not yet at 1.0. No other target links it.
+minor version because the library is not yet at 1.0.
+
+The server is its own Swift package, in the folder `MCPServer/`, and takes
+`DesqueezeCore` from the root package by path. The library brings five more
+packages, swift-nio among them. In the root manifest, every build of the core
+and every Xcode build of the app would fetch them. In its own package, the
+root package and the app stay free of third-party code at build time too.
+Build and test: `swift build --package-path MCPServer`,
+`swift test --package-path MCPServer`.
 
 | Tool | Arguments | Result | Changes files |
 |---|---|---|---|
@@ -528,7 +557,8 @@ minor version because the library is not yet at 1.0. No other target links it.
 
 ### 12.3 Install
 
-Both executables build with `swift build -c release`. For Dom's Mac they are
+`desqueeze` builds with `swift build -c release`, and `desqueeze-mcp` with
+`swift build -c release --package-path MCPServer`. For Dom's Mac they are
 copied to `~/.local/bin/`. The MCP server is registered with Claude Code by its
 absolute path. Registering it is a change to Dom's Claude configuration, so it
 is done only on his yes.
