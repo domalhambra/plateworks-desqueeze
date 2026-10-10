@@ -19,6 +19,8 @@ public struct DesqueezeOperations: Sendable {
     private let tag: ScaleTagging
     private let converters: RawConverters
     private let backups: BackupHandling
+    private let lock: FolderLock
+    private let verbose: @Sendable (String) -> Void
 
     /// - Parameters:
     ///   - exiftool: reads and writes the tags.
@@ -36,25 +38,33 @@ public struct DesqueezeOperations: Sendable {
     ///     does for its own job.
     ///   - verbose: gets one line for each leftover work file that a
     ///     converter removed before it started: `Removed a leftover work
-    ///     file: <name>`. Give it the sink of the `LoggingProcessRunner`.
-    ///     The default says nothing.
+    ///     file: <name>`. It also gets one line, with the number of the
+    ///     error, when the volume gave no lock for the folder (design
+    ///     13.9). Give it the sink of the `LoggingProcessRunner`. The
+    ///     default says nothing.
     public init(exiftool: URL, dnglab: URL?, dngConverter: URL?, runner: ProcessRunner = SystemProcessRunner(),
                 backups: BackupHandling, verbose: @escaping @Sendable (String) -> Void = { _ in }) {
         self.init(exiftool: exiftool, dnglab: dnglab, dngConverter: dngConverter,
                   tag: ScaleTag(exiftool: exiftool, runner: runner),
                   converters: RawConverters(exiftool: exiftool, dnglab: dnglab, adobe: dngConverter, runner: runner,
                                             backups: backups, verbose: verbose),
-                  backups: backups)
+                  backups: backups, verbose: verbose)
     }
 
+    /// - Parameter lock: the lock of the job. The default is the system's,
+    ///   and the public way in has no other: tests inject one to drive each
+    ///   answer.
     init(exiftool: URL, dnglab: URL?, dngConverter: URL?, tag: ScaleTagging, converters: RawConverters,
-         backups: BackupHandling) {
+         backups: BackupHandling, lock: FolderLock = .system,
+         verbose: @escaping @Sendable (String) -> Void = { _ in }) {
         self.exiftool = exiftool
         self.dnglab = dnglab
         self.dngConverter = dngConverter
         self.tag = tag
         self.converters = converters
         self.backups = backups
+        self.lock = lock
+        self.verbose = verbose
     }
 
     /// True when one converter or the other is installed, so a pending ARW
@@ -65,7 +75,9 @@ public struct DesqueezeOperations: Sendable {
     /// one source. `dnglab` and `dngConverter` are the paths for the report.
     public var canConvert: Bool { converters.canConvert }
 
-    private var job: DesqueezeJob { DesqueezeJob(tag: tag, converters: converters, backups: backups) }
+    private var job: DesqueezeJob {
+        DesqueezeJob(tag: tag, converters: converters, backups: backups, lock: lock, verbose: verbose)
+    }
 
     /// What the folder holds now. Changes no file.
     ///
@@ -92,9 +104,10 @@ public struct DesqueezeOperations: Sendable {
     ///   - cancel: stops the run after its current file, when it is set.
     ///   - progress: called after each step of a real run.
     /// - Throws: `FolderLock.Busy` when another run works in the folder,
-    ///   for a real run only: a dry run takes no lock (design 13.9). Any
-    ///   other error only when the folder cannot be scanned. No file is
-    ///   changed then. A file that fails is a note in the report.
+    ///   and `FolderLock.Failed` when the lock call failed, for a real run
+    ///   only: a dry run takes no lock (design 13.9). Any other error only
+    ///   when the folder cannot be scanned. No file is changed then. A file
+    ///   that fails is a note in the report.
     public func run(
         _ folder: URL,
         factor: SqueezeFactor,

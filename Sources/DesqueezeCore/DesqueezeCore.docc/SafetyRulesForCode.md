@@ -95,7 +95,8 @@ section "An original moves only on request" has its rules.
 | The lock is `flock` on the folder itself. No lock file is made. | A lock file would be a file of the tool in a photo folder, and a run that ends hard would leave a stale one. This lock goes with the process. | `testTheLockMakesNoFileAndChangesNoFileInTheFolder`, `testASecondTakeInTheSameProcessIsBusyUntilTheFirstIsReleased` |
 | The run releases the lock when it returns and when it throws. | A lock that stays would stop the next run in the same process, as in the window. | `testTheLockIsReleasedAfterARunWhoseScanThrows`, `testTwoRunsInARowBothPass` |
 | A scan and a dry run take no lock. | They change no file. A person must be able to look at a folder while a run works in it. | `testADryRunTakesNoLock` |
-| On a volume that gives no lock for a folder, the run goes on without one. | A lock that the volume does not give must not stop every run on that volume. | `testOnAVolumeWithNoSuchLockTheRunGoesOnWithoutOne` |
+| On a volume that gives no lock for a folder, the run goes on without one, and its result has one `noFolderLock` note, on the name of the folder. Six answers of `flock` mean this, and no other: `ENOTSUP`, `EOPNOTSUPP`, `ENOLCK`, `EISDIR`, `ENOSYS` and `EINVAL`. | A lock that the volume does not give must not stop every run on that volume. The user must know that nothing keeps a second run out. | `testAVolumeThatGivesNoLockForAFolderIsNotBusyAndNotUnreadable`, `testOnAVolumeWithNoSuchLockTheRunGoesOnWithoutOneAndSaysSo` |
+| Any other error of the lock call stops the run before it reads a file. The front end says that the folder could not be read, with the system's words. `EINTR` is asked again, three times at most. A descriptor that the system calls bad (`EBADF`) is not closed. | An error such as `EIO` says nothing about the lock. A run that went on would work in a folder that another run can hold. A bad descriptor can be the number of another open file by now. | `testAnyOtherAnswerIsAFailureAndNotAVolumeWithNoLock`, `testAnyOtherAnswerOfTheLockCallStopsTheRunBeforeItReadsAFile`, `testAnInterruptedCallIsAskedAgain`, `testADescriptorThatTheSystemCallsBadIsNotClosed` |
 | A program that the run starts does not get the lock. | The lock must go when the run ends, also while a converter still works. | `testTheDescriptorOfTheLockIsClosedInAProgramThatTheRunStarts` |
 
 Each front end has a test of what it says to a run that did not start:
@@ -156,7 +157,7 @@ One more rule has tests:
   (`testTheLightroomLineShowsWhenTheRunSetAtLeastOnePhoto`,
   `testADryRunNeverShowsTheLightroomLine`).
 
-## Two known gaps
+## Known gaps
 
 On a volume with no exclusive rename, such as ExFAT, ``ExclusiveRename``
 checks the name and then renames. A file that another program makes at
@@ -166,8 +167,19 @@ one path on which the tool can replace a file that it did not make.
 this path.
 
 On a volume that gives no lock for a folder, ``FolderLock`` lets the run go
-on, and two runs can then work in one folder. APFS, HFS+, ExFAT and FAT32
-gave the lock when they were measured, and
-`testOnExFATAFolderLockIsHeldAndASecondTakeIsBusy` pins ExFAT. A network
-volume was not measured. The source comment of ``FolderLock`` has each
-answer of the system and what it means.
+on, and two runs can then work in one folder. The result of the run says so
+with a `noFolderLock` note. APFS, HFS+, ExFAT and FAT32 gave the lock when
+they were measured, and `testOnExFATAFolderLockIsHeldAndASecondTakeIsBusy`
+pins ExFAT. A network volume was not measured. The source comment of
+``FolderLock`` has each answer of the system and what it means.
+
+After a hard end of a run, such as a Force Quit, the lock is free at once.
+A converter that the dead run started can still work for a moment, and a
+run that starts in that moment can meet its work file. Both converters end
+in under half a second on the Mac of the measurement, and two trials showed
+no collision. No test pins this.
+
+A scan or a dry run takes no lock, so it can read a folder while a run
+works in it. It can then show a file in change: for example a DNG as
+blocked, by a backup that the run is about to clear. The answer is to scan
+again after the run ends.

@@ -42,7 +42,8 @@ import Foundation
 /// `convertedUnmatched` note. It is not failed and not blocked.
 ///
 /// The notes of a run start with one note for each orphan backup in the
-/// folder, so every front end reports them.
+/// folder, so every front end reports them. Only the note of a volume that
+/// gives no folder lock stands before them (`noFolderLock`).
 ///
 /// **The ARW files a run left.** `RunSummary.unconvertedARWs` is the number of
 /// pending ARW files in the run's own scan, minus the ones this run converted.
@@ -71,13 +72,17 @@ import Foundation
 /// `FolderLock` on the folder before its scan, and holds it until it returns
 /// or throws (design 13.9). When another run holds the lock, it throws
 /// `FolderLock.Busy` and has read and changed nothing. On a volume that has
-/// no such lock, the run goes on without one. The dry run takes no lock.
+/// no such lock, the run goes on without one, and its summary starts with a
+/// `noFolderLock` note. When the lock call fails for any other reason, it
+/// throws `FolderLock.Failed` and has read and changed nothing. The dry run
+/// takes no lock.
 public struct DesqueezeJob: Sendable {
     private let tag: ScaleTagging
     private let converters: RawConverters
     private let backups: BackupHandling
     private let lock: FolderLock
     private let fileRecord: @Sendable (String) -> FileRecord?
+    private let verbose: @Sendable (String) -> Void
 
     /// - Parameter tag: reads and writes the `DefaultScale` tag.
     /// - Parameter converters: dnglab and Adobe DNG Converter, each nil when
@@ -97,13 +102,20 @@ public struct DesqueezeJob: Sendable {
     ///   move (design 14.2, lines 4 and 5), and only when it was asked to
     ///   move the originals. The default is `FileRecord.read`, which changes
     ///   no file. Tests inject it to drive each outcome.
+    /// - Parameter verbose: gets one line when the volume gave no lock for
+    ///   the folder, with the number of the error
+    ///   (`FolderLock.noLockLine`). Give it the sink of the
+    ///   `LoggingProcessRunner`: the line then stands before the first
+    ///   command of the run. The default says nothing.
     public init(tag: ScaleTagging, converters: RawConverters, backups: BackupHandling, lock: FolderLock = .system,
-                fileRecord: @escaping @Sendable (String) -> FileRecord? = { FileRecord.read(atPath: $0) }) {
+                fileRecord: @escaping @Sendable (String) -> FileRecord? = { FileRecord.read(atPath: $0) },
+                verbose: @escaping @Sendable (String) -> Void = { _ in }) {
         self.tag = tag
         self.converters = converters
         self.backups = backups
         self.lock = lock
         self.fileRecord = fileRecord
+        self.verbose = verbose
     }
 
     /// Scans `folder`, then runs on what that scan found.
@@ -128,10 +140,10 @@ public struct DesqueezeJob: Sendable {
     ///   - progress: called after each step: one for each conversion, one
     ///     for each DNG, and one for each original that the fifth step
     ///     handles.
-    /// - Throws: `FolderLock.Busy` when another run works in the folder, and
-    ///   any other error only when the scan fails. No file is changed then. A
-    ///   file that fails during the run is a note in the summary, not an
-    ///   error.
+    /// - Throws: `FolderLock.Busy` when another run works in the folder,
+    ///   `FolderLock.Failed` when the lock call failed, and any other error
+    ///   only when the scan fails. No file is changed then. A file that
+    ///   fails during the run is a note in the summary, not an error.
     public func run(
         folder: URL,
         factor: SqueezeFactor,
@@ -148,26 +160,36 @@ public struct DesqueezeJob: Sendable {
         // can be an original on its way to the Trash (design 14.2).
         defer { held?.release() }
         let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
-        return run(snapshot, factor: factor, convert: convert, trashOriginals: trashOriginals, remove: remove,
-                   cancel: cancel, progress: progress)
+        var summary = run(snapshot, factor: factor, convert: convert, trashOriginals: trashOriginals, remove: remove,
+                          cancel: cancel, progress: progress)
+        // The run worked with no lock: the volume gives none. The note is
+        // about the folder, so it is the first one (design 13.9).
+        if held == nil { summary.notes.insert(.noFolderLock(snapshot.folder), at: 0) }
+        return summary
     }
 
     /// The lock on `folder` for one run (design 13.9).
     ///
     /// - Returns: the lock, or nil when the volume has none for a folder. The
-    ///   run then goes on without one.
-    /// - Throws: `FolderLock.Busy` when another run holds the lock. When the
-    ///   folder could not be opened, the error of the scan: that is the path
-    ///   of a folder that could not be read, with the words it has always
-    ///   had. If that scan passes all the same, the error of the open.
+    ///   run then goes on without one, and `verbose` has got the number of
+    ///   the error.
+    /// - Throws: `FolderLock.Busy` when another run holds the lock, and
+    ///   `FolderLock.Failed` when the lock call failed for a reason that
+    ///   says nothing about the lock. When the folder could not be opened,
+    ///   the error of the scan: that is the path of a folder that could not
+    ///   be read, with the words it has always had. If that scan passes all
+    ///   the same, the error of the open.
     private func takeLock(on folder: URL) throws -> FolderLock.Held? {
         switch lock.take(folder) {
         case .held(let held):
             return held
         case .busy:
             throw FolderLock.Busy()
-        case .noLockOnThisVolume:
+        case .noLockOnThisVolume(let code):
+            verbose(FolderLock.noLockLine(code: code))
             return nil
+        case .failed(let code):
+            throw FolderLock.Failed(code: code)
         case .unreadable(let code):
             _ = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
             throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)

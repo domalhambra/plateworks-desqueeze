@@ -15,8 +15,18 @@ final class RunSummaryTests: XCTestCase {
     func testTheKindsAreTheSevenNamesOfTheDesignAndTheOnesOfSections13And14() {
         XCTAssertEqual(FileNote.Kind.allCases.map(\.rawValue), [
             "orphanBackup", "notConverted", "failed", "blockedByBackup", "leftoverBackup", "backupKept",
-            "folderReadOnly", "convertedUnmatched", "originalKept",
+            "folderReadOnly", "convertedUnmatched", "originalKept", "noFolderLock",
         ])
+    }
+
+    // A note about a volume that gives no folder lock is information
+    // (design 13.9): it marks no result as one to look at.
+    func testANoteAboutAVolumeWithNoFolderLockNeedsNoAttention() {
+        var summary = RunSummary()
+        summary.set = 3
+        summary.notes = [.noFolderLock(URL(fileURLWithPath: "/tmp/Shoot 1"))]
+        XCTAssertFalse(summary.needsAttention)
+        XCTAssertEqual(summary.countsLine, "3 set · 0 skipped · 0 failed")
     }
 
     // MARK: A DNG with no full match (design 13.4)

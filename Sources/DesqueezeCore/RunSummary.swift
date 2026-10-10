@@ -30,6 +30,11 @@ public struct FileNote: Equatable, Sendable, Identifiable, Codable {
         /// (design 14.3). The name is the ARW's. It is information: the file
         /// is not failed and not blocked.
         case originalKept
+        /// The run worked without the lock that keeps a second run out of
+        /// the folder, because the volume gives none (design 13.9). The
+        /// name is the folder's. It is information: no file is failed or
+        /// blocked by it.
+        case noFolderLock
     }
 
     public let name: String
@@ -75,6 +80,16 @@ extension FileNote {
     public static func folderReadOnly(_ folder: URL) -> FileNote {
         FileNote(name: folder.lastPathComponent, kind: .folderReadOnly,
                  message: "This folder is read-only. No file was changed.", detail: nil)
+    }
+
+    /// The note of a run on a volume that gives no lock for a folder
+    /// (design 13.9). The run went on, and nothing kept a second run out.
+    /// The only place that makes this sentence.
+    static func noFolderLock(_ folder: URL) -> FileNote {
+        FileNote(name: folder.lastPathComponent, kind: .noFolderLock,
+                 message: "This volume gives no folder lock. Do not start a second run in this folder while "
+                     + "this run works.",
+                 detail: nil)
     }
 
     /// - Parameter detail: each converter's own words, one line for each
@@ -274,8 +289,9 @@ extension RunSummary {
 
     /// True when a file failed or was blocked. A front end then marks the
     /// result as one to look at. A stopped run with no such file is not one,
-    /// a DNG with no full match (`convertedUnmatched`) is not one, and an
-    /// original that stays (`originalKept`) is not one.
+    /// a DNG with no full match (`convertedUnmatched`) is not one, an
+    /// original that stays (`originalKept`) is not one, and a run on a
+    /// volume that gives no folder lock (`noFolderLock`) is not one.
     public var needsAttention: Bool { failed > 0 || blocked > 0 }
 
     /// The sentence about the ARW files the run left, with the count. Nil

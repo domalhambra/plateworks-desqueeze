@@ -256,6 +256,56 @@ final class OperationsTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: shoot.appendingPathComponent("X.dng").path))
     }
 
+    // MARK: A volume that gives no folder lock (design 13.9)
+
+    /// The operations on the harness's fakes, on a lock that answers
+    /// `code`, and with a sink for `--verbose`.
+    func operations(lockAnswers code: Int32, verbose: @escaping @Sendable (String) -> Void = { _ in })
+        -> DesqueezeOperations {
+        let system = FakeLockCalls()
+        system.lockCode = code
+        return DesqueezeOperations(exiftool: exiftool, dnglab: nil, dngConverter: converterTool, tag: h.tag,
+                                   converters: h.converters(), backups: h.backups, lock: system.lock,
+                                   verbose: verbose)
+    }
+
+    // The command line tool and the MCP server print this report. The note
+    // is in it with its kind, the counts are those of a good run, and the
+    // sink of `--verbose` gets the number of the error.
+    func testOnAVolumeWithNoFolderLockTheReportHasTheNoteAndVerboseHasTheErrorNumber() throws {
+        let lines = CallLog()
+        let report = try operations(lockAnswers: ENOTSUP, verbose: { lines.entries.append($0) })
+            .run(shoot, factor: factor, trashOriginals: false)
+        XCTAssertEqual([report.converted, report.set, report.skipped, report.blocked, report.failed], [1, 2, 1, 0, 0])
+        XCTAssertEqual(report.notes.first, FileNote(
+            name: shoot.lastPathComponent, kind: .noFolderLock, message: FolderLockTests.noLockSentence, detail: nil))
+        XCTAssertEqual(report.notes.map(\.kind), [.noFolderLock, .orphanBackup])
+        XCTAssertEqual(lines.entries, ["The volume gave no folder lock: error 45, Operation not supported"])
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(try ReportJSON.text(report).utf8))
+            as? [String: Any])
+        let first = try XCTUnwrap((json["notes"] as? [NSDictionary])?.first)
+        XCTAssertEqual(first["kind"] as? String, "noFolderLock")
+        XCTAssertEqual(first["name"] as? String, shoot.lastPathComponent)
+        XCTAssertEqual(first["message"] as? String, FolderLockTests.noLockSentence)
+        XCTAssertTrue(first["detail"] is NSNull)
+
+        // Remove says the same, and a dry run takes no lock and says nothing.
+        XCTAssertEqual(try operations(lockAnswers: ENOTSUP).remove(shoot).notes.first?.kind, .noFolderLock)
+        XCTAssertEqual(try operations(lockAnswers: ENOTSUP).run(shoot, factor: factor, trashOriginals: false,
+                                                                dryRun: true).notes.map(\.kind), [.orphanBackup])
+    }
+
+    // A lock call that failed gives no report: the operation throws, with
+    // the system's words, and each front end says that the folder could not
+    // be read.
+    func testALockCallThatFailedGivesNoReport() {
+        XCTAssertThrowsError(try operations(lockAnswers: EIO).run(shoot, factor: factor, trashOriginals: false)) {
+            XCTAssertEqual($0.localizedDescription, "Input/output error")
+        }
+        XCTAssertThrowsError(try operations(lockAnswers: EIO).remove(shoot))
+        XCTAssertEqual(h.log.entries, [], "no file was read")
+    }
+
     // The public way in: one runner starts every program, also dnglab and
     // the exiftool calls of its match. So `--verbose` shows them all.
     func testWithDnglabEveryProgramIsStartedThroughTheGivenRunner() throws {

@@ -252,7 +252,7 @@ final class ReportsTests: XCTestCase {
         let json = try object(RunReport(folder: folder, factor: factor, summary: summary))
         XCTAssertEqual((json["notes"] as? [NSDictionary])?.map { $0["kind"] as? String }, [
             "orphanBackup", "notConverted", "failed", "blockedByBackup", "leftoverBackup", "backupKept",
-            "folderReadOnly", "convertedUnmatched", "originalKept",
+            "folderReadOnly", "convertedUnmatched", "originalKept", "noFolderLock",
         ])
     }
 
