@@ -339,9 +339,10 @@ struct ContentView: View {
                         ForEach(summary.notes) { note in
                             VStack(alignment: .leading, spacing: 2) {
                                 // A DNG with no full match is converted,
-                                // and an original that stays is no
-                                // failure. Each note informs, so it has
-                                // the symbol of information, and the
+                                // an original that stays is no failure,
+                                // and no more is a volume that gives no
+                                // folder lock. Each note informs, so it
+                                // has the symbol of information, and the
                                 // result above keeps its "done" symbol.
                                 if AppModel.isInformation(note) {
                                     SymbolLine(.information, note.name).font(.callout.weight(.medium))

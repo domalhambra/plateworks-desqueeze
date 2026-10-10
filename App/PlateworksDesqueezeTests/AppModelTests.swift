@@ -649,14 +649,14 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(summary.notes.map(AppModel.isInformation), [true, true])
     }
 
-    // Only two kinds of note inform: a DNG with no full match, and an
-    // original that stays (design 14.3). Every other kind is a file to look
-    // at.
-    func testOnlyTheNotesOfADNGWithNoFullMatchAndOfAnOriginalThatStaysAreInformation() {
+    // Only three kinds of note inform: a DNG with no full match, an
+    // original that stays (design 14.3), and a volume that gives no folder
+    // lock (design 13.9). Every other kind is a file to look at.
+    func testOnlyTheThreeKindsOfNoteThatInformAreInformation() {
         for kind in FileNote.Kind.allCases {
             let note = FileNote(name: "a.dng", kind: kind, message: "A sentence.", detail: nil)
-            XCTAssertEqual(AppModel.isInformation(note), kind == .convertedUnmatched || kind == .originalKept,
-                           "\(kind)")
+            XCTAssertEqual(AppModel.isInformation(note),
+                           kind == .convertedUnmatched || kind == .originalKept || kind == .noFolderLock, "\(kind)")
         }
     }
 

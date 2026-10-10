@@ -171,8 +171,10 @@ final class AppModel: ObservableObject {
     ///
     /// An original that stays in the folder is information too (design
     /// 14.3): the run did its work, and the note says why the ARW is there.
+    /// So is the note of a volume that gives no folder lock (design 13.9):
+    /// the run went on, and nothing failed.
     nonisolated static func isInformation(_ note: FileNote) -> Bool {
-        note.kind == .convertedUnmatched || note.kind == .originalKept
+        note.kind == .convertedUnmatched || note.kind == .originalKept || note.kind == .noFolderLock
     }
 
     /// The messages about the loaded folder. They come from the newest
