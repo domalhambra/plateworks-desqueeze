@@ -859,6 +859,36 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(summary.notes, [])
     }
 
+    // The work file vanished before the rename, on real files, with the
+    // real converters as the app wires them. The note has the words of the
+    // rename, and it names no partial DNG: there is none to delete. Nothing
+    // goes to the Trash.
+    func testAWorkFileThatVanishedBeforeTheRenameGivesANoteThatNamesNoPartialDNG() throws {
+        let real = try RealShoot()
+        defer { removeTemporaryFolder(real.shoot) }
+        let work = real.work
+        let scripted = real.tools.runner.handler
+        real.tools.runner.handler = { call in
+            let result = scripted(call)
+            // The read-back of the match is the last call before the rename.
+            if call.arguments.contains("-T"), !call.arguments.contains("-IFD0:Model") {
+                try? FileManager.default.removeItem(at: work)
+            }
+            return result
+        }
+        let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
+
+        let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files, withAdobe: false),
+                                   backups: files).run(real.snapshot, factor: factor, convert: true)
+
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: "frame 1.ARW", kind: .notConverted, message: "Not converted.",
+            detail: "The DNG could not get the name frame 1.dng: No such file or directory.")])
+        XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs], [0, 1, 1])
+        XCTAssertEqual(try real.names(in: real.trash), [], "nothing goes to the Trash")
+        XCTAssertEqual(try real.names(in: real.shoot), ["frame 1.ARW"])
+    }
+
     // MARK: A leftover work file (design 13.3, step 1)
 
     /// A real folder with one pending ARW, a folder that stands for the

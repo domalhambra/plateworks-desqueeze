@@ -40,6 +40,9 @@ final class DnglabConverterTests: XCTestCase {
         /// Each rename that the converter asked for: from, then to.
         var renames: [[String]] = []
         var renameOutcome = ExclusiveRename.Outcome.moved
+        /// The work file is gone when the rename is asked for: another
+        /// program, or the person, took it away.
+        var workFileIsGoneAtTheRename = false
         /// What dnglab prints on standard error.
         var dnglabError = ""
         var writeResult = ProcessResult(exitCode: 0, stdout: "    1 image files updated\n", stderr: "")
@@ -90,6 +93,7 @@ final class DnglabConverterTests: XCTestCase {
             fileExists: { disk.exists($0) }, fileSize: { disk.size($0) }, fileIsRegular: { disk.isRegularFile($0) },
             rename: { from, to in
                 tools.renames.append([from.path, to.path])
+                if tools.workFileIsGoneAtTheRename { disk.paths.remove(from.path) }
                 if tools.renameOutcome == .moved { disk.move(from.path, to: to.path) }
                 return tools.renameOutcome
             })
@@ -553,6 +557,70 @@ final class DnglabConverterTests: XCTestCase {
         tools.renameOutcome = .failed(EACCES)
         assertFails(.failed("The DNG could not get the name DSC05680.dng: Permission denied.", partial: work))
         XCTAssertEqual(disk.paths, [workPath])
+    }
+
+    // MARK: A work file that is gone is not reported
+
+    // The work file vanished before the rename: the system says "No such
+    // file". The result reports no partial output, so the job sends nothing
+    // to the Trash, and no note names a file that is not there.
+    func testARenameThatFailsBecauseTheWorkFileIsGoneReportsNoPartial() {
+        tools.renameOutcome = .failed(ENOENT)
+        tools.workFileIsGoneAtTheRename = true
+        assertFails(.failed("The DNG could not get the name DSC05680.dng: No such file or directory.", partial: nil))
+        XCTAssertEqual(tools.renames, [[workPath, dngPath]])
+        XCTAssertEqual(disk.paths, [])
+    }
+
+    // The same for a name that is taken, on the path of a volume with no
+    // exclusive rename: the name is checked first, and the work file is gone.
+    func testANameTakenWithAWorkFileThatIsGoneReportsNoPartial() {
+        tools.renameOutcome = .nameTaken
+        tools.workFileIsGoneAtTheRename = true
+        XCTAssertEqual(error() as? ConvertError,
+                       .failedForAll("A DNG with this name exists already. Not converted.", partial: nil))
+    }
+
+    // The same for a match that failed: the work file was there after
+    // dnglab, and it is gone when the write of the tags has failed.
+    func testAFailedMatchWithAWorkFileThatIsGoneReportsNoPartial() {
+        let (disk, workPath) = (disk!, workPath)
+        let handler = runner.handler
+        runner.handler = { call in
+            if call.arguments.contains("-overwrite_original") { disk.paths.remove(workPath) }
+            return handler(call)
+        }
+        tools.writeResult = ProcessResult(exitCode: 1, stdout: "    0 image files updated\n",
+                                          stderr: "Error: File not found - \(workPath)\n")
+        assertFails(.failed("The tags could not be written: Error: File not found", partial: nil))
+        XCTAssertEqual(tools.renames, [])
+    }
+
+    // On real files, with the rename of the system: the read-back of the
+    // match is the last call before the rename, and here it takes the work
+    // file away. The real `renamex_np` then answers "No such file".
+    func testOnTheRealDiskAWorkFileThatVanishedBeforeTheRenameIsNotReported() throws {
+        let folder = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(folder) }
+        let arw = folder.appendingPathComponent("frame 1.ARW")
+        let work = folder.appendingPathComponent(".frame 1.desqueeze-work.dng")
+        try Data("raw bytes".utf8).write(to: arw)
+        let tools = ScriptedTools()
+        let scripted = tools.runner.handler
+        tools.runner.handler = { call in
+            let result = scripted(call)
+            if call.arguments.contains("-T") { try? FileManager.default.removeItem(at: work) }
+            return result
+        }
+        let converter = DnglabConverter(executable: ScriptedTools.dnglab, exiftool: ScriptedTools.exiftool,
+                                        runner: tools.runner,
+                                        discardLeftover: { XCTFail("no leftover: \($0.lastPathComponent)") })
+
+        XCTAssertThrowsError(try converter.convert(arw, facts: adapted)) {
+            XCTAssertEqual($0 as? ConvertError, .failed(
+                "The DNG could not get the name frame 1.dng: No such file or directory.", partial: nil))
+        }
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path), ["frame 1.ARW"])
     }
 
     // The rename that a converter gets when no one gives it one must be the

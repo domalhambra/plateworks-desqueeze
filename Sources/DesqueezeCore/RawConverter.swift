@@ -234,7 +234,8 @@ public enum ConverterOutput {
 /// 4. **A partial output is reported only when the program ran:** after a
 ///    signal ended it, after a non-zero exit, after exit 0 with an empty
 ///    file, after `match` failed, or after the rename failed. It is always
-///    the work file.
+///    the work file, and only when the work file is there: a work file that
+///    vanished is not reported, so no note names a file that is not there.
 /// 5. **Any other error from the runner passes on as it came,** with no
 ///    partial: for example, the program could not start. The program never
 ///    ran, so a file at the name is not this conversion's.
@@ -339,10 +340,17 @@ struct ConverterRules: Sendable {
         } catch let error as ConvertError {
             throw error
         } catch {
-            throw ConvertError.failed(DesqueezeJob.describe(error), partial: work)
+            throw ConvertError.failed(DesqueezeJob.describe(error), partial: ifThere(work))
         }
         try move(work, to: output)
         return output
+    }
+
+    /// The work file as the partial output of a step that came after the
+    /// program: nil when the file is gone. Another program, or the person,
+    /// can take it away, and a rename then fails with "No such file".
+    private func ifThere(_ work: URL) -> URL? {
+        exists(work.path) ? work : nil
     }
 
     /// Rule 3. The names of the work file and of exiftool's leftover beside
@@ -375,11 +383,11 @@ struct ConverterRules: Sendable {
         case .nameTaken:
             // Another program made `<base>.dng` while the converter worked.
             // Every converter would find the name taken, so no one tries.
-            throw ConvertError.failedForAll(Self.nameTaken, partial: work)
+            throw ConvertError.failedForAll(Self.nameTaken, partial: ifThere(work))
         case .failed(let code):
             throw ConvertError.failed(
                 "The DNG could not get the name \(dng.lastPathComponent): \(ExclusiveRename.Outcome.words(for: code)).",
-                partial: work)
+                partial: ifThere(work))
         }
     }
 }

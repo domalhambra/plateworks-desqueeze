@@ -23,6 +23,9 @@ final class RawConverterTests: XCTestCase {
         /// Each rename that the converter asked for: from, then to.
         var renames: [[String]] = []
         var renameOutcome = ExclusiveRename.Outcome.moved
+        /// The work file is gone when the rename is asked for: another
+        /// program, or the person, took it away.
+        var workFileIsGoneAtTheRename = false
     }
 
     override func setUp() {
@@ -43,6 +46,7 @@ final class RawConverterTests: XCTestCase {
             fileExists: { disk.exists($0) }, fileSize: { disk.size($0) }, fileIsRegular: { disk.isRegularFile($0) },
             rename: { from, to in
                 steps.renames.append([from.path, to.path])
+                if steps.workFileIsGoneAtTheRename { disk.paths.remove(from.path) }
                 if steps.renameOutcome == .moved { disk.move(from.path, to: to.path) }
                 return steps.renameOutcome
             })
@@ -543,6 +547,25 @@ final class RawConverterTests: XCTestCase {
         steps.renameOutcome = .failed(EACCES)
         assertFails(.failed("The DNG could not get the name DSC05680.dng: Permission denied.", partial: work))
         XCTAssertEqual(disk.paths, [workPath])
+    }
+
+    // The work file vanished before the rename: the system says "No such
+    // file". The result reports no partial output, so the job sends nothing
+    // to the Trash, and no note names a file that is not there.
+    func testARenameThatFailsBecauseTheWorkFileIsGoneReportsNoPartial() {
+        converterWritesItsFile()
+        steps.renameOutcome = .failed(ENOENT)
+        steps.workFileIsGoneAtTheRename = true
+        assertFails(.failed("The DNG could not get the name DSC05680.dng: No such file or directory.", partial: nil))
+        XCTAssertEqual(steps.renames, [[workPath, dngPath]])
+        XCTAssertEqual(disk.paths, [])
+    }
+
+    func testANameTakenWithAWorkFileThatIsGoneReportsNoPartial() {
+        converterWritesItsFile()
+        steps.renameOutcome = .nameTaken
+        steps.workFileIsGoneAtTheRename = true
+        assertFails(.failedForAll("A DNG with this name exists already. Not converted.", partial: nil))
     }
 }
 
