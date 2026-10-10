@@ -15,5 +15,14 @@ xcuserdata/
 # would also hide a folder named Fixtures under Tests.
 /fixtures/
 
+# A photo is private, wherever it is in the tree. No ARW, no DNG and no
+# backup of a DNG enters the repo. The two spellings of each extension are
+# named, for a volume that tells letter case apart.
+*.ARW
+*.arw
+*.dng
+*.DNG
+*.dng_original
+
 # Python bytecode from scripts/docs_check.py, which the docs test runs.
 __pycache__/
