@@ -123,6 +123,92 @@ final class ARWFactsTests: XCTestCase {
         XCTAssertEqual(Array(parsed.keys), ["c.ARW"])
     }
 
+    // MARK: A control character in a file name
+
+    /// What exiftool 13.55 printed on 2026-10-09 for three copies of one
+    /// frame: `a<tab>b.ARW`, `a.b.ARW` and `plain.ARW`. The tab is printed
+    /// as a period, so the first two rows have one name.
+    static let realOutputWithATab = "a.b.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t2\n"
+        + "a.b.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t2\n"
+        + "plain.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t2\n"
+
+    func testExiftoolPrintsEachControlCharacterAsAPeriod() {
+        XCTAssertEqual(ExiftoolText.printed("a\tb.ARW"), "a.b.ARW")
+        XCTAssertEqual(ExiftoolText.printed("n\nl\u{7F}\u{1} q.ARW"), "n.l.. q.ARW", "as the real exiftool printed it")
+        XCTAssertEqual(ExiftoolText.printed("r\r\nn.ARW"), "r..n.ARW", "two characters, two periods")
+        XCTAssertEqual(ExiftoolText.printed("\u{1F}\u{20}\u{7E}\u{80}"), ". ~\u{80}", "only U+0001 to U+001F and U+007F")
+        XCTAssertEqual(ExiftoolText.printed("uni é ü 写真.ARW"), "uni é ü 写真.ARW")
+        XCTAssertEqual(ExiftoolText.printed("DSC05680.ARW"), "DSC05680.ARW")
+    }
+
+    // Two rows share a name: no one can say which row is whose. Neither
+    // file gets facts, and "no facts" is "no full match".
+    func testANameThatTwoRowsShareGivesNoFacts() {
+        let parsed = ARWFactsReader.parse(Self.realOutputWithATab)
+        XCTAssertEqual(parsed.keys.sorted(), ["plain.ARW"])
+        XCTAssertEqual(parsed["plain.ARW"], facts(800, 2597, 1556, noLensCorrection: true))
+        // Also when the two rows are equal, and when there are three.
+        XCTAssertEqual(ARWFactsReader.parse(Self.realOutputWithATab + Self.realOutputWithATab), [:])
+    }
+
+    func reader(printing output: String) -> (ARWFactsReader, FakeRunner) {
+        let runner = FakeRunner()
+        runner.handler = { _ in ProcessResult(exitCode: 0, stdout: output, stderr: "") }
+        return (ARWFactsReader(exiftool: exiftool, runner: runner), runner)
+    }
+
+    func testTwoFilesWhoseNamesPrintAsOneGetNoFactsAndTheOthersKeepTheirs() {
+        let (reader, _) = reader(printing: Self.realOutputWithATab)
+        let read = reader.read(["a\tb.ARW", "a.b.ARW", "plain.ARW"].map { URL(fileURLWithPath: "/tmp/Shoot 1/\($0)") })
+        XCTAssertEqual(read.keys.sorted(), ["plain.ARW"])
+        XCTAssertNil(read["a\tb.ARW"])
+        XCTAssertNil(read["a.b.ARW"])
+    }
+
+    // One file with a tab in its name, and no other file that prints as it:
+    // the row is its own, and the facts come back under the real name.
+    func testOneFileWithATabInItsNameGetsItsFactsUnderItsRealName() {
+        let (reader, runner) = reader(printing: "a.b.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t2\n")
+        let read = reader.read([URL(fileURLWithPath: "/tmp/Shoot 1/a\tb.ARW")])
+        XCTAssertEqual(read, ["a\tb.ARW": facts(800, 2597, 1556, noLensCorrection: true)])
+        XCTAssertEqual(runner.calls.first?.arguments.last, "/tmp/Shoot 1/a\tb.ARW", "the path goes to exiftool as it is")
+    }
+
+    // The two rows can come from two calls, when the files are in two
+    // batches. The name is still shared.
+    func testANameThatIsSharedAcrossTwoBatchesGivesNoFacts() {
+        var arws = (1...200).map { URL(fileURLWithPath: "/tmp/Shoot 1/frame\($0).ARW") }
+        arws[0] = URL(fileURLWithPath: "/tmp/Shoot 1/a\tb.ARW")
+        arws.append(URL(fileURLWithPath: "/tmp/Shoot 1/a.b.ARW"))
+        let runner = FakeRunner()
+        runner.handler = { call in
+            let rows = call.arguments.filter { $0.hasPrefix("/") }.map {
+                "\(ExiftoolText.printed(URL(fileURLWithPath: $0).lastPathComponent))\tILCE-7SM3\t800\t2597 1024 1556\t255\t2\n"
+            }
+            return ProcessResult(exitCode: 0, stdout: rows.joined(), stderr: "")
+        }
+        let read = ARWFactsReader(exiftool: exiftool, runner: runner).read(arws)
+        XCTAssertEqual(runner.calls.count, 2)
+        XCTAssertEqual(read.count, 199)
+        XCTAssertNil(read["a\tb.ARW"])
+        XCTAssertNil(read["a.b.ARW"])
+        XCTAssertNotNil(read["frame200.ARW"])
+    }
+
+    // Two rows with one name, and one file of the list with that name: the
+    // read does not pick one of them.
+    func testTwoRowsWithOneNameGiveNoFactsAlsoToTheOneFileOfTheList() {
+        let (reader, _) = reader(printing: "a.b.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t2\n"
+            + "a.b.ARW\tILCE-7SM3\t80\t2496 1024 1617\t17\t2\n")
+        XCTAssertEqual(reader.read([URL(fileURLWithPath: "/tmp/Shoot 1/a.b.ARW")]), [:])
+    }
+
+    // A row that no file of the list asked for is no one's facts.
+    func testOnlyTheFilesOfTheListGetFacts() {
+        let (reader, _) = reader(printing: Self.realOutput)
+        XCTAssertEqual(reader.read([URL(fileURLWithPath: "/tmp/iso80.ARW")]).keys.sorted(), ["iso80.ARW"])
+    }
+
     // MARK: The read
 
     func testOneCallForAShortListWithTheExactArguments() {
@@ -214,7 +300,9 @@ final class ARWFactsTests: XCTestCase {
     func testANonZeroExitStillGivesTheRows() {
         let runner = FakeRunner()
         runner.handler = { _ in ProcessResult(exitCode: 1, stdout: Self.realOutput, stderr: "") }
-        let read = ARWFactsReader(exiftool: exiftool, runner: runner).read([URL(fileURLWithPath: "/tmp/iso80.ARW")])
+        let names = ["iso80", "iso3200", "iso400", "iso50", "iso12800", "junk", "empty"]
+        let read = ARWFactsReader(exiftool: exiftool, runner: runner)
+            .read(names.map { URL(fileURLWithPath: "/tmp/\($0).ARW") })
         XCTAssertEqual(read.count, 7)
     }
 

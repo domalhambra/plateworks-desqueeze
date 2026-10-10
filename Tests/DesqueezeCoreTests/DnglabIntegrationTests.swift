@@ -261,6 +261,31 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
         XCTAssertEqual(try names(), [".frame.desqueeze-work.dng", "frame.ARW"])
     }
 
+    // A tab in the name of the ARW, with the real tools. exiftool prints the
+    // tab as a period: in the row of the facts read, and in the read-back
+    // of `OriginalRawFileName`. The ARW still gets its facts and its match.
+    // The file is made here, in the temporary folder.
+    func testARealConversionOfAnARWWithATabInItsNamePassesItsMatch() throws {
+        let arw = try copyFixture(as: "tab\there.ARW")
+        let reader = ARWFactsReader(exiftool: exiftool)
+        let facts = try XCTUnwrap(reader.read([arw])["tab\there.ARW"], "the facts come back under the real name")
+        XCTAssertTrue(AdobeMatch.match(facts).isFull)
+
+        let conversion = try converter.convert(arw, facts: facts)
+
+        XCTAssertEqual(conversion, Conversion(dng: folder.appendingPathComponent("tab\there.dng"), unmatched: nil))
+        XCTAssertEqual(try names(), ["tab\there.ARW", "tab\there.dng"])
+        // What the real exiftool prints for the tag, and what the file holds.
+        XCTAssertEqual(try read(["SubIFD:WhiteLevel", "IFD0:OriginalRawFileName"], in: conversion.dng),
+                       ["16383", "tab.here.ARW"])
+        let raw = try SystemProcessRunner().run(exiftool, ["-b", "-IFD0:OriginalRawFileName", conversion.dng.path])
+        XCTAssertEqual(raw.stdout, "tab\there.ARW", "the tag holds the real name")
+
+        // A second file that prints as the same name: neither has facts.
+        let twin = try copyFixture(as: "tab.here.ARW")
+        XCTAssertEqual(reader.read([arw, twin]), [:])
+    }
+
     // Why the rule is there: the real exiftool refuses to write a file that
     // has its own leftover beside it. So the app does not start a conversion
     // whose tag step could never pass.

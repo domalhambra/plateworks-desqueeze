@@ -252,6 +252,40 @@ final class DnglabConverterTests: XCTestCase {
         XCTAssertEqual(try converter().convert(arw, facts: adapted).dng, dng)
     }
 
+    // MARK: A control character in the name of the ARW
+
+    // exiftool prints a control character as a period. For `a<tab>b.ARW` the
+    // real exiftool 13.55 read `OriginalRawFileName` back as `a.b.ARW`
+    // (2026-10-09). The read-back compares in that form, so the conversion
+    // passes. Before, such an ARW failed its match on every run.
+    func testANameWithATabOrALineEndReadsBackAsExiftoolPrintsItAndPasses() throws {
+        for (name, printed) in [("a\tb.ARW", "a.b.ARW"), ("n\nl.ARW", "n.l.ARW")] {
+            setUp()
+            let arw = URL(fileURLWithPath: "/tmp/Shoot 1/\(name)")
+            tools.readBack = ["16383", "0.15", "0.9888 0 0 0 1 0 0 0 0.9955", "0.9888 0 0 0 1 0 0 0 0.9955",
+                              Self.noise800, "0.6", "1.25", "1", "250", printed].joined(separator: "\t")
+            let conversion = try converter().convert(arw, facts: adapted)
+            XCTAssertEqual(conversion.dng, ConverterOutput.url(for: arw))
+            XCTAssertTrue(runner.calls[1].arguments.contains("-IFD0:OriginalRawFileName=\(name)"),
+                          "the real name is written, with its control character")
+        }
+    }
+
+    // Only the control characters are folded. Another name is still wrong.
+    func testAnotherNameStillFailsTheReadBackOfANameWithATab() {
+        let arw = URL(fileURLWithPath: "/tmp/Shoot 1/a\tb.ARW")
+        for wrong in ["a b.ARW", "ab.ARW", "a.b.arw", "a..b.ARW", "-"] {
+            setUp()
+            tools.readBack = wrong
+            XCTAssertThrowsError(try converter().convert(arw, facts: .none), wrong) {
+                // The sentence names what exiftool had to print. No tab
+                // goes into a note.
+                XCTAssertEqual(($0 as? ConvertError)?.text,
+                               "The tag IFD0:OriginalRawFileName did not read back as a.b.ARW.", wrong)
+            }
+        }
+    }
+
     // MARK: dnglab fails
 
     func testANonZeroExitWithAFileReportsTheWorkFileAndWritesNoTag() {

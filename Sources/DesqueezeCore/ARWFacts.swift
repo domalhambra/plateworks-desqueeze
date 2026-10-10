@@ -72,11 +72,34 @@ public struct ARWFacts: Equatable, Sendable {
 /// Reads the facts. `DesqueezeJob` depends on this protocol, so its tests
 /// need no exiftool.
 public protocol ARWFactsReading: Sendable {
-    /// The facts of each file, by file name, from one request for the whole
-    /// list. A file with no entry has no facts (`ARWFacts.none`). The read
-    /// changes no file, and it never throws: a read that fails gives no
-    /// facts, and no facts is "no full match" (design 13.4).
+    /// The facts of each file of the list, by its file name, from one
+    /// request for the whole list. A file with no entry has no facts
+    /// (`ARWFacts.none`). The read changes no file, and it never throws: a
+    /// read that fails gives no facts, and no facts is "no full match"
+    /// (design 13.4).
     func read(_ arws: [URL]) -> [String: ARWFacts]
+}
+
+/// How exiftool prints text in a row of its output.
+enum ExiftoolText {
+    /// `text` as exiftool prints it: each control character, U+0001 to
+    /// U+001F and U+007F, is a period. So a file name with a tab or a line
+    /// end in it stays one cell of one row.
+    ///
+    /// Two names can then print as one: `a<tab>b.ARW` and `a.b.ARW` are
+    /// both `a.b.ARW`. A caller that finds a file by its printed name must
+    /// know that (`ARWFactsReader.read`).
+    ///
+    /// Checked with exiftool 13.55 on 2026-10-09, for a tab, a line end,
+    /// U+0001 and U+007F, in a file name and in `OriginalRawFileName`.
+    static func printed(_ text: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars {
+            let isControl = (0x01...0x1F).contains(scalar.value) || scalar.value == 0x7F
+            scalars.append(isControl ? "." : scalar)
+        }
+        return String(scalars)
+    }
 }
 
 /// The exiftool implementation.
@@ -113,35 +136,61 @@ public struct ARWFactsReader: ARWFactsReading {
     /// exiftool exits 1 when one file is unreadable, and the other rows are
     /// still valid, so the exit code is not read. A call that fails gives
     /// its files no facts. The other calls are still made.
+    ///
+    /// **A row is found by the name that exiftool prints,** and exiftool
+    /// prints a control character as a period (`ExiftoolText.printed`). A
+    /// file gets facts only when exactly one row has its printed name, and
+    /// no other file of the list prints as that name. When two rows, or two
+    /// files, share a printed name, no one can say which row is whose: those
+    /// files get no facts, which is "no full match". The same holds for two
+    /// files of the list that have one name in two folders.
     public func read(_ arws: [URL]) -> [String: ARWFacts] {
-        var facts: [String: ARWFacts] = [:]
+        var rows: [String: [ARWFacts]] = [:]
         for start in stride(from: 0, to: arws.count, by: Self.batchSize) {
             let batch = arws[start..<min(start + Self.batchSize, arws.count)]
             guard let result = try? runner.run(
                 exiftool, ["-m", "-n", "-T", "-filename"] + Self.tags + batch.map(\.path))
             else { continue }
-            facts.merge(Self.parse(result.stdout)) { _, new in new }
+            for row in Self.rows(result.stdout) { rows[row.name, default: []].append(row.facts) }
+        }
+        var files: [String: [String]] = [:]
+        for arw in arws { files[ExiftoolText.printed(arw.lastPathComponent), default: []].append(arw.lastPathComponent) }
+        var facts: [String: ARWFacts] = [:]
+        for (printed, names) in files where names.count == 1 {
+            if let found = rows[printed], found.count == 1 { facts[names[0]] = found[0] }
         }
         return facts
     }
 
-    /// Parses the tab-separated read: the file name, then the five tags.
-    /// exiftool prints `-` for a tag that a file does not have, and a row of
-    /// them for a file that it cannot read. A line that is no such row is
-    /// dropped.
+    /// The facts by the file name that exiftool printed. A name that two
+    /// rows share is not in the result: no one can say which row is whose.
     static func parse(_ text: String) -> [String: ARWFacts] {
         var facts: [String: ARWFacts] = [:]
+        var shared: Set<String> = []
+        for row in rows(text) {
+            if facts.updateValue(row.facts, forKey: row.name) != nil { shared.insert(row.name) }
+        }
+        for name in shared { facts[name] = nil }
+        return facts
+    }
+
+    /// Parses the tab-separated read: the file name, then the five tags, one
+    /// row for each file, in the order of the output. exiftool prints `-`
+    /// for a tag that a file does not have, and a row of them for a file
+    /// that it cannot read. A line that is no such row is dropped.
+    static func rows(_ text: String) -> [(name: String, facts: ARWFacts)] {
+        var rows: [(name: String, facts: ARWFacts)] = []
         for line in text.split(separator: "\n") {
             let cells = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
             guard cells.count == 1 + tags.count else { continue }
-            facts[cells[0]] = ARWFacts(
+            rows.append((cells[0], ARWFacts(
                 model: cells[1] == "-" || cells[1].isEmpty ? nil : cells[1],
                 iso: wholeNumber(cells[2]).flatMap { $0 > 0 ? $0 : nil },
                 daylightLevels: daylightLevels(cells[3]),
                 distortionCorrection: wholeNumber(cells[4]),
-                rawFileType: wholeNumber(cells[5]))
+                rawFileType: wholeNumber(cells[5]))))
         }
-        return facts
+        return rows
     }
 
     private static func daylightLevels(_ text: String) -> ARWFacts.DaylightLevels? {

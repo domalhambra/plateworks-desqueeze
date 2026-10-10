@@ -17,7 +17,8 @@ import Foundation
 ///    and `-overwrite_original`. No backup is kept: the file is this run's
 ///    own, a moment old, and has no earlier state to keep.
 /// 4. One exiftool call that reads every tag back. Numbers are compared as
-///    numbers (`AdobeMatch.sameNumbers`), the file name as text.
+///    numbers (`AdobeMatch.sameNumbers`), the file name as the text that
+///    exiftool prints for it (`ExiftoolText.printed`).
 /// 5. A rename of the work file to `<base>.dng` that fails when anything has
 ///    that name (`ExclusiveRename`).
 ///
@@ -173,6 +174,11 @@ public struct DnglabConverter: RawConverter {
 
     /// Step 4. One call reads every tag, as one tab-separated row in the
     /// order of `tags`. exiftool prints `-` for a tag that is not there.
+    ///
+    /// exiftool prints a control character as a period. The file name that
+    /// was written is compared in that form: a name with a tab or a line end
+    /// in it would otherwise never read back as equal, and its ARW would
+    /// fail on every run.
     private func check(_ tags: [AdobeMatch.Tag], in dng: URL) throws {
         let result = try runner.run(exiftool, ["-m", "-n", "-T"] + tags.map { "-\($0.name)" } + [dng.path])
         let row = result.stdout.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
@@ -181,11 +187,12 @@ public struct DnglabConverter: RawConverter {
             throw TagError.toolFailed("The tags did not read back.")
         }
         for (tag, read) in zip(tags, cells) {
-            let same = tag.name == Self.originalRawFileName
-                ? read == tag.value
-                : AdobeMatch.sameNumbers(tag.value, read)
-            guard same else {
-                throw TagError.toolFailed("The tag \(tag.name) did not read back as \(tag.value).")
+            // The file name, as exiftool prints it. The sentence has that
+            // form too: a tab or a line end never goes into a note.
+            let isText = tag.name == Self.originalRawFileName
+            let wanted = isText ? ExiftoolText.printed(tag.value) : tag.value
+            guard isText ? read == wanted : AdobeMatch.sameNumbers(wanted, read) else {
+                throw TagError.toolFailed("The tag \(tag.name) did not read back as \(wanted).")
             }
         }
     }
