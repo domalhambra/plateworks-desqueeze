@@ -261,11 +261,16 @@ run in the middle of a file. The next scan or run reports what it finds:
   one gave it. A network share was not tested. When a volume gives no lock
   for a folder, the run goes on without one. On such a volume, do not start
   two runs in one folder.
-- **A long file name.** The hidden work file has the base name of the ARW
-  and 20 more bytes, and a file name can have 255 bytes. So for an ARW whose
-  base name has more than 235 bytes, no converter starts. The result lists
-  the ARW as not converted: "The file name is too long. Shorten it, then run
-  again." Most letters are one byte. An accented letter can be two or more.
+- **A long file name.** A file name on a Mac volume can have 255 UTF-16
+  units. Most letters are one unit, also a Japanese letter. An emoji is
+  two or more. Some volumes store an accented letter as two units, so the
+  tool counts each accented letter as two. The longest name that a conversion
+  makes is a temporary file that exiftool makes beside the hidden work
+  file, `.<base>.desqueeze-work.dng_exiftool_tmp`: the base name of the ARW
+  and 33 more units. So for an ARW whose base name has more than 222 units,
+  no converter starts. The result lists the ARW as not converted: "The file
+  name is too long. Shorten it, then run again." The rule is the same for
+  both converters, and a dry run uses it too.
 - **A leftover work file can stay.** The tool removes a leftover work file
   only when it converts the same ARW again. If the ARW is gone, or if a DNG
   now belongs to it, the hidden file stays until you delete it.

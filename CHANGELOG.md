@@ -63,9 +63,10 @@ The first version. It is built from source, and there is no download.
   makes no file. A second run in the same folder does not start, from any
   front end, and says: "Another Desqueeze run is working in this folder.
   Wait for it to end, then run again." A scan and a dry run take no lock.
-- An ARW whose name is too long for the hidden work file gets no converter.
-  The note says: "The file name is too long. Shorten it, then run again."
-  The limit is a base name of 235 bytes.
+- An ARW whose name is too long for the files that a conversion makes gets
+  no converter. The note says: "The file name is too long. Shorten it, then
+  run again." The limit is a base name of 222 UTF-16 units, counted in the
+  decomposed form of the name.
 - A factor with a comma, such as "1,5", is refused with the rule and one
   more sentence: "Use a period for the decimal point."
 - Control-C, a plain `kill` and a closed Terminal window stop a run after

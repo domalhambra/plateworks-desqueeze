@@ -194,9 +194,10 @@ Each step has the rule that keeps the user's files safe. Design 4.3, 13.3,
    `<base>.dng`, the converter does not start. Neither converter may write
    over a file. A leftover file of exiftool beside the photo,
    `<base>.dng_exiftool_tmp`, stops that ARW, and the note names the file.
-   So does a base name of more than 235 bytes: the name of the work file
-   would be longer than the 255 bytes that a file name can have, and the
-   note says that the name is too long.
+   So does a base name of more than 222 UTF-16 units, counted in its
+   decomposed form: the name of exiftool's temporary file beside the work
+   file would be longer than the 255 units that a file name can have, and
+   the note says that the name is too long.
 4. **Convert to a work file.** Each converter writes the hidden file
    `.<base>.desqueeze-work.dng`, not `<base>.dng`. dnglab takes the path of
    the work file. Adobe DNG Converter takes its name with `-o`. A work file

@@ -218,8 +218,8 @@ DNG would have no full match, and an ARW whose new DNG would be blocked. A
 dry run reads no ARW and no DNG for these steps. It plans a run in which
 every check passes.
 
-An ARW whose name is too long for the hidden work file has no `convert`
-step. It counts in `failed`, with the `notConverted` note of the run.
+An ARW whose name is too long for the files that a conversion makes has no
+`convert` step. It counts in `failed`, with the `notConverted` note of the run.
 
 ## When there is no report
 

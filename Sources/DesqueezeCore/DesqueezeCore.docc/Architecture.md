@@ -83,8 +83,8 @@ behind each step.
    ``ConverterChoice`` gives each ARW its list of converters, from
    ``AdobeMatch`` and from what is installed.
 3. **Convert.** Both converters follow the same steps. The converter checks
-   that the name of the work file is not too long, and that nothing has the
-   name `<base>.dng`. It sends to the Trash a work file
+   that the name of the ARW is not too long for the files that the
+   conversion makes, and that nothing has the name `<base>.dng`. It sends to the Trash a work file
    that an earlier run left, and the `_exiftool_tmp` file of exiftool beside
    it, when each is a regular file. It writes the hidden work file from
    ``ConverterOutput/workURL(for:)``. ``DnglabConverter`` then writes the
