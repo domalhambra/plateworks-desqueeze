@@ -11,9 +11,13 @@ public struct ToolLocator: Sendable {
     public static let standardConverterApp = "/Applications/Adobe DNG Converter.app"
 
     /// What a front end says when `exiftool()` gives nil (design, sections 6
-    /// and 8). The install command follows it, in the front end's own layout.
+    /// and 8). The window shows the sentence, and the command on a line of
+    /// its own, from these two.
     public static let exiftoolMissing = "Desqueeze needs exiftool, and it is not installed."
     public static let exiftoolInstallCommand = "brew install exiftool"
+    /// The sentence and the command on one line, as the command line tool
+    /// and the MCP server say it. The only place that joins the two.
+    public static let exiftoolMissingLine = "\(exiftoolMissing) Install it with: \(exiftoolInstallCommand)"
     /// For the advice about the converters (`FolderText.converterAdvice`,
     /// design 13.5).
     public static let dnglabInstallCommand = "brew install dnglab"

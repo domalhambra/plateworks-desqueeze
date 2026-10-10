@@ -25,14 +25,27 @@ import Foundation
 /// result: the run stops after its current file, and no file is damaged.
 /// A plain `kill` (SIGTERM) goes to the tool alone, and is taken the same way.
 ///
-/// The signals stay taken for as long as the watcher lives.
+/// **What a caller must know**
+///
+/// - The watcher sets the flag for as long as it lives. The signals stay
+///   ignored for the whole process, also after the watcher is gone: `init`
+///   sets each signal to `SIG_IGN`, and nothing sets it back. After that, a
+///   Control-C does nothing to the process. So keep the watcher until the
+///   process ends, as the tool and the server do.
+/// - Two watchers on one signal both fire: each one sets its own flag and
+///   calls its own `onFirst`.
+/// - `flag` is public, and any holder can set it. `onFirst` runs only when
+///   the flag is not set at the first signal. If another holder set the flag
+///   first, `onFirst` does not run.
 public final class InterruptWatcher: @unchecked Sendable {
     public let flag = CancelFlag()
     private var sources: [DispatchSourceSignal] = []
 
     /// - Parameters:
     ///   - signals: the signals to take, for example `[SIGINT, SIGTERM]`.
-    ///   - onFirst: called once, at the first signal.
+    ///     Each one stays ignored for the rest of the process.
+    ///   - onFirst: called once, at the first signal, and only when the
+    ///     flag is not set by then.
     public init(signals: [Int32], onFirst: @escaping @Sendable () -> Void) {
         let flag = flag
         // One queue for every signal, so two signals that arrive together

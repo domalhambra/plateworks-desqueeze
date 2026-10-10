@@ -67,6 +67,15 @@ final class ToolLocatorTests: XCTestCase {
         XCTAssertEqual(ToolLocator.exiftoolInstallCommand, "brew install exiftool")
     }
 
+    // The command line tool and the MCP server say the sentence and the
+    // command on one line. The line is made once, here.
+    func testTheOneLineForAMissingExiftoolIsTheSentenceThenTheInstallCommand() {
+        XCTAssertEqual(ToolLocator.exiftoolMissingLine,
+                       "Desqueeze needs exiftool, and it is not installed. Install it with: brew install exiftool")
+        XCTAssertEqual(ToolLocator.exiftoolMissingLine,
+                       "\(ToolLocator.exiftoolMissing) Install it with: \(ToolLocator.exiftoolInstallCommand)")
+    }
+
     func testTheStandardConverterAppIsListedOnce() {
         let registered = URL(fileURLWithPath: "/Applications/Adobe DNG Converter.app/")
         XCTAssertEqual(locator(registered: registered, present: []).converterApps,
