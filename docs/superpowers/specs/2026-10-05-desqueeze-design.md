@@ -556,13 +556,14 @@ JSON shapes. `scale` is the tag value as text, or `null` when it is unknown.
   "converted": 1, "convertedByDnglab": 1, "convertedByAdobe": 0,
   "set": 2, "skipped": 0, "blocked": 0, "failed": 0,
   "stopped": false, "unconvertedARWs": 0,
+  "trashOriginals": false, "originalsInTrash": 0,
   "notes": [ { "name": "x.dng", "kind": "failed", "message": "…", "detail": null } ] }
 ```
 
 A dry run prints the same object with `"dryRun": true`, the counts a real run
 would give if every step passed, and a `"steps"` list of
-`{ "name", "action" }`, where action is `convert`, `write`, `skip`, or
-`blocked`. A `convert` step also has `"converter"`: `dnglab` or `adobe`.
+`{ "name", "action" }`, where action is `convert`, `write`, `skip`,
+`blocked`, or `trashOriginal` (14.3). A `convert` step also has `"converter"`: `dnglab` or `adobe`.
 `"dngConverter"` is the path of Adobe DNG Converter: the key keeps its first
 name.
 
@@ -988,6 +989,12 @@ An ARW goes to the Trash only when every line holds:
    exiftool -m -n -T -IFD0:OriginalRawFileName -SubIFD:DefaultScale <file.dng>
    ```
 
+The run asks the lines in the order 1, 2, 3, 5, 4, so the second read of
+the ARW is the last thing before the move. An ARW that is gone, or that has
+no record from before its conversion, counts as changed. The name in line 5
+is compared exactly, also in letter case. A DNG whose own backup the Trash
+refused (`backupKept`) is still complete.
+
 Then the app moves the ARW to the Trash through the same injected function
 that takes a backup there (`BackupHandling.trashFile`). So no test reaches
 the real Trash, and `DESQUEEZE_TEST_BACKUP_FOLDER` holds for a built tool.
@@ -1020,11 +1027,15 @@ change. The core makes each sentence:
 
 An ARW whose conversion failed gets no such note: its `failed` or
 `notConverted` note says enough. After a Cancel, the ARW files that step 5
-did not reach get no note: the result says "stopped".
+did not reach get no note: the result says "stopped". A Cancel that arrives
+during the last tag step, with originals still to move, gives `stopped`
+true.
 
 When the option was on, the result has one more line, from the core, in
 every front end that has the option: "Originals moved to the Trash: N of M."
-M is the count of ARW files that this run converted.
+M is the count of ARW files that this run converted. A dry run does not
+show the line. Its notes carry `originalKept` for each ARW that would stay,
+so the plan and the run give the same notes.
 
 Run JSON: two new keys, always present. `"trashOriginals"` is true when the
 option was on. `"originalsInTrash"` is the count of ARW files that the run
@@ -1035,7 +1046,9 @@ knows which conversions would get the `convertedUnmatched` note (13.4), and
 gives those no such step. The run and the dry run share the function that
 decides.
 
-Progress: one more step for each ARW that step 5 handles.
+Progress: one more step for each converted ARW, also one that stays.
+
+For `remove`, `"trashOriginals"` is false whatever the caller gave.
 
 ### 14.4 The window
 
@@ -1052,10 +1065,16 @@ files to the Trash".
   files go to the Trash after their DNG files pass the check." (For one:
   "1 original ARW file goes to the Trash after its DNG file passes the
   check.") N is the count of pending ARW files that can convert.
-- While it is on, the Run button reads `Desqueeze N photos, move M originals
-  to the Trash`. The window asks nothing more: the box is the request, and
-  the Trash is reversible.
-- The box is off and cannot change while a run or a scan is in work.
+- While it is on, the Run button reads `Desqueeze N photos, move M ARW to
+  Trash`, in the words of Finder's "Move to Trash". The text is the same for
+  one and for many. (The first text, "…move M originals to the Trash", was
+  cut at the window's width from about 320 points: measured 2026-10-10 with
+  228 photos and 12 originals.) The label must fit with four digits in each
+  number. The window asks nothing more: the box is the request, and the
+  Trash is reversible.
+- While a run or a scan is in work, the box cannot change. It keeps its
+  state through the run, and goes off when the run has ended.
+- The box is not shown for a read-only folder.
 - The Remove button is not affected.
 - VoiceOver hears the checkbox by its label, and hears the line of 14.3 with
   the result counts.
