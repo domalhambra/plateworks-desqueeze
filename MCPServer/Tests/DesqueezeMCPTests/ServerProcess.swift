@@ -120,6 +120,14 @@ final class ServerProcess: @unchecked Sendable {
         try? toServer.fileHandleForWriting.close()
     }
 
+    /// Sends a signal to the server, as a client that stops it does. It
+    /// goes to the process of the server only: never to a group, and never
+    /// to a process that this object did not start.
+    func send(signal number: Int32) {
+        guard process.isRunning else { return }
+        kill(process.processIdentifier, number)
+    }
+
     // MARK: From the server
 
     /// The next line of standard output, as a JSON object.

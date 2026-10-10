@@ -20,7 +20,7 @@ final class StartupTests: XCTestCase {
             XCTAssertEqual(exitCode, 1, value)
             XCTAssertEqual(lines, [
                 "desqueeze-mcp: DESQUEEZE_TEST_BACKUP_FOLDER is set, and its value is not a folder: \"\(value)\". "
-                    + "It is for tests only. Unset it, then start the server again.",
+                    + "It is for tests only. Unset it, then run again.",
             ])
         }
     }
@@ -126,8 +126,61 @@ final class MissingExiftoolTests: XCTestCase {
         XCTAssertEqual(result.isError, true)
         XCTAssertEqual(result.content, [.text(
             text: "desqueeze_run needs the argument \"factor\": the squeeze factor of the lens, a number from 1 "
-                + "to 4. There is no default.",
+                + "to 4, with at most four decimal places. There is no default.",
             annotations: nil, _meta: nil)])
+    }
+}
+
+/// A run with a progress token, in the test process, with the real exiftool
+/// on copies of the fixture in a temporary folder. Its backups go to a
+/// second temporary folder, never to the Trash.
+final class ProgressOrderTests: XCTestCase {
+    var base: URL!
+
+    override func setUpWithError() throws {
+        base = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+            .appendingPathComponent("desqueeze-mcp-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base.appendingPathComponent("Shoot"),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: base.appendingPathComponent("Discarded"),
+                                                withIntermediateDirectories: true)
+    }
+
+    override func tearDown() {
+        guard let base, base.lastPathComponent.hasPrefix("desqueeze-mcp-tests-") else { return }
+        try? FileManager.default.removeItem(at: base)
+    }
+
+    // The client takes its time with each progress message. The call must
+    // not return before the last one is sent: the library writes the result
+    // as soon as the call returns, and a step after the result is a step for
+    // a request that the client has closed.
+    func testEveryStepIsSentBeforeTheCallReturns() async throws {
+        let fixture = ServerTestCase.fixtures.appendingPathComponent("sample.dng")
+        guard FileManager.default.fileExists(atPath: fixture.path), ToolLocator().exiftool() != nil else {
+            throw XCTSkip("No fixture, or no exiftool.")
+        }
+        let folder = base.appendingPathComponent("Shoot")
+        for number in 1...3 {
+            try FileManager.default.copyItem(at: fixture, to: folder.appendingPathComponent("\(number).dng"))
+        }
+        let backups = try FileBackups.fromEnvironment(
+            [FileBackups.testFolderVariable: base.appendingPathComponent("Discarded").path]).backups
+        let handlers = ToolHandlers(
+            environment: ToolEnvironment(locator: ToolLocator(), runner: SystemProcessRunner(), backups: backups),
+            queue: CallQueue())
+        let sent = Events()
+
+        let result = try await handlers.call(CallTool.Parameters(
+            name: "desqueeze_run", arguments: ["folder": .string(folder.path), "factor": 1.5],
+            meta: Metadata(progressToken: .string("slow")))) { step in
+            try? await Task.sleep(for: .milliseconds(400))
+            sent.add("\(Int(step.params.progress)) of \(Int(step.params.total ?? 0)) \(step.params.message ?? "")")
+        }
+
+        XCTAssertEqual(sent.all, ["1 of 3 1.dng", "2 of 3 2.dng", "3 of 3 3.dng"],
+                       "every step was sent when the call returned")
+        XCTAssertEqual(result.isError, false)
     }
 }
 
@@ -138,8 +191,9 @@ final class CallQueueTests: XCTestCase {
         let first = await queue.run { 1 }
         XCTAssertEqual(first, 1)
         XCTAssertTrue(queue.isIdle)
+        XCTAssertEqual(queue.callsWithNoWork, 0)
 
-        await queue.close()
+        queue.close()
         let second: Int? = await queue.run {
             XCTFail("the queue is closed")
             return 2
@@ -147,6 +201,74 @@ final class CallQueueTests: XCTestCase {
 
         XCTAssertNil(second)
         XCTAssertTrue(queue.isIdle)
+        XCTAssertEqual(queue.callsWithNoWork, 1, "the call did no work, so it gets no answer")
+    }
+
+    // The client goes away during a call. The call in work goes on to its
+    // end. The call that waits behind it does not start.
+    func testClosingLetsTheCallInWorkCompleteAndStartsNoCallThatWaits() async {
+        let queue = CallQueue()
+        let started = DispatchSemaphore(value: 0)
+        let gate = DispatchSemaphore(value: 0)
+        async let first = queue.run { () -> Int? in
+            started.signal()
+            gate.wait()
+            return 1
+        }
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                started.wait()
+                continuation.resume()
+            }
+        }
+        async let second: Int? = queue.run {
+            XCTFail("the queue was closed before this call started")
+            return 2
+        }
+
+        queue.close()
+        gate.signal()
+
+        let results = await [first, second]
+        XCTAssertEqual(results, [1, nil])
+        await queue.waitForCallInWork()
+        XCTAssertTrue(queue.isIdle)
+        XCTAssertEqual(queue.callsWithNoWork, 1)
+    }
+
+    // A signal: the queue closes, and the call in work is told to stop. A
+    // call that is not in work is not told.
+    func testStopTellsTheCallInWorkAndNoOther() async {
+        let queue = CallQueue()
+        let told = Events()
+        let started = DispatchSemaphore(value: 0)
+        let stopped = DispatchSemaphore(value: 0)
+        _ = await queue.run(onStop: { told.add("a call that has completed") }) { 0 }
+        async let first = queue.run(onStop: {
+            told.add("the call in work")
+            stopped.signal()
+        }) { () -> Int? in
+            started.signal()
+            // The work goes on until it is told to stop.
+            return stopped.wait(timeout: .now() + 10) == .success ? 1 : -1
+        }
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                started.wait()
+                continuation.resume()
+            }
+        }
+        async let second: Int? = queue.run(onStop: { told.add("the call that waits") }) {
+            XCTFail("the queue was stopped before this call started")
+            return 2
+        }
+
+        queue.stop()
+
+        let results = await [first, second]
+        XCTAssertEqual(results, [1, nil])
+        XCTAssertEqual(told.all, ["the call in work"])
+        XCTAssertTrue(queue.isClosed)
     }
 
     // Ten calls that arrive at once. Each one fails the test when another

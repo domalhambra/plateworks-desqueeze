@@ -32,6 +32,8 @@ let package = Package(
                 "desqueeze-mcp",
                 .product(name: "DesqueezeCore", package: "DesqueezeCore"),
                 .product(name: "MCP", package: "swift-sdk"),
+                // A test's stand-in for the library's transport has a `Logger`.
+                .product(name: "Logging", package: "swift-log"),
             ]),
     ]
 )

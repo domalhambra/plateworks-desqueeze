@@ -8,8 +8,10 @@ import MCP
 /// command line tool's, and the result text is `ReportJSON.text`, so the
 /// server and `desqueeze --json` print the same JSON (design 12).
 struct ToolEnvironment: Sendable {
+    /// The sentence and the command are the core's, so every front end
+    /// says the same words.
     static let missingExiftool =
-        "Desqueeze needs exiftool, and it is not installed. Install it with: brew install exiftool"
+        "\(ToolLocator.exiftoolMissing) Install it with: \(ToolLocator.exiftoolInstallCommand)"
 
     /// Asked at each call, so a call works as soon as exiftool is installed,
     /// with no new start of the server.
@@ -62,18 +64,10 @@ struct ToolEnvironment: Sendable {
     /// package such as an app or a photo library, are not folders.
     private func folder(at path: String) throws -> URL {
         let named = URL(fileURLWithPath: path, isDirectory: true)
-        if let folder = FolderChoice.folder(at: named) { return folder }
-
-        let resolved = named.resolvingSymlinksInPath()
-        let why: String
-        if !FileManager.default.fileExists(atPath: resolved.path) {
-            why = "Nothing is at this path."
-        } else if (try? resolved.resourceValues(forKeys: [.isPackageKey]))?.isPackage == true {
-            why = "It is a package, such as an app or a photo library, and not a folder of photos."
-        } else {
-            why = "It is a file, not a folder."
+        guard let folder = FolderChoice.folder(at: named) else {
+            throw ToolFailure("\(FolderText.unreadable(path: path)). \(FolderChoice.whyNotAFolder(named))")
         }
-        throw ToolFailure("This folder could not be read: \(path). \(why)")
+        return folder
     }
 
     /// An operation throws only when its scan of the folder fails. No file
@@ -84,7 +78,7 @@ struct ToolEnvironment: Sendable {
         } catch {
             var detail = error.localizedDescription
             if case TagError.toolFailed(let text) = error { detail = text }
-            throw ToolFailure("This folder could not be read: \(folder.path). \(detail)")
+            throw ToolFailure("\(FolderText.unreadable(path: folder.path)). \(detail)")
         }
     }
 }

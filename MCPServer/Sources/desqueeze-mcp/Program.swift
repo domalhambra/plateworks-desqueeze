@@ -76,11 +76,9 @@ enum Program {
                 "Test mode: backups go to \($0.path), not to the Trash."
             })
         } catch let error as FileBackups.TestFolderError {
-            // The server stops before it reads a message.
-            return .stop(lines: [
-                "\(name): \(FileBackups.testFolderVariable) is set, and its value is not a folder: \"\(error.value)\". "
-                    + "It is for tests only. Unset it, then start the server again.",
-            ], exitCode: 1)
+            // The server stops before it reads a message. The words are the
+            // core's, so the command line tool says the same.
+            return .stop(lines: ["\(name): \(error.message) \(FileBackups.TestFolderError.detail)"], exitCode: 1)
         } catch {
             return .stop(lines: ["\(name): \(error.localizedDescription)"], exitCode: 1)
         }
@@ -110,8 +108,12 @@ enum Program {
         }
     }
 
-    /// Runs the server until standard input closes and every request that
-    /// was read has its answer.
+    /// The signals with which a client stops the server. An MCP client
+    /// sends `SIGTERM` when it shuts a server down.
+    static let stopSignals = [SIGTERM, SIGINT, SIGHUP]
+
+    /// Runs the server until standard input closes or a signal comes, and
+    /// every answer that will come is written.
     private static func serve(_ environment: ToolEnvironment) async -> Int32 {
         // swift-log prints on standard output until it is told otherwise.
         LoggingSystem.bootstrap { StreamLogHandler.standardError(label: $0) }
@@ -123,15 +125,31 @@ enum Program {
             name: name, version: DesqueezeVersion.current, title: "Plateworks Desqueeze",
             instructions: ToolCatalog.instructions, capabilities: .init(tools: .init(listChanged: false)))
         await ToolHandlers(environment: environment, queue: queue).register(on: server)
+        let transport = AnsweringTransport(logger: logger, queue: queue)
+
+        // A server that ended at once would leave a backup beside the file
+        // that exiftool was writing (design 12.2). At a signal, no call that
+        // waits starts, the call in work stops after its current file, its
+        // report is written, and the program ends with 0. With no call in
+        // work, it ends at once.
+        let watcher = InterruptWatcher(signals: stopSignals) {
+            queue.stop()
+            Task { await transport.stopReading() }
+        }
+        defer { withExtendedLifetime(watcher) {} }
+
         do {
-            try await server.start(transport: AnsweringTransport(logger: logger, isIdle: { queue.isIdle }))
+            try await server.start(transport: transport)
         } catch {
             write("\(name): The server could not start: \(error.localizedDescription)", to: .standardError)
             return 1
         }
         await server.waitUntilCompleted()
-        // A cancelled run can still be in work. It completes its file first.
-        await queue.close()
+        // The transport has closed the queue and waited for the call in
+        // work. This is the last check that no file is in work when the
+        // program ends.
+        queue.close()
+        await queue.waitForCallInWork()
         return 0
     }
 

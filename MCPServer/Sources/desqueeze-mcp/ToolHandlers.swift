@@ -1,5 +1,30 @@
 import DesqueezeCore
+import Foundation
 import MCP
+
+/// `tools/call` with its parameters as they came: any JSON value, or none.
+///
+/// The library's own `CallTool` decodes the parameters before the server
+/// sees the request. A request with no `params`, no `name`, or `arguments`
+/// that is not an object then gets Foundation's sentence about data that
+/// could not be read. With this method the library hands the value over, and
+/// the server says what is wrong.
+enum LooseCallTool: MCP.Method {
+    static let name = CallTool.name
+    typealias Parameters = Value
+    typealias Result = CallTool.Result
+
+    static let malformed = "tools/call needs a tool name and an arguments object."
+
+    /// - Throws: the JSON-RPC error for invalid parameters, with `malformed`.
+    static func parameters(_ value: Value) throws -> CallTool.Parameters {
+        do {
+            return try JSONDecoder().decode(CallTool.Parameters.self, from: try JSONEncoder().encode(value))
+        } catch {
+            throw MCPError.invalidParams(malformed)
+        }
+    }
+}
 
 /// Joins the three tools to the library's server: `tools/list` and
 /// `tools/call`.
@@ -13,8 +38,8 @@ struct ToolHandlers: Sendable {
         }
         // The handler holds the server, and the server holds the handler.
         // Both live as long as the program.
-        await server.withMethodHandler(CallTool.self) { parameters in
-            try await call(parameters) { step in
+        await server.withMethodHandler(LooseCallTool.self) { parameters in
+            try await call(try LooseCallTool.parameters(parameters)) { step in
                 // A client that went away gets no progress. The run goes on.
                 try? await server.notify(step)
             }
@@ -25,9 +50,10 @@ struct ToolHandlers: Sendable {
     ///
     /// - Parameter notify: sends one progress message to the client.
     /// - Throws: `MCPError` for a tool that the server does not have, which
-    ///   is an error of the protocol. `CancellationError` for a call that was
-    ///   cancelled before it started: the library then sends no answer, as
-    ///   the protocol says.
+    ///   is an error of the protocol. `CancellationError` for a call that
+    ///   did no work: it was cancelled before it started, or the queue was
+    ///   closed. The library then sends no answer, as the protocol says for
+    ///   a cancelled request.
     func call(
         _ parameters: CallTool.Parameters,
         notify: @escaping @Sendable (Message<ProgressNotification>) async -> Void
@@ -47,10 +73,11 @@ struct ToolHandlers: Sendable {
 
         // The library cancels this task when the client sends
         // `notifications/cancelled` for the call. A run in work then stops
-        // after its current file, and its report says `stopped`.
+        // after its current file, and its report says `stopped`. A signal
+        // stops the call in work the same way, through the queue.
         let cancel = CancelFlag()
         let result = await withTaskCancellationHandler {
-            await queue.run {
+            await queue.run(onStop: { cancel.cancel() }) {
                 // Cancelled while it waited: no work.
                 cancel.isCancelled ? nil : environment.result(of: call, cancel: cancel) { progress?.step($0) }
             }

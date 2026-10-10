@@ -143,8 +143,8 @@ enum ToolCatalog {
             folder,
             ToolArgument(
                 name: "factor", kind: .factor,
-                description: "The squeeze factor of the lens: 1.33, 1.5, 1.8 or 2 for most lenses. A number "
-                    + "from 1 to 4, with at most four decimal places. There is no default. Ask the user."),
+                description: "The squeeze factor of the lens: 1.33, 1.5, 1.8 or 2 for most lenses. It is "
+                    + "\(SqueezeFactor.ruleText). There is no default. Ask the user."),
             ToolArgument(
                 name: "convert", kind: .flag(default: true),
                 description: "False leaves the ARW files alone. Only the DNG files that exist get the tag."),

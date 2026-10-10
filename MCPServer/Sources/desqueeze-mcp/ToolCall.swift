@@ -93,8 +93,8 @@ enum ToolCall: Equatable, Sendable {
         func factor() throws -> SqueezeFactor {
             guard let value = values["factor"] else {
                 throw ToolFailure(
-                    "\(tool.name) needs the argument \"factor\": the squeeze factor of the lens, a number from 1 "
-                        + "to 4. There is no default.")
+                    "\(tool.name) needs the argument \"factor\": the squeeze factor of the lens, "
+                        + "\(SqueezeFactor.ruleText). There is no default.")
             }
             let text: String
             switch value {
@@ -105,8 +105,7 @@ enum ToolCall: Equatable, Sendable {
                     "The argument \"factor\" must be a number, such as 1.5. Text in quotes is not a number.")
             }
             guard let factor = SqueezeFactor(text: text) else {
-                throw ToolFailure(
-                    "The factor must be a number from 1 to 4, with at most four decimal places. It was \(text).")
+                throw ToolFailure("The factor must be \(SqueezeFactor.ruleText). It was \(text).")
             }
             return factor
         }

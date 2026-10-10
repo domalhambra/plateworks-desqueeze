@@ -67,6 +67,7 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertEqual(run?["dry_run"]?["default"] as? Bool, false)
         XCTAssertEqual(run?["factor"]?["minimum"] as? Int, 1)
         XCTAssertEqual(run?["factor"]?["maximum"] as? Int, 4)
+        XCTAssertEqual((run?["factor"]?["description"] as? String)?.contains(SqueezeFactor.ruleText), true)
         XCTAssertTrue(try XCTUnwrap(tools[1]["description"] as? String).contains("desqueeze_remove"),
                       "run names the tool that reverses it")
 
@@ -92,6 +93,34 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertEqual(error["code"] as? Int, -32602)
         XCTAssertEqual((error["message"] as? String)?.contains("desqueeze_delete"), true)
         XCTAssertTrue(try server.result(of: "ping").isEmpty)
+    }
+
+    // The library reads `params` as any JSON value and hands it to the
+    // server, so the server says what is wrong in its own words.
+    func testMalformedParametersOfAToolCallGetAPlainSentence() throws {
+        let server = try start()
+        let wrong = [
+            "",
+            #","params":null"#,
+            #","params":{}"#,
+            #","params":"desqueeze_scan""#,
+            #","params":["desqueeze_scan"]"#,
+            #","params":{"arguments":{"folder":"/tmp"}}"#,
+            #","params":{"name":5,"arguments":{"folder":"/tmp"}}"#,
+            #","params":{"name":"desqueeze_scan","arguments":"/tmp"}"#,
+            #","params":{"name":"desqueeze_scan","arguments":["/tmp"]}"#,
+        ]
+        for (number, params) in wrong.enumerated() {
+            let id = 100 + number
+            try server.write(#"{"jsonrpc":"2.0","id":\#(id),"method":"tools/call"\#(params)}"# + "\n")
+            let answer = try server.answer(to: id).answer
+
+            let error = try XCTUnwrap(answer["error"] as? [String: Any], "\(params): \(answer)")
+            XCTAssertEqual(error["code"] as? Int, -32602, "invalid params: \(params)")
+            XCTAssertEqual(error["message"] as? String,
+                           "Invalid params: tools/call needs a tool name and an arguments object.", params)
+        }
+        XCTAssertTrue(try server.result(of: "ping").isEmpty, "the server goes on")
     }
 
     // MARK: desqueeze_scan
@@ -460,9 +489,11 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertEqual(try names(in: folder), ["1.dng", "2.dng", "3.dng", "4.dng"], "no backup is left")
     }
 
-    // Every request that was read gets its answer, also when standard input
-    // closes right behind it, as it does for `desqueeze-mcp < requests.txt`.
-    func testRequestsFollowedAtOnceByTheEndOfInputAreAllAnswered() throws {
+    // Standard input closes right behind the requests, as it does for
+    // `desqueeze-mcp < requests.txt`. A request that needs no queue is
+    // answered. Of the tool calls, at most the one in work runs: the client
+    // has gone, and a call that changes files must not start for nobody.
+    func testAtTheEndOfInputAtMostTheToolCallInWorkRuns() throws {
         try requireFixturesAndTools()
         try makeDNGs(2)
         let server = try launch()
@@ -471,18 +502,76 @@ final class ServerEndToEndTests: ServerTestCase {
             "clientInfo": ["name": "desqueeze-mcp-tests", "version": "1"],
         ])
         let list = server.request("tools/list")
-        let run = server.request("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 2]))
-        let scan = server.request("tools/call", toolCall("desqueeze_scan", ["folder": folder.path]))
+        let ping = server.request("ping")
+        let first = server.request("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 2]))
+        let second = server.request("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5]))
 
-        try server.write(try [hello, list, run, scan].map { try ServerProcess.line($0.message) + "\n" }.joined())
+        try server.write(try [hello, list, ping, first, second].map { try ServerProcess.line($0.message) + "\n" }
+            .joined())
         server.closeInput()
 
         XCTAssertEqual(server.waitForExit(timeout: ServerProcess.longWait), 0)
         XCTAssertTrue(server.waitForEndOfOutput())
+        XCTAssertEqual(server.unfinishedOutput, "")
         var answered: Set<Int> = []
-        for _ in 0..<4 { answered.insert(try XCTUnwrap(try server.nextMessage()["id"] as? Int)) }
-        XCTAssertEqual(answered, [hello.id, list.id, run.id, scan.id])
-        XCTAssertEqual(try scales(), ["1.dng": "2 1", "2.dng": "2 1"])
+        for _ in server.outputLines { answered.insert(try XCTUnwrap(try server.nextMessage()["id"] as? Int)) }
+        XCTAssertTrue(answered.isSuperset(of: [hello.id, list.id, ping.id]), "\(answered)")
+        let calls = answered.subtracting([hello.id, list.id, ping.id])
+        XCTAssertLessThanOrEqual(calls.count, 1, "at most the call in work ran: \(calls)")
+        // The folder shows which call ran, and that no other did.
+        let expected = calls == [first.id] ? "2 1" : calls == [second.id] ? "1.5 1" : "1 1"
+        XCTAssertEqual(try scales(), ["1.dng": expected, "2.dng": expected])
+        XCTAssertEqual(try names(in: folder), ["1.dng", "2.dng"], "no backup is left")
+    }
+
+    // The idle rule, with the real server. The client goes away during a
+    // run that lasts longer than the 2 seconds for which the server waits
+    // for an answer that no call is working on. The answer still arrives
+    // whole, and then the server ends with 0.
+    func testAtTheEndOfInputARunThatLastsLongerThanThePatienceIsAnswered() throws {
+        try requireFixturesAndTools()
+        try makeDNGs(14)
+        let server = try start()
+
+        let run = try server.send("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5],
+                                                         progressToken: "long"))
+        _ = try server.nextMessage(timeout: ServerProcess.longWait)
+        let closed = Date()
+        server.closeInput()
+
+        let result = try toolResult(server, id: run)
+        XCTAssertGreaterThan(Date().timeIntervalSince(closed), 2,
+                             "the run must last longer than the 2 seconds, or this test pins nothing")
+        XCTAssertEqual(counts(try result.json()), [0, 14, 0, 0, 0, 0])
+        XCTAssertEqual(try result.json()["stopped"] as? Bool, false)
+        XCTAssertEqual(server.waitForExit(), 0)
+        XCTAssertTrue(server.waitForEndOfOutput())
+        XCTAssertEqual(server.unfinishedOutput, "", "the answer is whole")
+        XCTAssertEqual(try names(in: folder).filter { $0.hasSuffix("_original") }, [], "no backup is left")
+    }
+
+    // A run that was cancelled stops after its current file and gives its
+    // report. With the end of input right behind the cancel, the report is
+    // still written before the server ends.
+    func testARunCancelledJustBeforeTheEndOfInputStillGivesItsReport() throws {
+        try requireFixturesAndTools()
+        try makeDNGs(6)
+        let server = try start()
+
+        let run = try server.send("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5],
+                                                         progressToken: "stop"))
+        _ = try server.nextMessage(timeout: ServerProcess.longWait)
+        try server.notify("notifications/cancelled", ["requestId": run])
+        server.closeInput()
+
+        let json = try toolResult(server, id: run).json()
+        XCTAssertEqual(json["stopped"] as? Bool, true)
+        let set = try XCTUnwrap(json["set"] as? Int)
+        XCTAssertEqual(server.waitForExit(), 0)
+        XCTAssertTrue(server.waitForEndOfOutput())
+        XCTAssertEqual(server.unfinishedOutput, "")
+        XCTAssertEqual(try scales().values.filter { $0 == "1.5 1" }.count, set, "each file is whole")
+        XCTAssertEqual(try names(in: folder).filter { $0.hasSuffix("_original") }, [], "no backup is left")
     }
 
     // A request that the library never answers must not hold the server
@@ -498,6 +587,83 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertEqual(server.waitForExit(timeout: 10), 0)
         XCTAssertTrue(server.waitForEndOfOutput())
         XCTAssertTrue(server.errorText.contains("No answer came for: [\"1.5\"]"), server.errorText)
+    }
+
+    // MARK: A signal
+
+    // An MCP client stops a server with SIGTERM. The server does not end at
+    // once: exiftool would complete the file in work, and nobody would check
+    // it or discard its backup. The run stops after the file in work, its
+    // report is written, the call that waits does not start, and the server
+    // ends with 0. The signal goes to the server's process only.
+    func testASignalDuringARunStopsItAfterTheFileInWorkAndEndsTheServerWithZero() throws {
+        try requireFixturesAndTools()
+        let count = 10
+        try makeDNGs(count)
+        let server = try start()
+
+        let run = try server.send("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5],
+                                                         progressToken: "signal"))
+        _ = try server.nextMessage(timeout: ServerProcess.longWait)
+        // A second call, which waits behind the run. The answer to a ping
+        // that was sent after it shows that the library has started it.
+        let remove = try server.send("tools/call", toolCall("desqueeze_remove", ["folder": folder.path]))
+        let ping = try server.send("ping")
+        while try server.nextMessage(timeout: ServerProcess.longWait)["id"] as? Int != ping {}
+        server.send(signal: SIGTERM)
+
+        XCTAssertEqual(server.waitForExit(timeout: ServerProcess.longWait), 0, "the server ends by itself, with 0")
+        XCTAssertTrue(server.waitForEndOfOutput())
+        XCTAssertEqual(server.unfinishedOutput, "", "the output ends with a line end")
+        let messages = try server.outputLines.map {
+            try XCTUnwrap(try JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any], $0)
+        }
+        let answers = messages.filter { $0["method"] == nil }
+        XCTAssertFalse(answers.contains { $0["id"] as? Int == remove }, "the call that waited gets no answer")
+        let answer = try XCTUnwrap(answers.first { $0["id"] as? Int == run }, "the run gives its report")
+        let json = try toolResult(answer, earlier: []).json()
+        XCTAssertEqual(json["stopped"] as? Bool, true)
+        let set = try XCTUnwrap(json["set"] as? Int)
+        XCTAssertGreaterThanOrEqual(set, 1)
+        XCTAssertLessThan(set, count, "the run must stop before the last file")
+
+        // exiftool does not get the signal: it goes to the server only. As
+        // for the command line tool, one outcome is allowed all the same: a
+        // program that was just starting got it. That one file is `failed`,
+        // its detail names signal 15, and it is left as it was.
+        let notes = try XCTUnwrap(json["notes"] as? [[String: Any]])
+        XCTAssertEqual(json["failed"] as? Int, notes.count, "every note is a failed file: \(notes)")
+        XCTAssertLessThanOrEqual(notes.count, 1, "at most one program was just starting: \(notes)")
+        for note in notes {
+            XCTAssertEqual(note["kind"] as? String, "failed")
+            let detail = try XCTUnwrap(note["detail"] as? String)
+            XCTAssertTrue(detail.contains("signal 15."), "the only allowed failure is signal 15: \(detail)")
+        }
+
+        // Each file is whole: set and checked with its backup gone, or as
+        // it was. The remove did not run: the files that were set are set.
+        XCTAssertEqual(try names(in: folder), (1...count).map { "\($0).dng" }.sorted(),
+                       "no backup and no exiftool work file stays in the folder")
+        XCTAssertEqual(try names(in: discard).count, set, "one backup for each file that was set")
+        let scales = try scales()
+        XCTAssertEqual(scales.values.filter { $0 == "1.5 1" }.count, set)
+        XCTAssertEqual(scales.values.filter { $0 == "1 1" }.count, count - set)
+        for note in notes {
+            XCTAssertEqual(scales[try XCTUnwrap(note["name"] as? String)], "1 1",
+                           "the file that the signal reached is unchanged")
+        }
+    }
+
+    // With no call in work there is nothing to complete.
+    func testASignalWithNoCallInWorkEndsTheServerAtOnceWithZero() throws {
+        for number in [SIGTERM, SIGINT, SIGHUP] {
+            let server = try start()
+
+            server.send(signal: number)
+
+            XCTAssertEqual(server.waitForExit(timeout: 5), 0, "signal \(number)")
+            XCTAssertTrue(server.waitForEndOfOutput())
+        }
     }
 
     // MARK: Standard output is the protocol
