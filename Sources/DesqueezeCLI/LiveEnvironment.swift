@@ -3,14 +3,22 @@ import Foundation
 
 /// Sets a flag at Control-C, so a run stops after its current file.
 ///
-/// exiftool and the converter do not get the Control-C. Checked on this Mac
-/// (macOS 27): `Process` starts each program as the leader of a process group
-/// of its own, so its group id is its own process id and not the tool's. A
-/// terminal sends Control-C to the foreground group, which holds the tool and
-/// no program that it started. A `SIGINT` sent to the tool's group during a run
-/// did not reach the exiftool in work. That write completed, was checked, and
-/// its backup was discarded, and the run then saw the flag and stopped. Apple
-/// does not document this behavior of `Process`, so two tests pin it:
+/// exiftool and the converter normally do not get the Control-C. Checked on
+/// this Mac (macOS 27): `Process` starts each program as the leader of a
+/// process group of its own, so its group id is its own process id and not the
+/// tool's. A terminal sends Control-C to the foreground group, which holds the
+/// tool and no program that it started. A `SIGINT` sent to the tool's group
+/// during a run did not reach the exiftool in work. That write completed, was
+/// checked, and its backup was discarded, and the run then saw the flag and
+/// stopped.
+///
+/// "Normally" is the word. A program that is only just starting can still get
+/// the signal: `InterruptTests` saw it once in 27 runs under load, when the
+/// signal reached an exiftool that was just starting. That file is then
+/// reported as failed ("ended by signal 2"), and it is left as it was. Run
+/// again to complete it (design 12.1).
+///
+/// Apple does not document this behavior of `Process`, so two tests pin it:
 /// `ProcessRunnerTests` for the group, and `InterruptTests` for the run.
 /// A plain `kill` (SIGTERM) goes to the tool alone, and is taken the same way.
 public final class InterruptWatcher: @unchecked Sendable {

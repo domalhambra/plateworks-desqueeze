@@ -7,8 +7,9 @@ final class InterruptTests: BuiltToolTestCase {
 
     /// A terminal sends Control-C to the foreground process group. `Process`
     /// starts each child in a group of its own, so the group of the tool
-    /// holds the tool and no exiftool. The signal goes to that group, as the
-    /// terminal sends it.
+    /// normally holds the tool and no exiftool. The signal goes to that group,
+    /// as the terminal sends it. A program that is just starting can still
+    /// get it, and the test below allows that one outcome.
     func interrupt(_ process: Process) {
         let id = process.processIdentifier
         XCTAssertEqual(getpgid(id), id, "the tool leads a process group of its own")
@@ -34,20 +35,40 @@ final class InterruptTests: BuiltToolTestCase {
         XCTAssertEqual(result.exitCode, 1)
         let json = try result.json()
         XCTAssertEqual(json["stopped"] as? Bool, true)
+        let failed = try XCTUnwrap(json["failed"] as? Int)
+        let notes = try XCTUnwrap(json["notes"] as? [NSDictionary])
         let set = try XCTUnwrap(json["set"] as? Int)
         XCTAssertGreaterThanOrEqual(set, 1)
         XCTAssertLessThan(set, Self.fileCount, "the run must stop before the last file")
-        XCTAssertEqual(json["failed"] as? Int, 0, "the file in work must complete: exiftool must not get the signal")
-        XCTAssertEqual(json["notes"] as? [NSDictionary], [])
         XCTAssertTrue(result.messages.contains("Stopping after the current file."), result.stderr)
 
-        // Each file is whole: set and checked with its backup gone, or not started.
+        // The tools normally do not get the Control-C. One that is just
+        // starting can (design 12.1). That one file is then `failed`, its
+        // detail names signal 2, and it is left as it was. Nothing else may
+        // fail: not a second file, and not for another reason.
+        XCTAssertEqual(failed, notes.count, "every failed file has its note")
+        XCTAssertLessThanOrEqual(failed, 1, "at most one program was just starting: \(notes)")
+        var failedName: String?
+        if let note = notes.first {
+            failedName = note["name"] as? String
+            XCTAssertEqual(note["kind"] as? String, "failed")
+            let detail = try XCTUnwrap(note["detail"] as? String)
+            XCTAssertTrue(detail.contains("signal 2"), "the only allowed failure is signal 2: \(detail)")
+        }
+
+        // Each file is whole: set and checked with its backup gone, or not
+        // started, or (rarely) the one that the signal reached, as it was.
         XCTAssertEqual(try names(in: folder), (1...Self.fileCount).map { "photo \($0).dng" },
                        "no backup and no exiftool work file stays in the folder")
         XCTAssertEqual(try names(in: discard).count, set, "one backup for each file that was set")
         let scan = try desqueeze("scan", folder.path, "--json").json()
-        let scales = try XCTUnwrap(scan["dngs"] as? [NSDictionary]).map { $0["scale"] as? String }
+        let dngs = try XCTUnwrap(scan["dngs"] as? [NSDictionary])
+        let scales = dngs.map { $0["scale"] as? String }
         XCTAssertEqual(scales.filter { $0 == "1.5 1" }.count, set)
         XCTAssertEqual(scales.filter { $0 == "1 1" }.count, Self.fileCount - set)
+        if let failedName {
+            let scale = dngs.first { $0["name"] as? String == failedName }?["scale"] as? String
+            XCTAssertEqual(scale, "1 1", "the file that the signal reached is unchanged")
+        }
     }
 }
