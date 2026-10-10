@@ -570,10 +570,25 @@ final class ServerEndToEndTests: ServerTestCase {
     // run that lasts longer than the 2 seconds for which the server waits
     // for an answer that no call is working on. The answer still arrives
     // whole, and then the server ends with 0.
+    //
+    // The number of files comes from this Mac's own speed. A fixed number
+    // that lasts 2 seconds on one Mac does not on a faster one.
     func testAtTheEndOfInputARunThatLastsLongerThanThePatienceIsAnswered() throws {
         try requireFixturesAndTools()
-        try makeDNGs(14)
+        try makeDNGs(2)
         let server = try start()
+
+        // A run of 2 files, timed from the progress message of the first
+        // file to the answer: the time of one file, without the scan.
+        let timed = try server.send("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 2],
+                                                           progressToken: "timed"))
+        _ = try server.nextMessage(timeout: ServerProcess.longWait)
+        let firstFileDone = Date()
+        XCTAssertEqual(counts(try toolResult(server, id: timed).json()), [0, 2, 0, 0, 0, 0])
+        let perFile = max(Date().timeIntervalSince(firstFileDone), 0.001)
+        // Enough files for 3 seconds of work after the first file.
+        let copies = max(14, Int(3 / perFile) + 2)
+        for number in 3...copies { try copyFixture("sample.dng", as: "\(number).dng") }
 
         let run = try server.send("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5],
                                                          progressToken: "long"))
@@ -583,8 +598,9 @@ final class ServerEndToEndTests: ServerTestCase {
 
         let result = try toolResult(server, id: run)
         XCTAssertGreaterThan(Date().timeIntervalSince(closed), 2,
-                             "the run must last longer than the 2 seconds, or this test pins nothing")
-        XCTAssertEqual(counts(try result.json()), [0, 14, 0, 0, 0, 0])
+                             "the run must last longer than the 2 seconds, or this test pins nothing: "
+                                 + "\(copies) files at \(perFile) seconds a file")
+        XCTAssertEqual(counts(try result.json()), [0, copies, 0, 0, 0, 0])
         XCTAssertEqual(try result.json()["stopped"] as? Bool, false)
         XCTAssertEqual(server.waitForExit(), 0)
         XCTAssertTrue(server.waitForEndOfOutput())

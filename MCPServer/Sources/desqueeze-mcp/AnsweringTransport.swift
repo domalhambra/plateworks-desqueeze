@@ -30,6 +30,14 @@ import MCP
 /// before the program ends. A call that did no work gets no answer. The
 /// transport cannot see which id that call had, so it takes their number
 /// from the queue: that many ids will stay in the list.
+///
+/// The rule is a count, and not the exact ids, because the handler of a
+/// call cannot say its id. The library (swift-sdk 0.12.1) gives a method
+/// handler the parameters of the request and nothing else. The id is in
+/// `Server.currentHandlerContext`, and it has `package` access there, so
+/// this package cannot read it. When a later version of the library opens
+/// it, the handler can report the id of a call that did no work, and the
+/// transport can take that id out of the list.
 actor AnsweringTransport: Transport {
     /// How long the transport waits for an answer that no call is working
     /// on. Only a request that the library never answers can use this time.

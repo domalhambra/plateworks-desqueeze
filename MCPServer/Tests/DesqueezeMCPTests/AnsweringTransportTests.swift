@@ -15,14 +15,22 @@ actor FakePipe: Transport {
     private let input: AsyncThrowingStream<Data, Swift.Error>
     private let feed: AsyncThrowingStream<Data, Swift.Error>.Continuation
     private let writeTime: Duration
+    private let firstSendFails: Bool
     /// Every byte that "standard output" got.
     private var output = Data()
     private(set) var sendsStarted = 0
 
-    /// - Parameter writeTime: how long one `send` is suspended.
-    init(writeTime: Duration) {
+    /// The client has closed its end: the write fails.
+    struct ClosedPipe: Swift.Error {}
+
+    /// - Parameters:
+    ///   - writeTime: how long one `send` is suspended.
+    ///   - firstSendFails: true makes the first `send` throw after its
+    ///     `writeTime`, with nothing written.
+    init(writeTime: Duration, firstSendFails: Bool = false) {
         (input, feed) = AsyncThrowingStream<Data, Swift.Error>.makeStream()
         self.writeTime = writeTime
+        self.firstSendFails = firstSendFails
     }
 
     func connect() {}
@@ -30,6 +38,10 @@ actor FakePipe: Transport {
 
     func send(_ data: Data) async throws {
         sendsStarted += 1
+        if firstSendFails, sendsStarted == 1 {
+            try await Task.sleep(for: writeTime)
+            throw ClosedPipe()
+        }
         let half = data.count / 2
         output.append(data.prefix(half))
         try await Task.sleep(for: writeTime)
@@ -147,6 +159,30 @@ final class AnsweringTransportTests: XCTestCase {
         let lines = await pipe.lines
         XCTAssertEqual(lines.count, messages.count)
         XCTAssertEqual(Set(lines), Set(messages), "each line of standard output is one whole message")
+    }
+
+    // A write that fails must hand the pipe over to the next message, as a
+    // write that passes does. Without the hand-over, no message is ever
+    // written again, and each later send waits for ever.
+    func testAfterASendThatFailsTheNextSendStillGoesOut() async throws {
+        let pipe = FakePipe(writeTime: .milliseconds(200), firstSendFails: true)
+        let transport = AnsweringTransport(inner: pipe, logger: pipe.logger, queue: CallQueue())
+        let events = Events()
+
+        Task { await Self.send(Self.answer(1), through: transport, then: "first written", into: events) }
+        try await eventually("the first send is in work") { await pipe.sendsStarted == 1 }
+        // This one arrives while the first is in work, and waits for it.
+        Task { await Self.send(Self.answer(2), through: transport, then: "second written", into: events) }
+
+        try await eventually("the second message is written", timeout: 3) { events.has("second written") }
+        XCTAssertEqual(events.all.count, 2, "\(events.all)")
+        XCTAssertEqual(events.all.first?.hasPrefix("send failed"), true, "\(events.all)")
+
+        // This one arrives when nothing is in work.
+        Task { await Self.send(Self.answer(3), through: transport, then: "third written", into: events) }
+        try await eventually("the third message is written", timeout: 3) { events.has("third written") }
+        let lines = await pipe.lines
+        XCTAssertEqual(lines, [Self.answer(2), Self.answer(3)], "each line is one whole message")
     }
 
     // MARK: A send in work
@@ -327,6 +363,25 @@ final class AnsweringTransportTests: XCTestCase {
 
         try await eventually("the stream ends") { events.has("stream ended") }
         XCTAssertEqual(events.all, ["read", "written", "stream ended"])
+        XCTAssertTrue(queue.isClosed, "no call starts after a signal")
+    }
+
+    // A signal can come before the library has asked for the stream: the
+    // watcher is set up before the server starts. The reading that starts
+    // after it must end at once. Standard input stays open here, so only
+    // the signal can end the stream.
+    func testStopReadingBeforeTheReadingStartsStillEndsTheStream() async throws {
+        let pipe = FakePipe(writeTime: .milliseconds(1))
+        defer { pipe.endInput() }
+        let queue = CallQueue()
+        let transport = AnsweringTransport(inner: pipe, logger: pipe.logger, queue: queue, patience: .seconds(30))
+        let events = Events()
+
+        await transport.stopReading()
+        await consume(transport, into: events)
+
+        try await eventually("the stream ends", timeout: 2) { events.has("stream ended") }
+        XCTAssertEqual(events.all, ["stream ended"])
         XCTAssertTrue(queue.isClosed, "no call starts after a signal")
     }
 

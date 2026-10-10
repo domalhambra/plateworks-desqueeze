@@ -8,11 +8,6 @@ import MCP
 /// command line tool's, and the result text is `ReportJSON.text`, so the
 /// server and `desqueeze --json` print the same JSON (design 12).
 struct ToolEnvironment: Sendable {
-    /// The sentence and the command are the core's, so every front end
-    /// says the same words.
-    static let missingExiftool =
-        "\(ToolLocator.exiftoolMissing) Install it with: \(ToolLocator.exiftoolInstallCommand)"
-
     /// Asked at each call, so a call works as soon as exiftool is installed,
     /// with no new start of the server.
     var locator: ToolLocator
@@ -40,7 +35,8 @@ struct ToolEnvironment: Sendable {
 
     /// - Returns: the report as JSON text.
     private func perform(_ call: ToolCall, cancel: CancelFlag, progress: (RunProgress) -> Void) throws -> String {
-        guard let exiftool = locator.exiftool() else { throw ToolFailure(Self.missingExiftool) }
+        // The line is the core's, so the command line tool says the same.
+        guard let exiftool = locator.exiftool() else { throw ToolFailure(ToolLocator.exiftoolMissingLine) }
         let folder = try self.folder(at: call.folder)
         let operations = DesqueezeOperations(exiftool: exiftool, dnglab: locator.dnglab(),
                                              dngConverter: locator.dngConverter(), runner: runner,
