@@ -1,0 +1,537 @@
+import DesqueezeCore
+import XCTest
+
+/// The built server with the real exiftool and the real converter (design
+/// 12.4). Each test speaks MCP to it over its pipes. A test that needs a
+/// fixture or a tool skips when it is absent.
+final class ServerEndToEndTests: ServerTestCase {
+    // MARK: The session
+
+    func testInitializeGivesTheNameTheVersionAndTheToolsCapability() throws {
+        let server = try launch()
+
+        let result = try initialize(server)
+
+        let info = try XCTUnwrap(result["serverInfo"] as? [String: Any])
+        XCTAssertEqual(info["name"] as? String, "desqueeze-mcp")
+        XCTAssertEqual(info["version"] as? String, DesqueezeVersion.current)
+        XCTAssertEqual(result["protocolVersion"] as? String, "2025-06-18")
+        let capabilities = try XCTUnwrap(result["capabilities"] as? [String: Any])
+        XCTAssertNotNil(capabilities["tools"], "the server says that it has tools")
+        XCTAssertNil(capabilities["resources"])
+        XCTAssertNil(capabilities["prompts"])
+        XCTAssertEqual((result["instructions"] as? String)?.contains("desqueeze_scan"), true)
+        XCTAssertTrue(try server.result(of: "ping").isEmpty, "a ping gets an empty result")
+    }
+
+    func testToolsListHasThreeToolsWithTheirSchemasAndAnnotations() throws {
+        let server = try start()
+
+        let tools = try XCTUnwrap(try server.result(of: "tools/list")["tools"] as? [[String: Any]])
+
+        XCTAssertEqual(tools.compactMap { $0["name"] as? String }, Self.toolNames)
+        let required = ["desqueeze_scan": ["folder"], "desqueeze_run": ["folder", "factor"],
+                        "desqueeze_remove": ["folder"]]
+        let types = [
+            "desqueeze_scan": ["folder": "string"],
+            "desqueeze_run": ["folder": "string", "factor": "number", "convert": "boolean", "dry_run": "boolean"],
+            "desqueeze_remove": ["folder": "string", "dry_run": "boolean"],
+        ]
+        for tool in tools {
+            let name = try XCTUnwrap(tool["name"] as? String)
+            let schema = try XCTUnwrap(tool["inputSchema"] as? [String: Any], name)
+            XCTAssertEqual(schema["type"] as? String, "object", name)
+            XCTAssertEqual(schema["additionalProperties"] as? Bool, false, name)
+            XCTAssertEqual(schema["required"] as? [String], required[name], name)
+            let properties = try XCTUnwrap(schema["properties"] as? [String: [String: Any]], name)
+            XCTAssertEqual(properties.mapValues { $0["type"] as? String ?? "" }, types[name], name)
+            for (argument, property) in properties {
+                XCTAssertFalse((property["description"] as? String ?? "").isEmpty, "\(name) \(argument)")
+            }
+
+            // Design 12.2: what a description must tell the model.
+            let description = try XCTUnwrap(tool["description"] as? String, name)
+            XCTAssertTrue(description.contains("top level"), "\(name): the top level of the folder only")
+            if name == "desqueeze_scan" {
+                XCTAssertTrue(description.contains("Changes no file"), name)
+                XCTAssertTrue(description.contains("Call this first"), name)
+            } else {
+                XCTAssertTrue(description.contains("call desqueeze_scan first"), "\(name): scan first")
+                XCTAssertTrue(description.contains("reversible"), name)
+                XCTAssertTrue(description.contains("ARW files are never changed"), name)
+                XCTAssertTrue(description.contains("dry_run"), name)
+            }
+        }
+        let run = try XCTUnwrap(tools[1]["inputSchema"] as? [String: Any])["properties"] as? [String: [String: Any]]
+        XCTAssertEqual(run?["convert"]?["default"] as? Bool, true)
+        XCTAssertEqual(run?["dry_run"]?["default"] as? Bool, false)
+        XCTAssertEqual(run?["factor"]?["minimum"] as? Int, 1)
+        XCTAssertEqual(run?["factor"]?["maximum"] as? Int, 4)
+        XCTAssertTrue(try XCTUnwrap(tools[1]["description"] as? String).contains("desqueeze_remove"),
+                      "run names the tool that reverses it")
+
+        // Scan is read-only. Run and remove change files, destroy nothing,
+        // and a second call with the same arguments changes nothing more.
+        let scan = try XCTUnwrap(tools[0]["annotations"] as? [String: Any])
+        XCTAssertEqual(scan["readOnlyHint"] as? Bool, true)
+        for tool in tools.dropFirst() {
+            let annotations = try XCTUnwrap(tool["annotations"] as? [String: Any])
+            XCTAssertEqual(annotations["readOnlyHint"] as? Bool, false)
+            XCTAssertEqual(annotations["destructiveHint"] as? Bool, false)
+            XCTAssertEqual(annotations["idempotentHint"] as? Bool, true)
+        }
+    }
+
+    func testAnUnknownToolIsAnErrorOfTheProtocolAndTheServerGoesOn() throws {
+        let server = try start()
+
+        let id = try server.send("tools/call", toolCall("desqueeze_delete", ["folder": folder.path]))
+        let answer = try server.answer(to: id).answer
+
+        let error = try XCTUnwrap(answer["error"] as? [String: Any], "\(answer)")
+        XCTAssertEqual(error["code"] as? Int, -32602)
+        XCTAssertEqual((error["message"] as? String)?.contains("desqueeze_delete"), true)
+        XCTAssertTrue(try server.result(of: "ping").isEmpty)
+    }
+
+    // MARK: desqueeze_scan
+
+    // The comparison is with `DesqueezeOperations` and `ReportJSON.text` in
+    // the test process. Those two are all that `desqueeze scan --json`
+    // prints, so the server and the command line tool give the same bytes.
+    func testScanGivesTheJSONOfTheCommandLineTool() throws {
+        try requireFixturesAndTools()
+        try makeShoot()
+        let before = try state(of: folder)
+        let server = try start()
+
+        let result = try call(server, "desqueeze_scan", ["folder": folder.path])
+
+        XCTAssertFalse(result.isError, result.text)
+        XCTAssertEqual(result.progress.count, 0, "a scan has no progress")
+        XCTAssertEqual(result.text, try ReportJSON.text(try operations().scan(folder)))
+        let json = try result.json()
+        XCTAssertEqual(Set(json.keys),
+                       ["folder", "writable", "exiftool", "dngConverter", "dngs", "pendingARWs", "orphanBackups"])
+        XCTAssertEqual(json["folder"] as? String, folder.path)
+        XCTAssertEqual(json["writable"] as? Bool, true)
+        XCTAssertEqual(json["exiftool"] as? String, ToolLocator().exiftool()?.path)
+        XCTAssertEqual(json["dngConverter"] as? String, ToolLocator().dngConverter()?.path)
+        XCTAssertEqual(json["dngs"] as? [NSDictionary], [[
+            "name": "already here.dng", "scale": "1 1", "originalRawFileName": "sample.ARW", "hasBackup": false,
+        ]])
+        XCTAssertEqual(json["pendingARWs"] as? [String], ["frame.ARW"])
+        XCTAssertEqual(json["orphanBackups"] as? [String], [])
+        XCTAssertEqual(try state(of: folder), before)
+    }
+
+    func testALinkToAFolderIsThatFolder() throws {
+        try requireFixturesAndTools()
+        try makeShoot()
+        let link = base.appendingPathComponent("Link to shoot")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: folder)
+        let server = try start()
+
+        let result = try call(server, "desqueeze_scan", ["folder": link.path])
+
+        XCTAssertFalse(result.isError, result.text)
+        XCTAssertEqual(try result.json()["folder"] as? String, folder.path, "the folder, not the link")
+    }
+
+    // MARK: desqueeze_run and desqueeze_remove
+
+    func testADryRunChangesNoFile() throws {
+        try requireFixturesAndTools()
+        try makeShoot()
+        let before = try state(of: folder)
+        let server = try start()
+
+        let run = try call(server, "desqueeze_run", ["folder": folder.path, "factor": 1.5, "dry_run": true],
+                           progressToken: "dry")
+        let remove = try call(server, "desqueeze_remove", ["folder": folder.path, "dry_run": true])
+
+        XCTAssertFalse(run.isError, run.text)
+        let json = try run.json()
+        XCTAssertEqual(json["dryRun"] as? Bool, true)
+        XCTAssertEqual(json["factor"] as? String, "1.5")
+        XCTAssertEqual(counts(json), [1, 2, 0, 0, 0, 0], "the counts of the run it plans")
+        XCTAssertEqual(json["steps"] as? [NSDictionary], [
+            ["name": "frame.ARW", "action": "convert"],
+            ["name": "already here.dng", "action": "write"],
+            ["name": "frame.dng", "action": "write"],
+        ])
+        XCTAssertEqual(run.progress.count, 0, "a dry run has no steps in work")
+        XCTAssertFalse(remove.isError, remove.text)
+        XCTAssertEqual(try remove.json()["dryRun"] as? Bool, true)
+        XCTAssertEqual(counts(try remove.json()), [0, 0, 1, 0, 0, 0], "the DNG has no stretch already")
+
+        XCTAssertEqual(try state(of: folder), before, "no size, no date and no byte changed")
+        XCTAssertEqual(try names(in: folder), ["already here.dng", "frame.ARW"], "no _original file, and no new DNG")
+        XCTAssertEqual(try names(in: discard), [])
+    }
+
+    func testRunThenScanThenRunAgainThenRemoveThenScan() throws {
+        try requireFixturesAndTools()
+        try makeShoot()
+        let arwBefore = try Data(contentsOf: folder.appendingPathComponent("frame.ARW"))
+        let server = try start()
+
+        // No progress token, so no progress message: `call` reads the answer
+        // and fails when another message comes first.
+        let run = try call(server, "desqueeze_run", ["folder": folder.path, "factor": 1.5])
+        XCTAssertFalse(run.isError, run.text)
+        XCTAssertEqual(run.progress.count, 0)
+        let json = try run.json()
+        XCTAssertEqual(Set(json.keys), ["folder", "factor", "dryRun", "converted", "set", "skipped", "blocked", "failed",
+                                        "stopped", "unconvertedARWs", "notes"])
+        XCTAssertEqual(json["folder"] as? String, folder.path)
+        XCTAssertEqual(json["factor"] as? String, "1.5")
+        XCTAssertEqual(json["dryRun"] as? Bool, false)
+        XCTAssertEqual(json["stopped"] as? Bool, false)
+        XCTAssertEqual(counts(json), [1, 2, 0, 0, 0, 0])
+        XCTAssertEqual(json["notes"] as? [NSDictionary], [])
+
+        func scanned() throws -> [String: String] {
+            let scan = try call(server, "desqueeze_scan", ["folder": folder.path])
+            var scales: [String: String] = [:]
+            for dng in try XCTUnwrap(try scan.json()["dngs"] as? [[String: Any]]) {
+                scales[try XCTUnwrap(dng["name"] as? String)] = dng["scale"] as? String ?? "unknown"
+            }
+            return scales
+        }
+        XCTAssertEqual(try scanned(), ["already here.dng": "1.5 1", "frame.dng": "1.5 1"])
+        XCTAssertEqual(try names(in: folder), ["already here.dng", "frame.ARW", "frame.dng"], "no backup is left")
+        XCTAssertEqual(try names(in: discard), ["already here.dng_original", "frame.dng_original"],
+                       "the backups went to the test folder, not to the Trash")
+
+        let again = try call(server, "desqueeze_run", ["folder": folder.path, "factor": 1.5])
+        XCTAssertEqual(counts(try again.json()), [0, 0, 2, 0, 0, 0], "all skipped")
+
+        let remove = try call(server, "desqueeze_remove", ["folder": folder.path])
+        XCTAssertFalse(remove.isError, remove.text)
+        XCTAssertEqual(try remove.json()["factor"] as? String, "1")
+        XCTAssertEqual(counts(try remove.json()), [0, 2, 0, 0, 0, 0])
+        XCTAssertEqual(try scanned(), ["already here.dng": "1 1", "frame.dng": "1 1"])
+        XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent("frame.ARW")), arwBefore,
+                       "the ARW is never changed")
+    }
+
+    // `convert` false leaves the ARW, and the report counts it.
+    func testConvertFalseLeavesTheARW() throws {
+        try requireFixturesAndTools()
+        try makeShoot()
+        let server = try start()
+
+        let run = try call(server, "desqueeze_run", ["folder": folder.path, "factor": 2, "convert": false])
+
+        XCTAssertFalse(run.isError, run.text)
+        XCTAssertEqual(try run.json()["factor"] as? String, "2")
+        XCTAssertEqual(counts(try run.json()), [0, 1, 0, 0, 0, 1])
+        XCTAssertEqual(try names(in: folder), ["already here.dng", "frame.ARW"])
+        XCTAssertEqual(try scales(), ["already here.dng": "2 1"])
+    }
+
+    // A JSON number has no decimal places of its own: 1.33 arrives as the
+    // nearest binary number. The factor must still be 1.33, as typed.
+    func testAFactorWithDecimalPlacesHasNoNoise() throws {
+        try requireFixturesAndTools()
+        try copyFixture("sample.dng", as: "a.dng")
+        let server = try start()
+
+        for (factor, label) in [(1.33, "1.33"), (1.8, "1.8"), (1.3333, "1.3333"), (2.0, "2"), (4.0, "4")] {
+            let plan = try call(server, "desqueeze_run", ["folder": folder.path, "factor": factor, "dry_run": true])
+            XCTAssertFalse(plan.isError, plan.text)
+            XCTAssertEqual(try plan.json()["factor"] as? String, label)
+        }
+        // The same numbers, written as a client can write them.
+        for (text, label) in [("1.50", "1.5"), ("2", "2"), ("1.0", "1"), ("1.33e0", "1.33")] {
+            let request = server.request("tools/call", ["name": "desqueeze_run", "arguments": [String: Any]()])
+            let line = try ServerProcess.line(request.message).replacingOccurrences(
+                of: #""arguments":{}"#, with: #""arguments":{"folder":"\#(folder.path)","factor":\#(text),"dry_run":true}"#)
+            try server.write(line + "\n")
+            let plan = try toolResult(server, id: request.id)
+            XCTAssertFalse(plan.isError, plan.text)
+            XCTAssertEqual(try plan.json()["factor"] as? String, label, text)
+        }
+
+        let run = try call(server, "desqueeze_run", ["folder": folder.path, "factor": 1.33])
+        XCTAssertEqual(try run.json()["factor"] as? String, "1.33")
+        XCTAssertEqual(try scales(), ["a.dng": "1.33 1"])
+    }
+
+    // A file that fails is in the JSON. The call itself did not fail.
+    func testAFileThatFailsIsStillASuccessfulCall() throws {
+        try requireFixturesAndTools()
+        try copyFixture("sample.dng", as: "good.dng")
+        try Data("not a photo".utf8).write(to: folder.appendingPathComponent("junk.dng"))
+        try copyFixture("sample.dng", as: "held.dng")
+        try Data("an older backup".utf8).write(to: folder.appendingPathComponent("held.dng_original"))
+        let server = try start()
+
+        let run = try call(server, "desqueeze_run", ["folder": folder.path, "factor": 1.5])
+
+        XCTAssertFalse(run.isError, "isError is false: the JSON carries the failures")
+        let json = try run.json()
+        XCTAssertEqual(counts(json), [0, 1, 0, 1, 1, 0])
+        let kinds = try XCTUnwrap(json["notes"] as? [[String: Any]]).compactMap { $0["kind"] as? String }
+        XCTAssertEqual(Set(kinds), ["failed", "blockedByBackup"])
+    }
+
+    // MARK: Progress
+
+    func testARunWithAProgressTokenSendsOneMessageForEachStep() throws {
+        try requireFixturesAndTools()
+        try makeShoot()
+        let server = try start()
+
+        let run = try call(server, "desqueeze_run", ["folder": folder.path, "factor": 1.5], progressToken: "run-1")
+
+        XCTAssertEqual(counts(try run.json()), [1, 2, 0, 0, 0, 0])
+        // `call` has checked that each one came before the result.
+        XCTAssertEqual(run.progress as [NSDictionary], [
+            ["progressToken": "run-1", "progress": 1, "total": 3, "message": "frame.ARW"],
+            ["progressToken": "run-1", "progress": 2, "total": 3, "message": "already here.dng"],
+            ["progressToken": "run-1", "progress": 3, "total": 3, "message": "frame.dng"],
+        ])
+
+        // The token can be a number. Remove has steps too.
+        let id = try server.send("tools/call", [
+            "name": "desqueeze_remove", "arguments": ["folder": folder.path], "_meta": ["progressToken": 7],
+        ])
+        let remove = try toolResult(server, id: id)
+        XCTAssertEqual(remove.progress as [NSDictionary], [
+            ["progressToken": 7, "progress": 1, "total": 2, "message": "already here.dng"],
+            ["progressToken": 7, "progress": 2, "total": 2, "message": "frame.dng"],
+        ])
+    }
+
+    // MARK: One call at a time
+
+    // The brief's case: two runs on one folder, sent in one write. Side by
+    // side, both would scan before either wrote, and the second writer would
+    // meet the backup of the first: a false "blocked" or "failed".
+    func testTwoRunsSentAtOnceGiveTwoValidReports() throws {
+        try requireFixturesAndTools()
+        try makeDNGs(4)
+        let server = try start()
+
+        let first = server.request("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5]))
+        let second = server.request("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5]))
+        try server.write(try ServerProcess.line(first.message) + "\n" + ServerProcess.line(second.message) + "\n")
+
+        // The answers can come in either order: the library writes each one
+        // from a task of its own. The reports say which call ran first.
+        var reports: [Int: [String: Any]] = [:]
+        while reports.count < 2 {
+            let message = try server.nextMessage(timeout: ServerProcess.longWait)
+            let id = try XCTUnwrap(message["id"] as? Int, "\(message)")
+            reports[id] = try toolResult(message, earlier: []).json()
+        }
+        XCTAssertEqual(Set(reports.keys), [first.id, second.id])
+        let inOrder = reports.values.sorted { ($0["set"] as? Int ?? 0) > ($1["set"] as? Int ?? 0) }
+        XCTAssertEqual(counts(inOrder[0]), [0, 4, 0, 0, 0, 0], "the call that ran first set all four")
+        XCTAssertEqual(counts(inOrder[1]), [0, 0, 4, 0, 0, 0], "the call that waited found all four set")
+        for report in inOrder { XCTAssertEqual(report["notes"] as? [NSDictionary], [], "no false note") }
+        XCTAssertEqual(try names(in: folder), ["1.dng", "2.dng", "3.dng", "4.dng"], "no backup is left")
+    }
+
+    // A call that arrives while a run is in work waits for it. The scan is
+    // sent after the first progress message, so the run is in work then, with
+    // five files to go. A scan takes less time than one of them: beside the
+    // run, it would answer first and show files with no stretch.
+    func testACallThatArrivesDuringARunWaitsForIt() throws {
+        try requireFixturesAndTools()
+        try makeDNGs(6)
+        let server = try start()
+
+        let run = try server.send("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5],
+                                                         progressToken: "wait"))
+        let firstStep = try server.nextMessage(timeout: ServerProcess.longWait)
+        XCTAssertEqual(firstStep["method"] as? String, "notifications/progress", "\(firstStep)")
+        let scan = try server.send("tools/call", toolCall("desqueeze_scan", ["folder": folder.path]))
+        let ping = try server.send("ping")
+
+        // The ping is not a tool call. It does not wait.
+        var order: [Int] = []
+        var results: [Int: [String: Any]] = [:]
+        while order.count < 3 {
+            let message = try server.nextMessage(timeout: ServerProcess.longWait)
+            guard message["method"] == nil, let id = message["id"] as? Int else { continue }
+            order.append(id)
+            results[id] = message
+        }
+        XCTAssertEqual(order.first, ping, "the ping is answered at once, during the run")
+        XCTAssertEqual(Set(order), [ping, run, scan])
+        let report = try toolResult(try XCTUnwrap(results[run]), earlier: []).json()
+        XCTAssertEqual(counts(report), [0, 6, 0, 0, 0, 0])
+        let scanned = try toolResult(try XCTUnwrap(results[scan]), earlier: []).json()
+        let scales = try XCTUnwrap(scanned["dngs"] as? [[String: Any]]).map { $0["scale"] as? String }
+        XCTAssertEqual(scales, Array(repeating: "1.5 1", count: 6), "the scan saw the folder after the whole run")
+    }
+
+    // MARK: Cancel
+
+    // The library turns `notifications/cancelled` into a cancelled task. The
+    // server sets the run's flag: the run stops after the file in work, and
+    // its report says `stopped`.
+    func testACancelStopsTheRunAfterTheFileInWork() throws {
+        try requireFixturesAndTools()
+        try makeDNGs(6)
+        let server = try start()
+
+        let run = try server.send("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5],
+                                                         progressToken: "stop"))
+        _ = try server.nextMessage(timeout: ServerProcess.longWait)
+        try server.notify("notifications/cancelled", ["requestId": run, "reason": "The test stops the run."])
+
+        let result = try toolResult(server, id: run)
+        XCTAssertFalse(result.isError, result.text)
+        let json = try result.json()
+        XCTAssertEqual(json["stopped"] as? Bool, true)
+        let set = try XCTUnwrap(json["set"] as? Int)
+        XCTAssertTrue((1..<6).contains(set), "\(set) files were set before the stop")
+        let scales = try scales()
+        XCTAssertEqual(scales.values.filter { $0 == "1.5 1" }.count, set, "each file is whole: set, or not started")
+        XCTAssertEqual(scales.values.filter { $0 == "1 1" }.count, 6 - set)
+        XCTAssertEqual(try names(in: folder).filter { $0.hasSuffix("_original") }, [], "no backup is left")
+        XCTAssertTrue(try server.result(of: "ping").isEmpty, "the server goes on")
+    }
+
+    // A call that is cancelled while it waits does no work and gets no
+    // answer, as the protocol says for a cancelled request.
+    func testACallCancelledWhileItWaitsDoesNoWork() throws {
+        try requireFixturesAndTools()
+        try makeDNGs(4)
+        let server = try start()
+
+        let run = try server.send("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5],
+                                                         progressToken: "first"))
+        _ = try server.nextMessage(timeout: ServerProcess.longWait)
+        let remove = try server.send("tools/call", toolCall("desqueeze_remove", ["folder": folder.path]))
+        // The library takes each request in a task of its own, and a cancel
+        // that comes before that task has started is lost. The answer to a
+        // ping that was sent after the call shows that the call has started.
+        let ping = try server.send("ping")
+        var steps = 0
+        while try server.nextMessage(timeout: ServerProcess.longWait)["id"] as? Int != ping { steps += 1 }
+        try server.notify("notifications/cancelled", ["requestId": remove])
+
+        let report = try toolResult(server, id: run)
+        XCTAssertEqual(counts(try report.json()), [0, 4, 0, 0, 0, 0])
+        XCTAssertEqual(steps + report.progress.count, 3, "the three steps after the first")
+        // A scan waits behind every call before it. Its answer is the next
+        // one, so the remove gave none, and it changed no file.
+        let scan = try server.send("tools/call", toolCall("desqueeze_scan", ["folder": folder.path]))
+        let (answer, earlier) = try server.answer(to: scan, timeout: ServerProcess.longWait)
+        XCTAssertEqual(earlier.count, 0, "no answer to the cancelled call: \(earlier)")
+        let scales = try XCTUnwrap(try toolResult(answer, earlier: []).json()["dngs"] as? [[String: Any]])
+        XCTAssertEqual(scales.map { $0["scale"] as? String }, Array(repeating: "1.5 1", count: 4))
+    }
+
+    // MARK: Standard input closes
+
+    func testClosingStandardInputEndsTheServerWithZero() throws {
+        let server = try start()
+        XCTAssertNil(server.waitForExit(timeout: 0.5), "the server waits for its client")
+
+        server.closeInput()
+
+        XCTAssertEqual(server.waitForExit(), 0)
+    }
+
+    // The client goes away during a run. The run completes, its answer is
+    // written, and then the server ends with 0.
+    func testClosingStandardInputDuringARunLetsTheRunComplete() throws {
+        try requireFixturesAndTools()
+        try makeDNGs(4)
+        let server = try start()
+
+        let run = try server.send("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5],
+                                                         progressToken: "close"))
+        _ = try server.nextMessage(timeout: ServerProcess.longWait)
+        server.closeInput()
+
+        let result = try toolResult(server, id: run)
+        XCTAssertEqual(result.progress.count, 3, "the three steps after the first")
+        XCTAssertEqual(counts(try result.json()), [0, 4, 0, 0, 0, 0])
+        XCTAssertEqual(try result.json()["stopped"] as? Bool, false)
+        XCTAssertEqual(server.waitForExit(), 0)
+        XCTAssertEqual(try scales().values.sorted(), Array(repeating: "1.5 1", count: 4))
+        XCTAssertEqual(try names(in: folder), ["1.dng", "2.dng", "3.dng", "4.dng"], "no backup is left")
+    }
+
+    // Every request that was read gets its answer, also when standard input
+    // closes right behind it, as it does for `desqueeze-mcp < requests.txt`.
+    func testRequestsFollowedAtOnceByTheEndOfInputAreAllAnswered() throws {
+        try requireFixturesAndTools()
+        try makeDNGs(2)
+        let server = try launch()
+        let hello = server.request("initialize", [
+            "protocolVersion": "2025-06-18", "capabilities": [String: Any](),
+            "clientInfo": ["name": "desqueeze-mcp-tests", "version": "1"],
+        ])
+        let list = server.request("tools/list")
+        let run = server.request("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 2]))
+        let scan = server.request("tools/call", toolCall("desqueeze_scan", ["folder": folder.path]))
+
+        try server.write(try [hello, list, run, scan].map { try ServerProcess.line($0.message) + "\n" }.joined())
+        server.closeInput()
+
+        XCTAssertEqual(server.waitForExit(timeout: ServerProcess.longWait), 0)
+        XCTAssertTrue(server.waitForEndOfOutput())
+        var answered: Set<Int> = []
+        for _ in 0..<4 { answered.insert(try XCTUnwrap(try server.nextMessage()["id"] as? Int)) }
+        XCTAssertEqual(answered, [hello.id, list.id, run.id, scan.id])
+        XCTAssertEqual(try scales(), ["1.dng": "2 1", "2.dng": "2 1"])
+    }
+
+    // A request that the library never answers must not hold the server
+    // open. The library takes a request whose id is not a whole number or a
+    // string for a notification, and sends nothing. The server waits a short
+    // time, says so on standard error, and ends.
+    func testARequestThatGetsNoAnswerDoesNotHoldTheServerOpen() throws {
+        let server = try start()
+
+        try server.write(#"{"jsonrpc":"2.0","id":1.5,"method":"ping"}"# + "\n")
+        server.closeInput()
+
+        XCTAssertEqual(server.waitForExit(timeout: 10), 0)
+        XCTAssertTrue(server.waitForEndOfOutput())
+        XCTAssertTrue(server.errorText.contains("No answer came for: [\"1.5\"]"), server.errorText)
+    }
+
+    // MARK: Standard output is the protocol
+
+    // A whole session, with a run, an error of each kind, and lines that are
+    // not MCP. Every line of standard output is one JSON-RPC message, and
+    // there is nothing else: no log line, no blank line, no unfinished line.
+    func testNothingButJSONRPCLinesOnStandardOutput() throws {
+        try requireFixturesAndTools()
+        try makeShoot()
+        try Data("not a photo".utf8).write(to: folder.appendingPathComponent("junk.dng"))
+        let server = try start()
+
+        _ = try server.result(of: "tools/list")
+        _ = try call(server, "desqueeze_scan", ["folder": folder.path])
+        _ = try call(server, "desqueeze_run", ["folder": folder.path, "factor": 1.5, "dry_run": true])
+        _ = try call(server, "desqueeze_run", ["folder": folder.path, "factor": 1.5], progressToken: "all")
+        _ = try call(server, "desqueeze_remove", ["folder": folder.path])
+        XCTAssertTrue(try call(server, "desqueeze_run", ["folder": folder.path]).isError)
+        XCTAssertTrue(try call(server, "desqueeze_scan", ["folder": "/no/such/folder"]).isError)
+        let unknown = try server.send("no/such/method")
+        XCTAssertNotNil(try server.answer(to: unknown).answer["error"])
+        try server.write("this line is not JSON\n")
+        XCTAssertNotNil(try server.nextMessage()["error"], "a parse error, as a JSON-RPC message")
+        try server.write("\n")
+        _ = try server.result(of: "ping")
+        server.closeInput()
+
+        XCTAssertEqual(server.waitForExit(), 0)
+        XCTAssertTrue(server.waitForEndOfOutput())
+        XCTAssertEqual(server.unfinishedOutput, "", "the output ends with a line end")
+        XCTAssertGreaterThanOrEqual(server.outputLines.count, 14)
+        for line in server.outputLines { XCTAssertTrue(Self.isJSONRPC(line), "not a JSON-RPC line: \(line)") }
+        XCTAssertTrue(server.errorText.contains("Test mode: backups go to \(discard.path), not to the Trash."),
+                      "the notice is on standard error: \(server.errorText)")
+    }
+}
