@@ -84,7 +84,7 @@ final class OriginalsModelTests: XCTestCase {
         XCTAssertTrue(h.model.trashOriginals)
         XCTAssertEqual(h.model.trashOriginalsLine,
                        "1 original ARW file goes to the Trash after its DNG file passes the check.")
-        XCTAssertEqual(h.model.runLabel, "Desqueeze 2 photos, move 1 original to the Trash")
+        XCTAssertEqual(h.model.runLabel, "Desqueeze 2 photos, move 1 ARW to Trash")
 
         h.model.setTrashOriginals(false)
         XCTAssertNil(h.model.trashOriginalsLine)
@@ -97,7 +97,7 @@ final class OriginalsModelTests: XCTestCase {
         h.model.setTrashOriginals(true)
         XCTAssertEqual(h.model.trashOriginalsLine,
                        "3 original ARW files go to the Trash after their DNG files pass the check.")
-        XCTAssertEqual(h.model.runLabel, "Desqueeze 4 photos, move 3 originals to the Trash")
+        XCTAssertEqual(h.model.runLabel, "Desqueeze 4 photos, move 3 ARW to Trash")
         // The words are the core's.
         XCTAssertEqual(h.model.trashOriginalsLine, FolderText.trashOriginalsLine(count: 3))
         XCTAssertEqual(h.model.runLabel, FolderText.runLabel(count: 4, originalsToTrash: 3))
@@ -160,7 +160,7 @@ final class OriginalsModelTests: XCTestCase {
         let h = try await loaded(files: ["a.dng", "b.ARW", "bad.ARW"], failing: ["bad.ARW"])
         defer { h.cleanUp() }
         h.model.setTrashOriginals(true)
-        XCTAssertEqual(h.model.runLabel, "Desqueeze 3 photos, move 2 originals to the Trash")
+        XCTAssertEqual(h.model.runLabel, "Desqueeze 3 photos, move 2 ARW to Trash")
 
         h.model.run()
         await h.runEnds()
@@ -307,7 +307,7 @@ final class OriginalsModelTests: XCTestCase {
         XCTAssertTrue(h.model.trashOriginals, "kept by a scan of the same folder")
         XCTAssertEqual(h.model.trashOriginalsLine,
                        "2 original ARW files go to the Trash after their DNG files pass the check.")
-        XCTAssertEqual(h.model.runLabel, "Desqueeze 3 photos, move 2 originals to the Trash")
+        XCTAssertEqual(h.model.runLabel, "Desqueeze 3 photos, move 2 ARW to Trash")
 
         // The same model with the box off: the scan leaves it off.
         h.model.setTrashOriginals(false)

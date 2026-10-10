@@ -413,13 +413,17 @@ final class OriginalsTests: XCTestCase {
                        "12 original ARW files go to the Trash after their DNG files pass the check.")
     }
 
+    // The text of design 14.4, in the words of Finder's "Move to Trash".
+    // The part about the originals is the same for one and for many. The
+    // first text, "…move 12 originals to the Trash", was cut at the
+    // window's width.
     func testTheRunLabelWithTheOriginals() {
         XCTAssertEqual(FolderText.runLabel(count: 228, originalsToTrash: 12),
-                       "Desqueeze 228 photos, move 12 originals to the Trash")
-        XCTAssertEqual(FolderText.runLabel(count: 2, originalsToTrash: 1),
-                       "Desqueeze 2 photos, move 1 original to the Trash")
-        XCTAssertEqual(FolderText.runLabel(count: 1, originalsToTrash: 1),
-                       "Desqueeze 1 photo, move 1 original to the Trash")
+                       "Desqueeze 228 photos, move 12 ARW to Trash")
+        XCTAssertEqual(FolderText.runLabel(count: 2, originalsToTrash: 1), "Desqueeze 2 photos, move 1 ARW to Trash")
+        XCTAssertEqual(FolderText.runLabel(count: 1, originalsToTrash: 1), "Desqueeze 1 photo, move 1 ARW to Trash")
+        XCTAssertEqual(FolderText.runLabel(count: 9_999, originalsToTrash: 9_999),
+                       "Desqueeze 9999 photos, move 9999 ARW to Trash")
     }
 
     // With the box off, or with no original to move, the label is the one

@@ -196,7 +196,7 @@ final class AppModel: ObservableObject {
     private var runCount: Int { snapshot?.runCount(converterAvailable: converterAvailable) ?? 0 }
 
     /// `Desqueeze N photos`, and while the box is on `Desqueeze N photos,
-    /// move M originals to the Trash` (design 14.4). The core makes both.
+    /// move M ARW to Trash` (design 14.4). The core makes both.
     var runLabel: String {
         FolderText.runLabel(count: runCount, originalsToTrash: trashOriginals ? originalsCount : 0)
     }

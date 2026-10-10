@@ -74,8 +74,14 @@ public enum FolderText {
     }
 
     /// The label of the run button when the run also moves the originals
-    /// (design 14.4): `Desqueeze 14 photos, move 12 originals to the Trash`.
-    /// With no original to move, it is `runLabel(count:)`.
+    /// (design 14.4): `Desqueeze 14 photos, move 12 ARW to Trash`, in the
+    /// words of Finder's "Move to Trash". The part about the originals is
+    /// the same for one and for many: `Desqueeze 1 photo, move 1 ARW to
+    /// Trash`. With no original to move, it is `runLabel(count:)`.
+    ///
+    /// The text is short on purpose. The window is 440 points wide, and the
+    /// label must show completely with four digits in each number. A longer
+    /// text, "…move 12 originals to the Trash", was cut.
     ///
     /// - Parameters:
     ///   - count: the photos that the run works on.
@@ -83,8 +89,7 @@ public enum FolderText {
     ///     the box of the window is on. 0 when it is off.
     public static func runLabel(count: Int, originalsToTrash: Int) -> String {
         guard originalsToTrash > 0 else { return runLabel(count: count) }
-        let originals = originalsToTrash == 1 ? "1 original" : "\(originalsToTrash) originals"
-        return "\(runLabel(count: count)), move \(originals) to the Trash"
+        return "\(runLabel(count: count)), move \(originalsToTrash) ARW to Trash"
     }
 
     /// The label of the checkbox of the window (design 14.4). The only
