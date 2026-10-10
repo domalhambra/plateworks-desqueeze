@@ -51,10 +51,17 @@ import Foundation
 /// with `remove: true`. The job never guesses it from the factor and
 /// `convert`: `run` at factor 1 with `convert` false is not Remove, and it
 /// reports the ARW files it left (design 12.1).
+///
+/// **One run in a folder at a time.** `run(folder:)` takes the lock of
+/// `FolderLock` on the folder before its scan, and holds it until it returns
+/// or throws (design 13.9). When another run holds the lock, it throws
+/// `FolderLock.Busy` and has read and changed nothing. On a volume that has
+/// no such lock, the run goes on without one. The dry run takes no lock.
 public struct DesqueezeJob: Sendable {
     private let tag: ScaleTagging
     private let converters: RawConverters
     private let backups: BackupHandling
+    private let lock: FolderLock
 
     /// - Parameter tag: reads and writes the `DefaultScale` tag.
     /// - Parameter converters: dnglab and Adobe DNG Converter, each nil when
@@ -64,10 +71,14 @@ public struct DesqueezeJob: Sendable {
     ///   check, and where the partial output of a failed conversion goes. There
     ///   is no default, so no caller reaches the Trash by
     ///   leaving it out. The window and the tool name the Trash themselves.
-    public init(tag: ScaleTagging, converters: RawConverters, backups: BackupHandling) {
+    /// - Parameter lock: the lock that keeps a second run out of the folder.
+    ///   The default is the system's. It makes no file and reaches nothing
+    ///   outside the folder, so every front end takes it by leaving it out.
+    public init(tag: ScaleTagging, converters: RawConverters, backups: BackupHandling, lock: FolderLock = .system) {
         self.tag = tag
         self.converters = converters
         self.backups = backups
+        self.lock = lock
     }
 
     /// Scans `folder`, then runs on what that scan found.
@@ -86,8 +97,10 @@ public struct DesqueezeJob: Sendable {
     ///   - cancel: stops the run after its current file, when it is set.
     ///   - progress: called after each step: one for each conversion, and
     ///     one for each DNG.
-    /// - Throws: only when the scan fails. No file is changed then. A file
-    ///   that fails during the run is a note in the summary, not an error.
+    /// - Throws: `FolderLock.Busy` when another run works in the folder, and
+    ///   any other error only when the scan fails. No file is changed then. A
+    ///   file that fails during the run is a note in the summary, not an
+    ///   error.
     public func run(
         folder: URL,
         factor: SqueezeFactor,
@@ -96,8 +109,35 @@ public struct DesqueezeJob: Sendable {
         cancel: CancelFlag = CancelFlag(),
         progress: (RunProgress) -> Void = { _ in }
     ) throws -> RunSummary {
+        // Before the scan, so nothing is read for a run that does not start.
+        let held = try takeLock(on: folder)
+        // Also when the scan throws. The lock is not left to the end of
+        // `held`: the run must hold it to its last file.
+        defer { held?.release() }
         let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
         return run(snapshot, factor: factor, convert: convert, remove: remove, cancel: cancel, progress: progress)
+    }
+
+    /// The lock on `folder` for one run (design 13.9).
+    ///
+    /// - Returns: the lock, or nil when the volume has none for a folder. The
+    ///   run then goes on without one.
+    /// - Throws: `FolderLock.Busy` when another run holds the lock. When the
+    ///   folder could not be opened, the error of the scan: that is the path
+    ///   of a folder that could not be read, with the words it has always
+    ///   had. If that scan passes all the same, the error of the open.
+    private func takeLock(on folder: URL) throws -> FolderLock.Held? {
+        switch lock.take(folder) {
+        case .held(let held):
+            return held
+        case .busy:
+            throw FolderLock.Busy()
+        case .noLockOnThisVolume:
+            return nil
+        case .unreadable(let code):
+            _ = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
+            throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)
+        }
     }
 
     /// Scans `folder`, and returns what a run would do. Changes no file.
