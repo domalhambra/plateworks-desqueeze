@@ -85,7 +85,7 @@ final class ARWFactsTests: XCTestCase {
 
     // MARK: The read
 
-    func testOneCallForTheWholeListWithTheExactArguments() {
+    func testOneCallForAShortListWithTheExactArguments() {
         let runner = FakeRunner()
         runner.handler = { _ in ProcessResult(exitCode: 0, stdout: Self.realOutput, stderr: "") }
         let reader = ARWFactsReader(exiftool: exiftool, runner: runner)
@@ -97,6 +97,69 @@ final class ARWFactsTests: XCTestCase {
         ])])
         XCTAssertEqual(read["iso80.ARW"]?.iso, 80)
         XCTAssertEqual(read["iso400.ARW"]?.saysNoLensCorrection, true)
+    }
+
+    // The list is the command line, and the system refuses a command line
+    // that is too long. So the read is made in batches.
+    func testFourHundredAndFiftyFilesAreReadInThreeCallsAndEveryFileGetsItsFacts() {
+        let arws = (1...450).map { URL(fileURLWithPath: "/tmp/Shoot 1/frame\($0).ARW") }
+        let runner = FakeRunner()
+        // One row for each file of the call, with the file's number as its ISO.
+        runner.handler = { call in
+            let rows = call.arguments.filter { $0.hasPrefix("/") }.map { path -> String in
+                let name = URL(fileURLWithPath: path).lastPathComponent
+                return "\(name)\tILCE-7SM3\t\(name.dropFirst(5).dropLast(4))\t2597 1024 1556\t255\n"
+            }
+            return ProcessResult(exitCode: 0, stdout: rows.joined(), stderr: "")
+        }
+        let read = ARWFactsReader(exiftool: exiftool, runner: runner).read(arws)
+
+        XCTAssertEqual(ARWFactsReader.batchSize, 200)
+        XCTAssertEqual(runner.calls.map { $0.arguments.filter { $0.hasPrefix("/") }.count }, [200, 200, 50])
+        XCTAssertEqual(runner.calls.flatMap { $0.arguments.filter { $0.hasPrefix("/") } }, arws.map(\.path),
+                       "every file is in one call, in the order of the list")
+        for call in runner.calls {
+            XCTAssertEqual(Array(call.arguments.prefix(8)), [
+                "-m", "-n", "-T", "-filename", "-IFD0:Model", "-ExifIFD:ISO", "-SR2SubIFD:WB_RGBLevelsDaylight",
+                "-SubIFD:DistortionCorrection",
+            ])
+        }
+        XCTAssertEqual(read.count, 450)
+        for number in [1, 200, 201, 400, 401, 450] {
+            XCTAssertEqual(read["frame\(number).ARW"], facts(number, 2597, 1556, noLensCorrection: true), "\(number)")
+        }
+    }
+
+    func testExactlyOneBatchOfFilesIsOneCall() {
+        let runner = FakeRunner()
+        _ = ARWFactsReader(exiftool: exiftool, runner: runner)
+            .read((1...200).map { URL(fileURLWithPath: "/tmp/frame\($0).ARW") })
+        XCTAssertEqual(runner.calls.count, 1)
+    }
+
+    /// Fails the call with this number, counted from 1, and answers the
+    /// others with one row for the first file of the call.
+    final class OneCallFails: ProcessRunner, @unchecked Sendable {
+        let failing: Int
+        var calls = 0
+
+        init(failing: Int) { self.failing = failing }
+
+        func run(_ executable: URL, _ arguments: [String]) throws -> ProcessResult {
+            calls += 1
+            if calls == failing { throw NamedError(text: "The program could not start.") }
+            let first = URL(fileURLWithPath: arguments.first { $0.hasPrefix("/") } ?? "").lastPathComponent
+            return ProcessResult(exitCode: 0, stdout: "\(first)\tILCE-7SM3\t800\t2597 1024 1556\t255\n", stderr: "")
+        }
+    }
+
+    // The files of that batch have no facts. The other batches keep theirs.
+    func testABatchWhoseReadFailsDoesNotTakeTheFactsOfTheOtherBatches() {
+        let runner = OneCallFails(failing: 2)
+        let read = ARWFactsReader(exiftool: exiftool, runner: runner)
+            .read((1...450).map { URL(fileURLWithPath: "/tmp/frame\($0).ARW") })
+        XCTAssertEqual(runner.calls, 3)
+        XCTAssertEqual(read.keys.sorted(), ["frame1.ARW", "frame401.ARW"])
     }
 
     func testAnEmptyListStartsNoProgram() {

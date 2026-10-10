@@ -148,12 +148,14 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
     }
 
     // dnglab's exit code is the truth: 7 for a file that it cannot read, and
-    // no DNG.
+    // no DNG. Its own reason follows the exit code.
     func testARealDnglabOnAFileThatIsNoPhotoFailsAndLeavesNoDNG() throws {
         let junk = folder.appendingPathComponent("junk.ARW")
         try Data("not a photo".utf8).write(to: junk)
         XCTAssertThrowsError(try converter.convert(junk, facts: .none)) {
-            XCTAssertEqual($0 as? ConvertError, .failed("dnglab returned 7.", partial: nil))
+            XCTAssertEqual($0 as? ConvertError, .failed(
+                "dnglab returned 7. Unsupported file: Error: No decoder found, model '', make: '', mode: ''.",
+                partial: nil))
         }
         XCTAssertEqual(try names(), ["junk.ARW"])
     }
@@ -281,8 +283,9 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
 
         XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.failed, summary.unconvertedARWs],
                        [1, 1, 1, 1])
-        XCTAssertEqual(summary.notes, [FileNote(name: "junk.ARW", kind: .notConverted, message: "Not converted.",
-                                                detail: "dnglab returned 7.")])
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: "junk.ARW", kind: .notConverted, message: "Not converted.",
+            detail: "dnglab returned 7. Unsupported file: Error: No decoder found, model '', make: '', mode: ''.")])
         XCTAssertEqual(try names(), ["frame.ARW", "frame.dng", "junk.ARW"])
     }
 }

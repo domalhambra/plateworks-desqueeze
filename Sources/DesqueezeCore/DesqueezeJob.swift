@@ -5,15 +5,19 @@ import Foundation
 /// Order: scan the folder, convert every pending ARW, then tag every DNG, the
 /// new ones last. One file at a time. Cancel is honored between files.
 ///
-/// **Which converter.** Before the first conversion, the run reads the facts
-/// of every pending ARW with one call, and `ConverterChoice` gives each ARW
-/// its list of converters (design 13.4). The run tries them in order. The
+/// **Which converter.** Before the first conversion, the run asks once for
+/// the facts of every pending ARW, and `ConverterChoice` gives each ARW its
+/// list of converters (design 13.4). `ARWFactsReader` answers with one
+/// exiftool call for each 200 files. The run tries them in order. The
 /// dry run asks the same function, and names the first one.
 ///
 /// **A failed conversion.** When a converter fails, the next one in the list
 /// gets the ARW. The ARW is listed as failed only when the last one failed,
 /// and the run goes on. The note's detail has one line for each converter
 /// that was tried, with that converter's own words.
+/// A cancel between two converters stops the run there: the next converter
+/// does not start for that ARW. The ARW is listed as failed, with the words
+/// of the converters that were tried, and the run is stopped.
 /// When a converter left a partial DNG, the job moves it to the Trash
 /// through `BackupHandling.trashFile` and says so on that converter's line,
 /// or names the file to delete when the Trash refuses (design 4.3). It moves
@@ -81,7 +85,7 @@ public struct DesqueezeJob: Sendable {
 
     /// Scans `folder`, and returns what a run would do. Changes no file.
     ///
-    /// The tool calls are reads: the scan's one read of the folder, and one
+    /// The tool calls are reads: the scan's one read of the folder, and the
     /// read of the ARW facts when dnglab is installed and an ARW would
     /// convert. No converter starts.
     ///
@@ -127,8 +131,8 @@ public struct DesqueezeJob: Sendable {
     /// list of converters. Remove never converts. With neither converter the
     /// ARW files wait.
     ///
-    /// The facts come from one read for all the files. The read changes no
-    /// file, so the dry run makes it too.
+    /// The facts come from one request for all the files. The read changes
+    /// no file, so the dry run makes it too.
     private func arwsToConvert(_ snapshot: FolderSnapshot, convert: Bool) -> [Pending] {
         guard convert, converters.canConvert, !snapshot.pendingARWs.isEmpty else { return [] }
         let facts = converters.dnglab == nil ? [:] : converters.facts?.read(snapshot.pendingARWs) ?? [:]
@@ -242,8 +246,17 @@ public struct DesqueezeJob: Sendable {
             // Each converter's own words, in the order of the tries.
             var words: [String] = []
             var made: (conversion: Conversion, converter: ConverterKind)?
+            var tried = 0
+            var leftAConverterUntried = false
             for kind in pending.order {
                 guard let converter = converters[kind] else { continue }
+                // A cancel that came while the converter before this one
+                // worked. This one does not start.
+                if tried > 0, cancel.isCancelled {
+                    leftAConverterUntried = true
+                    break
+                }
+                tried += 1
                 do {
                     made = (try converter.convert(pending.arw, facts: pending.facts), kind)
                     break
@@ -269,6 +282,12 @@ public struct DesqueezeJob: Sendable {
             }
             completed += 1
             progress(RunProgress(completed: completed, total: total, name: pending.arw.lastPathComponent))
+            // Also for the last file of the run: the ARW could still have
+            // converted, so work is left undone.
+            if leftAConverterUntried {
+                summary.cancelled = true
+                return summary
+            }
         }
 
         for dng in dngs {

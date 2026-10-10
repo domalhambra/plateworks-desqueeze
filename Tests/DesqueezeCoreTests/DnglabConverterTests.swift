@@ -25,6 +25,8 @@ final class DnglabConverterTests: XCTestCase {
         var dnglabExit: Int32 = 0
         /// The bytes of the DNG that dnglab leaves. Nil: it leaves no file.
         var dnglabWrites: Int? = 1_000
+        /// What dnglab prints on standard error.
+        var dnglabError = ""
         var writeResult = ProcessResult(exitCode: 0, stdout: "    1 image files updated\n", stderr: "")
         /// Nil: the read-back gives what was written.
         var readBack: String?
@@ -48,7 +50,7 @@ final class DnglabConverterTests: XCTestCase {
                     disk.paths.insert(dngPath)
                     disk.sizes[dngPath] = bytes
                 }
-                return ProcessResult(exitCode: tools.dnglabExit, stdout: "", stderr: "")
+                return ProcessResult(exitCode: tools.dnglabExit, stdout: "", stderr: tools.dnglabError)
             }
             if call.arguments.contains("-overwrite_original") {
                 tools.written = call.arguments.filter { $0.contains("=") }
@@ -195,6 +197,83 @@ final class DnglabConverterTests: XCTestCase {
         tools.dnglabWrites = nil
         XCTAssertEqual(error() as? ConvertError, .failed("dnglab returned 7.", partial: nil))
         XCTAssertEqual(runner.calls, [convertCall])
+    }
+
+    // MARK: dnglab's own words
+
+    /// What dnglab 0.8.0 printed on standard error on 2026-10-09 for a text
+    /// file named `junk.ARW`, with exit code 7. The first line has the
+    /// terminal colour codes that dnglab writes, also into a pipe.
+    static let realStandardError = [
+        "[\u{1B}[31mERROR \u{1B}[0m][dnglab_lib::jobs::raw2dng] Unsupported file: \"junk.ARW\"",
+        "Error: No decoder found, model '', make: '', mode: ''",
+        "Please see https://github.com/dnglab/dnglab/blob/main/CONTRIBUTE_SAMPLES.md how to contribute samples "
+            + "to get this camera supported. (bin/dnglab/dnglab-lib/src/jobs/raw2dng.rs:121)",
+        "Converted 0/1 files, 1 failed:",
+        "   /tmp/Shoot 1/junk.ARW",
+        "Total time: 0.02s",
+        "Error: Unsupported file: Error: No decoder found, model '', make: '', mode: ''",
+    ].joined(separator: "\n") + "\n"
+
+    static let realReason = "Unsupported file: Error: No decoder found, model '', make: '', mode: ''"
+
+    func testTheReasonIsTheLastErrorLineOfTheRealOutputWithoutItsPrefix() {
+        XCTAssertEqual(DnglabConverter.reason(inStandardError: Self.realStandardError), Self.realReason)
+    }
+
+    // "dnglab returned 7." alone says nothing about the file. dnglab's own
+    // reason follows it on the same line.
+    func testAFailedConversionSaysTheExitCodeThenDnglabsReason() {
+        tools.dnglabExit = 7
+        tools.dnglabWrites = nil
+        tools.dnglabError = Self.realStandardError
+        XCTAssertEqual(error() as? ConvertError,
+                       .failed("dnglab returned 7. \(Self.realReason).", partial: nil))
+    }
+
+    func testTheReasonKeepsThePartialDNG() {
+        tools.dnglabExit = 1
+        tools.dnglabError = "Error: The disk is full.\n"
+        XCTAssertEqual(error() as? ConvertError, .failed("dnglab returned 1. The disk is full.", partial: dng))
+    }
+
+    func testWithNoErrorLineTheTextStaysAsItIs() {
+        tools.dnglabExit = 7
+        tools.dnglabWrites = nil
+        for output in ["", "\n\n", "Converted 0/1 files, 1 failed:\nTotal time: 0.02s\n", "Error:\n", "Error:   \n",
+                       "An Error: in the middle of a line\n"] {
+            tools.dnglabError = output
+            XCTAssertNil(DnglabConverter.reason(inStandardError: output), "\"\(output)\"")
+            XCTAssertEqual(error() as? ConvertError, .failed("dnglab returned 7.", partial: nil), "\"\(output)\"")
+        }
+    }
+
+    func testTheReasonIsTheLastErrorLineAndEmptyLinesAfterItDoNotCount() {
+        XCTAssertEqual(DnglabConverter.reason(inStandardError: "Error: first\nother words\nError: second\n\n  \n"),
+                       "second")
+    }
+
+    func testTerminalColourCodesAreRemovedFromTheReason() {
+        XCTAssertEqual(
+            DnglabConverter.reason(inStandardError: "\u{1B}[1;31mError:\u{1B}[0m No \u{1B}[33mdecoder\u{1B}[0m found\n"),
+            "No decoder found")
+    }
+
+    func testAReasonIsCutToTwoHundredCharacters() {
+        let long = String(repeating: "x", count: 450)
+        XCTAssertEqual(DnglabConverter.reason(inStandardError: "Error: \(long)\n"), String(repeating: "x", count: 200))
+        XCTAssertEqual(DnglabConverter.reason(inStandardError: "Error: \(String(long.prefix(200)))\n")?.count, 200)
+    }
+
+    // Adobe DNG Converter prints no such line, and its text does not change.
+    func testAdobeDNGConverterHasNoReasonLine() {
+        let runner = FakeRunner()
+        runner.handler = { _ in ProcessResult(exitCode: 3, stdout: "", stderr: "Error: something\n") }
+        let adobe = AdobeConverter(executable: URL(fileURLWithPath: "/fake/Adobe DNG Converter"), runner: runner,
+                                   fileExists: { _ in false }, fileSize: { _ in nil })
+        XCTAssertThrowsError(try adobe.convert(arw)) {
+            XCTAssertEqual($0 as? ConvertError, .failed("Adobe DNG Converter returned 3.", partial: nil))
+        }
     }
 
     // Killed in work, dnglab left a DNG of 0 bytes, of 4 bytes, or a cut-off

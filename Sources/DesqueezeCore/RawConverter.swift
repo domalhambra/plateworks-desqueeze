@@ -136,6 +136,10 @@ struct ConverterRules: Sendable {
     let name: String
     let exists: @Sendable (String) -> Bool
     let size: @Sendable (String) -> Int?
+    /// The program's own reason for a non-zero exit, from what it printed.
+    /// It follows the sentence with the exit code, on the same line. Nil
+    /// when the program gave none: the sentence then stands alone.
+    var reason: @Sendable (ProcessResult) -> String? = { _ in nil }
 
     /// - Parameters:
     ///   - start: runs the program for this ARW. It gets the output URL.
@@ -164,8 +168,11 @@ struct ConverterRules: Sendable {
         // From here on, a `<base>.dng` is this run's: the guard above proved
         // that nothing had the name before the program ran.
         guard result.exitCode == 0 else {
-            throw ConvertError.failed("\(name) returned \(result.exitCode).",
-                                      partial: exists(output.path) ? output : nil)
+            var text = "\(name) returned \(result.exitCode)."
+            // The reason is the program's, and the next sentence can be the
+            // job's, about the partial DNG. A period keeps the two apart.
+            if let reason = reason(result) { text += " " + reason + (reason.hasSuffix(".") ? "" : ".") }
+            throw ConvertError.failed(text, partial: exists(output.path) ? output : nil)
         }
         // Adobe's converter returns 0 for a file it cannot read, and makes no
         // DNG. A size that cannot be read says the same: no DNG is known.

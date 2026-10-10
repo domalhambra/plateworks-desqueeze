@@ -43,7 +43,7 @@ public struct ARWFacts: Equatable, Sendable {
 /// Reads the facts. `DesqueezeJob` depends on this protocol, so its tests
 /// need no exiftool.
 public protocol ARWFactsReading: Sendable {
-    /// The facts of each file, by file name, from one read for the whole
+    /// The facts of each file, by file name, from one request for the whole
     /// list. A file with no entry has no facts (`ARWFacts.none`). The read
     /// changes no file, and it never throws: a read that fails gives no
     /// facts, and no facts is "no full match" (design 13.4).
@@ -65,6 +65,11 @@ public struct ARWFactsReader: ARWFactsReading {
     /// `SubIFD:DistortionCorrection` when the ARW has no lens-correction
     /// data. A lens that reports itself gives 17 ("Auto fixed by lens").
     static let noCorrectionData = "255"
+    /// The most files on one exiftool command line. The list is the command
+    /// line, and the system refuses a command line above about one megabyte.
+    /// 200 paths of the longest length that a path can have (1024 bytes)
+    /// stay far below that.
+    static let batchSize = 200
 
     private let exiftool: URL
     private let runner: ProcessRunner
@@ -74,18 +79,22 @@ public struct ARWFactsReader: ARWFactsReading {
         self.runner = runner
     }
 
-    /// One exiftool call for the whole list. An empty list starts nothing.
+    /// One exiftool call for each `batchSize` files of the list, in the
+    /// order of the list. An empty list starts nothing.
     ///
     /// exiftool exits 1 when one file is unreadable, and the other rows are
-    /// still valid, so the exit code is not read. Known limit: the list is
-    /// the command line, and the system refuses a command line above about
-    /// one megabyte, which is several thousand files. The read then fails,
-    /// and every file has no facts.
+    /// still valid, so the exit code is not read. A call that fails gives
+    /// its files no facts. The other calls are still made.
     public func read(_ arws: [URL]) -> [String: ARWFacts] {
-        guard !arws.isEmpty else { return [:] }
-        guard let result = try? runner.run(exiftool, ["-m", "-n", "-T", "-filename"] + Self.tags + arws.map(\.path))
-        else { return [:] }
-        return Self.parse(result.stdout)
+        var facts: [String: ARWFacts] = [:]
+        for start in stride(from: 0, to: arws.count, by: Self.batchSize) {
+            let batch = arws[start..<min(start + Self.batchSize, arws.count)]
+            guard let result = try? runner.run(
+                exiftool, ["-m", "-n", "-T", "-filename"] + Self.tags + batch.map(\.path))
+            else { continue }
+            facts.merge(Self.parse(result.stdout)) { _, new in new }
+        }
+        return facts
     }
 
     /// Parses the tab-separated read: the file name, then the four tags.

@@ -50,12 +50,15 @@ public struct DnglabConverter: RawConverter {
         self.executable = executable
         self.exiftool = exiftool
         self.runner = runner
-        rules = ConverterRules(name: "dnglab", exists: fileExists, size: fileSize)
+        rules = ConverterRules(name: "dnglab", exists: fileExists, size: fileSize,
+                               reason: { Self.reason(inStandardError: $0.stderr) })
     }
 
     /// Unlike Adobe's converter, dnglab's exit code is the truth: 7 for a
     /// file that it cannot read, with no DNG, and 6 for an output that
     /// exists, which it does not touch. The rules are the same all the same.
+    /// After a non-zero exit, dnglab's own reason follows the exit code
+    /// (`reason(inStandardError:)`).
     public func convert(_ arw: URL, facts: ARWFacts) throws -> Conversion {
         let match = AdobeMatch.match(facts)
         let tags = match.tags + [AdobeMatch.Tag(name: Self.originalRawFileName, value: arw.lastPathComponent)]
@@ -68,6 +71,29 @@ public struct DnglabConverter: RawConverter {
             })
         return Conversion(dng: dng, unmatched: match.failed)
     }
+
+    /// dnglab's own reason for a failure: the last line of its standard
+    /// error that starts with `Error:`, without that prefix, and at most
+    /// `reasonLimit` characters of it. Nil when there is no such line, or
+    /// when nothing follows the prefix.
+    ///
+    /// dnglab 0.8.0 ends its output for a file that it cannot read with
+    /// `Error: Unsupported file: Error: No decoder found, model '', make:
+    /// '', mode: ''`. It writes terminal colour codes also into a pipe, so
+    /// they are taken out first.
+    static func reason(inStandardError text: String) -> String? {
+        let prefix = "Error:"
+        let line = text.replacingOccurrences(of: "\u{1B}\\[[0-9;]*[A-Za-z]", with: "", options: .regularExpression)
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .last { $0.hasPrefix(prefix) }
+        guard let reason = line?.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces), !reason.isEmpty else {
+            return nil
+        }
+        return String(reason.prefix(reasonLimit))
+    }
+
+    static let reasonLimit = 200
 
     /// One call for every tag. The write passes when exiftool returned 0 and
     /// says that it updated the file.

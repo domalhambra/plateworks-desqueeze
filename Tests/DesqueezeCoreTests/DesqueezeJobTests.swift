@@ -625,6 +625,56 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual([summary.convertedByDnglab, summary.unconvertedARWs, summary.set], [1, 1, 0])
     }
 
+    // A cancel arrives while dnglab works on an ARW, and dnglab fails. Adobe
+    // DNG Converter is the next converter of that ARW, and it must not
+    // start: the person asked the run to stop. The partial DNG still goes
+    // to the Trash, and the ARW is listed with dnglab's words.
+    func testACancelWhileDnglabFailsDoesNotStartAdobeForTheSameARW() {
+        facts.facts = ["X.ARW": .adapted, "Y.ARW": .adapted]
+        let flag = CancelFlag()
+        dnglab.failWithPartial = ["X.ARW"]
+        dnglab.onConvert = { flag.cancel() }
+        var updates: [RunProgress] = []
+        let summary = job(withDnglab: true).run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW", "Y.ARW"]),
+                                                factor: factor, convert: true, cancel: flag) { updates.append($0) }
+        XCTAssertEqual(log.entries, ["facts X.ARW Y.ARW", "dnglab X.ARW", "trashFile X.dng"],
+                       "no Adobe DNG Converter, no next ARW, no tag")
+        XCTAssertTrue(summary.cancelled)
+        XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs, summary.set], [0, 1, 2, 0])
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: "X.ARW", kind: .notConverted, message: "Not converted.",
+            detail: "dnglab returned 1. The partial DNG was moved to the Trash.")])
+        XCTAssertEqual(updates.map(\.name), ["X.ARW"])
+    }
+
+    // The same on the last ARW, with no DNG to tag. Nothing comes after the
+    // ARW, and the run is still stopped: a converter was left untried.
+    func testACancelWhileDnglabFailsOnTheLastARWIsAStoppedRun() {
+        facts.facts = ["X.ARW": .adapted]
+        let flag = CancelFlag()
+        dnglab.fail = ["X.ARW"]
+        dnglab.onConvert = { flag.cancel() }
+        let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor,
+                                                convert: true, cancel: flag)
+        XCTAssertEqual(log.entries, ["facts X.ARW", "dnglab X.ARW"])
+        XCTAssertTrue(summary.cancelled, "Adobe DNG Converter was not tried, so work is left undone")
+        XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs], [0, 1, 1])
+        XCTAssertEqual(summary.notes.map(\.detail), ["made no DNG"])
+    }
+
+    // With dnglab alone there is no next converter. The cancel then follows
+    // the rule of every last file: nothing is left undone.
+    func testACancelWhileDnglabFailsWithNoOtherConverterLeavesNothingUntried() {
+        facts.facts = ["X.ARW": .adapted]
+        let flag = CancelFlag()
+        dnglab.fail = ["X.ARW"]
+        dnglab.onConvert = { flag.cancel() }
+        let summary = job(withConverter: false, withDnglab: true)
+            .run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true, cancel: flag)
+        XCTAssertFalse(summary.cancelled)
+        XCTAssertEqual([summary.failed, summary.unconvertedARWs], [1, 1])
+    }
+
     // The whole path on real files with the real `DnglabConverter` on a fake
     // runner: dnglab leaves a cut-off DNG and is ended by a signal, the file
     // moves to the injected Trash, and Adobe DNG Converter then converts.
