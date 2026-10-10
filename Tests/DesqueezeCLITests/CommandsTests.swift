@@ -282,7 +282,8 @@ final class CommandsTests: XCTestCase {
         }
         XCTAssertEqual(commands.count, 4, "the facts, dnglab, the match write, and its read-back: \(commands)")
         XCTAssertTrue(isCommand(0, "$ /fake/bin/exiftool -m -n -T -filename -IFD0:Model -ExifIFD:ISO "
-            + "-SR2SubIFD:WB_RGBLevelsDaylight -SubIFD:DistortionCorrection '/", "/Shoot 1/X.ARW'"), "\(commands)")
+            + "-SR2SubIFD:WB_RGBLevelsDaylight -SubIFD:DistortionCorrection -SubIFD:SonyRawFileType '/",
+                                "/Shoot 1/X.ARW'"), "\(commands)")
         XCTAssertTrue(isCommand(1, "$ /fake/bin/dnglab convert --embed-raw false '/",
                                 "/Shoot 1/.X.desqueeze-work.dng'"), "\(commands)")
         XCTAssertTrue(commands.count > 1 && commands[1].contains("/Shoot 1/X.ARW' '/"), "\(commands)")
@@ -291,7 +292,7 @@ final class CommandsTests: XCTestCase {
         XCTAssertTrue(commands.count > 2 && commands[2].contains(" -IFD0:OriginalRawFileName=X.ARW '/"), "\(commands)")
         XCTAssertTrue(isCommand(3, "$ /fake/bin/exiftool -m -n -T -SubIFD:WhiteLevel ",
                                 "/Shoot 1/.X.desqueeze-work.dng'"), "\(commands)")
-        XCTAssertTrue(h.err.lines.contains("  stdout: X.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255"))
+        XCTAssertTrue(h.err.lines.contains("  stdout: X.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t2"))
         XCTAssertTrue(h.err.lines.contains("1/2 X.ARW"), "progress is still there")
     }
 

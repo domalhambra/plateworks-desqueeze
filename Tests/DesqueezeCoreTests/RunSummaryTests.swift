@@ -32,7 +32,7 @@ final class RunSummaryTests: XCTestCase {
             detail: "The ARW holds lens-correction data, and dnglab does not write it into the DNG."))
     }
 
-    // Rule 1, 2 or 3 failed: no tag of the match is in the DNG.
+    // Rule 1, 2, 3 or 5 failed: no tag of the match is in the DNG.
     func testTheNoteOfAFrameWithNoTableRowSaysThatTheLevelsAreDnglabsOwn() {
         let levels = "Converted. The levels are dnglab's own. \(Self.ending)"
         let other = ARWFacts(model: "ILCE-7M4", iso: 800, daylightLevels: nil, saysNoLensCorrection: true)
@@ -42,6 +42,9 @@ final class RunSummaryTests: XCTestCase {
             (.iso, .iso1250, "The table of Adobe's values has no row for ISO 1250."),
             (.iso, .none, "The ISO could not be read from the ARW."),
             (.daylightLevels, .none, "The ARW has no daylight levels that the table of Adobe's values can use."),
+            (.compressedRaw, .uncompressed,
+             "The table of Adobe's values has compressed raw only, and this ARW is another kind."),
+            (.compressedRaw, .none, "The kind of raw data could not be read from the ARW."),
         ]
         for (rule, facts, detail) in cases {
             XCTAssertEqual(FileNote.convertedUnmatched("X.dng", rule: rule, facts: facts), FileNote(

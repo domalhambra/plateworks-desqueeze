@@ -136,7 +136,42 @@ final class AdobeMatchTests: XCTestCase {
         XCTAssertEqual(value("SubIFD:WhiteLevel", in: match), "16383")
     }
 
-    // The first rule that fails is the reason. Rules 1 to 3 come before the lens.
+    // MARK: Rule 5: compressed raw only (design 13.4)
+
+    // The values of the table were measured on compressed raw. Another kind,
+    // or an ARW that does not say its kind, gets no tag of the table.
+    func testAnARWThatIsNotCompressedRawWritesNoTag() {
+        let levels = ARWFacts.DaylightLevels(red: 2597, green: 1024, blue: 1556)
+        for kind in [0, 1, 3, 4, nil] as [Int?] {
+            let facts = ARWFacts(model: "ILCE-7SM3", iso: 800, daylightLevels: levels, distortionCorrection: 255,
+                                 rawFileType: kind)
+            XCTAssertEqual(AdobeMatch.match(facts), AdobeMatch.Match(tags: [], failed: .compressedRaw),
+                           "\(String(describing: kind))")
+            XCTAssertFalse(AdobeMatch.match(facts).isFull)
+        }
+        let compressed = ARWFacts(model: "ILCE-7SM3", iso: 800, daylightLevels: levels, distortionCorrection: 255,
+                                  rawFileType: 2)
+        XCTAssertTrue(AdobeMatch.match(compressed).isFull)
+        XCTAssertEqual(AdobeMatch.match(compressed).tags.count, 9)
+    }
+
+    // A lens frame that is not compressed raw: rule 5 is the reason, and no
+    // tag is written. "Matched as far as the table goes" needs rule 5.
+    func testALensFrameThatIsNotCompressedRawGetsNoTagAndRule5IsTheReason() {
+        let facts = ARWFacts(model: "ILCE-7SM3", iso: 80,
+                             daylightLevels: ARWFacts.DaylightLevels(red: 2496, green: 1024, blue: 1617),
+                             distortionCorrection: 17, rawFileType: 0)
+        XCTAssertEqual(AdobeMatch.match(facts), AdobeMatch.Match(tags: [], failed: .compressedRaw))
+        // The lens fact alone, with no value: rule 4, with every tag.
+        let silent = ARWFacts(model: "ILCE-7SM3", iso: 80,
+                              daylightLevels: ARWFacts.DaylightLevels(red: 2496, green: 1024, blue: 1617),
+                              distortionCorrection: nil, rawFileType: 2)
+        XCTAssertEqual(AdobeMatch.match(silent).failed, .noLensCorrection)
+        XCTAssertEqual(AdobeMatch.match(silent).tags.count, 9)
+    }
+
+    // The first rule that fails is the reason. Rules 1 to 3 come before
+    // rule 5, and rule 5 before the lens.
     func testTheReasonIsTheFirstRuleThatFails() {
         XCTAssertEqual(AdobeMatch.match(.none).failed, .model)
         XCTAssertEqual(AdobeMatch.match(ARWFacts(model: "ILCE-7SM3", iso: nil, daylightLevels: nil,
@@ -145,7 +180,15 @@ final class AdobeMatchTests: XCTestCase {
                                                  saysNoLensCorrection: false)).failed, .daylightLevels)
         XCTAssertEqual(AdobeMatch.match(lens(iso: 1250)), AdobeMatch.Match(tags: [], failed: .iso),
                        "a lens frame at an ISO with no row gets no tag")
-        XCTAssertEqual(AdobeMatch.Rule.allCases.map(\.rawValue), [1, 2, 3, 4], "the numbers of design 13.4")
+        let uncompressed = { (iso: Int?, levels: ARWFacts.DaylightLevels?) in
+            ARWFacts(model: "ILCE-7SM3", iso: iso, daylightLevels: levels, distortionCorrection: 255, rawFileType: 0)
+        }
+        XCTAssertEqual(AdobeMatch.match(uncompressed(1250, nil)).failed, .iso)
+        XCTAssertEqual(AdobeMatch.match(uncompressed(800, nil)).failed, .daylightLevels)
+        XCTAssertEqual(AdobeMatch.match(ARWFacts(model: "ILCE-1", iso: 800, daylightLevels: nil,
+                                                 distortionCorrection: 255, rawFileType: 0)).failed, .model)
+        XCTAssertEqual(AdobeMatch.Rule.allCases.map(\.rawValue), [1, 2, 3, 4, 5], "the numbers of design 13.4")
+        XCTAssertEqual(AdobeMatch.Rule.compressedRaw.rawValue, 5)
     }
 
     // MARK: The table and the data file

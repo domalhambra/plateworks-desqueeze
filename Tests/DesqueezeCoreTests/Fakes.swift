@@ -200,7 +200,7 @@ final class ScriptedTools: @unchecked Sendable {
 
     let runner = FakeRunner()
     /// The row of the facts read for every ARW, after the file name.
-    var factsRow = "ILCE-7SM3\t800\t2597 1024 1556\t255"
+    var factsRow = "ILCE-7SM3\t800\t2597 1024 1556\t255\t2"
     private var written: [String] = []
 
     init() {
@@ -264,6 +264,18 @@ final class FakeFacts: ARWFactsReading, @unchecked Sendable {
 }
 
 extension ARWFacts {
+    /// The facts of a frame of compressed raw, as every measured frame is,
+    /// with the lens fact as a yes or a no.
+    ///
+    /// - Parameter saysNoLensCorrection: true gives 255, "no correction
+    ///   data". False gives 17, the value of a lens that reports itself.
+    init(model: String?, iso: Int?, daylightLevels: DaylightLevels?, saysNoLensCorrection: Bool,
+         rawFileType: Int? = ARWFacts.compressedRaw) {
+        self.init(model: model, iso: iso, daylightLevels: daylightLevels,
+                  distortionCorrection: saysNoLensCorrection ? ARWFacts.noCorrectionData : 17,
+                  rawFileType: rawFileType)
+    }
+
     /// A frame from an adapted lens at ISO 800, as every anamorphic frame
     /// is: a full match.
     static let adapted = ARWFacts(model: "ILCE-7SM3", iso: 800,
@@ -277,4 +289,9 @@ extension ARWFacts {
     static let iso1250 = ARWFacts(model: "ILCE-7SM3", iso: 1250,
                                   daylightLevels: DaylightLevels(red: 2597, green: 1024, blue: 1556),
                                   saysNoLensCorrection: true)
+    /// An adapted lens at ISO 800, as uncompressed raw: only rule 5 fails.
+    /// `SonyRawFileType` 0 is "Sony Uncompressed 14-bit RAW".
+    static let uncompressed = ARWFacts(model: "ILCE-7SM3", iso: 800,
+                                       daylightLevels: DaylightLevels(red: 2597, green: 1024, blue: 1556),
+                                       saysNoLensCorrection: true, rawFileType: 0)
 }

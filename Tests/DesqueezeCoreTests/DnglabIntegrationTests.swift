@@ -74,7 +74,7 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
         XCTAssertEqual(facts, ARWFacts(
             model: "ILCE-7SM3", iso: 800,
             daylightLevels: ARWFacts.DaylightLevels(red: 2597, green: 1024, blue: 1556),
-            saysNoLensCorrection: true))
+            distortionCorrection: 255, rawFileType: 2), "no lens-correction data, and compressed raw")
         XCTAssertTrue(AdobeMatch.match(facts).isFull)
     }
 

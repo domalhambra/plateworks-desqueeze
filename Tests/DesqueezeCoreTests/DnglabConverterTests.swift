@@ -223,12 +223,15 @@ final class DnglabConverterTests: XCTestCase {
         XCTAssertTrue(runner.calls[1].arguments.contains("-IFD0:OriginalRawFileName=DSC05680.ARW"))
     }
 
-    // Rule 1, 2 or 3 fails: the levels stay dnglab's own. The file name is
-    // still written, because the pending rule needs it (design 4.1).
+    // Rule 1, 2, 3 or 5 fails: the levels stay dnglab's own. The file name
+    // is still written, because the pending rule needs it (design 4.1).
     func testWithNoTableRowOnlyTheFileNameIsWrittenAndTheResultCarriesTheReason() throws {
         let iso1250 = ARWFacts(model: "ILCE-7SM3", iso: 1250, daylightLevels: adapted.daylightLevels,
                                saysNoLensCorrection: true)
-        for (facts, rule) in [(ARWFacts.none, AdobeMatch.Rule.model), (iso1250, .iso)] {
+        let uncompressed = ARWFacts(model: "ILCE-7SM3", iso: 800, daylightLevels: adapted.daylightLevels,
+                                    saysNoLensCorrection: true, rawFileType: 0)
+        for (facts, rule) in [(ARWFacts.none, AdobeMatch.Rule.model), (iso1250, .iso),
+                              (uncompressed, .compressedRaw)] {
             setUp()
             let conversion = try converter().convert(arw, facts: facts)
             XCTAssertEqual(conversion, Conversion(dng: dng, unmatched: rule))

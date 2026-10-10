@@ -85,7 +85,7 @@ extension FileNote {
     /// The only place that makes these sentences.
     ///
     /// When only rule 4 failed, every tag of the match is in the DNG, and it
-    /// has no lens correction. When rule 1, 2 or 3 failed, no tag of the
+    /// has no lens correction. When rule 1, 2, 3 or 5 failed, no tag of the
     /// match is in it.
     ///
     /// - Parameters:
@@ -107,6 +107,11 @@ extension FileNote {
         case .daylightLevels:
             what = "The levels are dnglab's own."
             why = "The ARW has no daylight levels that the table of Adobe's values can use."
+        case .compressedRaw:
+            what = "The levels are dnglab's own."
+            why = facts.rawFileType == nil
+                ? "The kind of raw data could not be read from the ARW."
+                : "The table of Adobe's values has compressed raw only, and this ARW is another kind."
         case .noLensCorrection:
             what = "The DNG has no built-in lens correction."
             why = "The ARW holds lens-correction data, and dnglab does not write it into the DNG."

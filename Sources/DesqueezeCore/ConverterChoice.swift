@@ -25,7 +25,7 @@ public enum ConverterKind: String, Codable, Sendable, CaseIterable {
 /// The run gives the ARW to the first converter. When that one fails, the
 /// next one gets it. The ARW is failed when the last one failed.
 public enum ConverterChoice {
-    /// - Parameter fullMatch: the four rules of design 13.4 hold for the ARW,
+    /// - Parameter fullMatch: the five rules of design 13.4 hold for the ARW,
     ///   so a dnglab DNG with the match tags renders as Adobe's does.
     /// - Returns: the converters to try, in order. Empty when none is
     ///   installed: the ARW is not converted.

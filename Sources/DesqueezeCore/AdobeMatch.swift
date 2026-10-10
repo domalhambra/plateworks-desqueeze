@@ -7,7 +7,7 @@ import Foundation
 /// the data file `docs/superpowers/specs/2026-10-09-ilce-7sm3-adobe-values.json`,
 /// and a unit test fails when the copy and the file differ.
 public enum AdobeMatch {
-    /// The four rules of a full match, with the numbers of design 13.4.
+    /// The five rules of a full match, with the numbers of design 13.4.
     public enum Rule: Int, Equatable, Sendable, CaseIterable {
         /// 1. The model has a row in the table.
         case model = 1
@@ -17,6 +17,8 @@ public enum AdobeMatch {
         case daylightLevels
         /// 4. The ARW says that it has no lens-correction data.
         case noLensCorrection
+        /// 5. The ARW is compressed raw, the only kind that was measured.
+        case compressedRaw
     }
 
     /// One tag to write.
@@ -35,14 +37,17 @@ public enum AdobeMatch {
     /// What the table gives for one ARW.
     public struct Match: Equatable, Sendable {
         /// The tags to write, in the order of design 13.2. All of them when
-        /// rules 1 to 3 hold, also when rule 4 does not: "matched as far as
-        /// the table goes". None when rule 1, 2 or 3 failed: the levels of
-        /// the DNG are then dnglab's own.
+        /// rules 1, 2, 3 and 5 hold, also when rule 4 does not: "matched as
+        /// far as the table goes". None when rule 1, 2, 3 or 5 failed: the
+        /// levels of the DNG are then dnglab's own.
         public let tags: [Tag]
-        /// The first rule that failed. Nil for a full match.
+        /// The rule that failed. Nil for a full match. When more than one
+        /// failed, it is the first of 1, 2, 3 and 5: each of them leaves the
+        /// DNG with no tag of the table. Rule 4 is named only when it alone
+        /// failed.
         public let failed: Rule?
 
-        /// True when all four rules hold.
+        /// True when all five rules hold.
         public var isFull: Bool { failed == nil }
 
         public init(tags: [Tag], failed: Rule?) {
@@ -64,6 +69,11 @@ public enum AdobeMatch {
         guard let levels = facts.daylightLevels, levels.green == camera.daylightReference.green,
               levels.red > 0, levels.blue > 0 else {
             return Match(tags: [], failed: .daylightLevels)
+        }
+        // The values of the table are those of compressed raw. Another
+        // kind, or no word about the kind, gets none of them.
+        guard facts.isCompressedRaw else {
+            return Match(tags: [], failed: .compressedRaw)
         }
         let calibration = calibration(red: levels.red, blue: levels.blue, reference: camera.daylightReference)
         let tags = [

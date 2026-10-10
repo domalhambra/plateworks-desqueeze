@@ -69,6 +69,13 @@ final class ConverterChoiceTests: XCTestCase {
         XCTAssertEqual(order(lens), [.adobe])
         let iso1250 = ARWFacts(model: "ILCE-7SM3", iso: 1250, daylightLevels: adapted.daylightLevels,
                                saysNoLensCorrection: true)
+        // Rule 5: an ARW that is not compressed raw has no full match.
+        for kind in [0, nil] as [Int?] {
+            let other = ARWFacts(model: "ILCE-7SM3", iso: 800, daylightLevels: adapted.daylightLevels,
+                                 saysNoLensCorrection: true, rawFileType: kind)
+            XCTAssertEqual(ConverterChoice.order(for: other, dnglabInstalled: true, adobeInstalled: true), [.adobe])
+            XCTAssertEqual(ConverterChoice.order(for: other, dnglabInstalled: true, adobeInstalled: false), [.dnglab])
+        }
         XCTAssertEqual(order(iso1250), [.adobe])
         XCTAssertEqual(order(.none), [.adobe], "a file with no facts has no full match")
     }

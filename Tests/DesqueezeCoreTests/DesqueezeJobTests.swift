@@ -508,6 +508,56 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(dnglab.facts["unread.ARW"], ARWFacts.none)
     }
 
+    // MARK: Rule 5: compressed raw only (design 13.4)
+
+    // An ARW that is not compressed raw has no full match: with both
+    // installed, Adobe DNG Converter gets it, and dnglab does not start.
+    func testAnARWThatIsNotCompressedRawGoesToAdobeWhenBothAreInstalled() {
+        facts.facts = ["X.ARW": .uncompressed, "Y.ARW": .adapted]
+        let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW", "Y.ARW"]), factor: .noStretch,
+                                                convert: true)
+        XCTAssertEqual(log.entries, ["facts X.ARW Y.ARW", "convert X.ARW", "dnglab Y.ARW"])
+        XCTAssertEqual([summary.convertedByDnglab, summary.convertedByAdobe], [1, 1])
+        XCTAssertEqual(summary.notes, [])
+    }
+
+    // With dnglab alone it converts, and the note says that the levels are
+    // dnglab's own, and why.
+    func testAnARWThatIsNotCompressedRawConvertsWithANoteWhenDnglabIsAlone() {
+        facts.facts = ["X.ARW": .uncompressed]
+        let summary = job(withConverter: false, withDnglab: true)
+            .run(snapshot(dngs: [], pending: ["X.ARW"]), factor: .noStretch, convert: true)
+        XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.failed], [1, 1, 0])
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: "X.dng", kind: .convertedUnmatched,
+            message: "Converted. The levels are dnglab's own. "
+                + "Install Adobe DNG Converter for the same file that Lightroom makes.",
+            detail: "The table of Adobe's values has compressed raw only, and this ARW is another kind.")])
+        XCTAssertFalse(summary.needsAttention)
+    }
+
+    // The whole path, from the row that exiftool prints to the tags that go
+    // into the DNG: the real reader and the real converter on scripted
+    // programs. For an uncompressed ARW only the file name is written.
+    func testFromTheFactsRowToTheMatchAnUncompressedARWGetsOnlyTheFileName() throws {
+        for (kind, tagCount, noteCount) in [("2", 10, 0), ("0", 1, 1), ("-", 1, 1)] {
+            let real = try RealShoot()
+            defer { removeTemporaryFolder(real.shoot) }
+            real.tools.factsRow = "ILCE-7SM3\t800\t2597 1024 1556\t255\t\(kind)"
+            let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
+
+            let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files, withAdobe: false),
+                                       backups: files).run(real.snapshot, factor: .noStretch, convert: true)
+
+            XCTAssertEqual(summary.convertedByDnglab, 1, kind)
+            let write = try XCTUnwrap(real.tools.runner.calls.first { $0.arguments.contains("-overwrite_original") })
+            let written = write.arguments.filter { $0.contains("=") }
+            XCTAssertEqual(written.count, tagCount, "raw kind \(kind): \(written)")
+            XCTAssertEqual(written.last, "-IFD0:OriginalRawFileName=frame 1.ARW")
+            XCTAssertEqual(summary.notes.map(\.kind), Array(repeating: .convertedUnmatched, count: noteCount), kind)
+        }
+    }
+
     // The note of the conversion comes before the note of the tag step.
     func testADNGWithNoFullMatchThatThenFailsItsTagHasBothNotes() {
         facts.facts = ["lens.ARW": .lens]

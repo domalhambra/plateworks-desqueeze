@@ -280,9 +280,9 @@ final class EndToEndTests: BuiltToolTestCase {
             // dnglab's command, and the three exiftool commands around it:
             // the facts, the match write, and its read-back.
             XCTAssertTrue(hasLine("$ \(exiftool) -m -n -T -filename -IFD0:Model -ExifIFD:ISO "
-                + "-SR2SubIFD:WB_RGBLevelsDaylight -SubIFD:DistortionCorrection '/", "/Shoot with spaces/frame.ARW'"),
-                result.stderr)
-            XCTAssertTrue(result.messages.contains { $0.hasSuffix("frame.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255") },
+                + "-SR2SubIFD:WB_RGBLevelsDaylight -SubIFD:DistortionCorrection -SubIFD:SonyRawFileType '/",
+                                  "/Shoot with spaces/frame.ARW'"), result.stderr)
+            XCTAssertTrue(result.messages.contains { $0.hasSuffix("frame.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t2") },
                           result.stderr)
             XCTAssertTrue(result.messages.contains {
                 $0.hasPrefix("$ \(dnglab) convert --embed-raw false '/")

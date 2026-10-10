@@ -14,13 +14,13 @@ final class FakeTools: ProcessRunner, @unchecked Sendable {
     static let dnglab = URL(fileURLWithPath: "/fake/bin/dnglab")
     static let converter = URL(fileURLWithPath: "/fake/Adobe DNG Converter")
     /// The facts of a frame from an adapted lens at ISO 800: a full match.
-    static let adapted = "ILCE-7SM3\t800\t2597 1024 1556\t255"
+    static let adapted = "ILCE-7SM3\t800\t2597 1024 1556\t255\t2"
     /// The facts of a frame from a lens that reports itself: only rule 4 fails.
-    static let lens = "ILCE-7SM3\t80\t2496 1024 1617\t17"
+    static let lens = "ILCE-7SM3\t80\t2496 1024 1617\t17\t2"
 
     /// File name to tag value, for example `"A.dng": "1 1"`. No entry is "unknown".
     var scales: [String: String] = [:]
-    /// ARW name to the four cells of its facts row. No entry is a row of
+    /// ARW name to the five cells of its facts row. No entry is a row of
     /// dashes: exiftool could not read the file.
     var facts: [String: String] = [:]
     var failWrites: Set<String> = []
@@ -42,7 +42,7 @@ final class FakeTools: ProcessRunner, @unchecked Sendable {
         }
         if arguments.contains("-IFD0:Model") {
             let rows = arguments.filter { $0.hasPrefix("/") }.map { URL(fileURLWithPath: $0).lastPathComponent }
-                .map { "\($0)\t\(facts[$0] ?? "-\t-\t-\t-")\n" }.joined()
+                .map { "\($0)\t\(facts[$0] ?? "-\t-\t-\t-\t-")\n" }.joined()
             return ProcessResult(exitCode: 0, stdout: rows, stderr: "")
         }
         if arguments.contains("-overwrite_original") {

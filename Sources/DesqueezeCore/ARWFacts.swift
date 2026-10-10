@@ -1,7 +1,10 @@
 import Foundation
 
-/// The four facts about one ARW that decide which converter takes it, and
+/// The five facts about one ARW that decide which converter takes it, and
 /// what the match writes (design 13.4).
+///
+/// The last two are the numbers that the file holds, not a yes or a no: a
+/// note can then say "the ARW says another kind" or "the ARW does not say".
 public struct ARWFacts: Equatable, Sendable {
     /// `WB_RGBLevelsDaylight`: what the camera says daylight is, for the lens
     /// on it.
@@ -23,21 +26,47 @@ public struct ARWFacts: Equatable, Sendable {
     public let iso: Int?
     /// Nil when the ARW gives no three whole numbers, each 0 or more.
     public let daylightLevels: DaylightLevels?
+    /// `SubIFD:DistortionCorrection`, as the file holds it. 255 says that
+    /// the ARW has no lens-correction data (`noCorrectionData`). A lens that
+    /// reports itself gives 17. Nil when the ARW has no such tag, or a value
+    /// that is no whole number.
+    public let distortionCorrection: Int?
+    /// `SubIFD:SonyRawFileType`, as the file holds it: how the raw data is
+    /// stored. 2 is Sony compressed raw (`compressedRaw`), the only kind
+    /// that was measured. Nil when the ARW has no such tag, or a value that
+    /// is no whole number.
+    public let rawFileType: Int?
+
+    /// `distortionCorrection` when the ARW has no lens-correction data.
+    /// exiftool prints it without `-n` as "No correction params available".
+    public static let noCorrectionData = 255
+    /// `rawFileType` for Sony compressed raw. exiftool prints it without
+    /// `-n` as "Sony Compressed RAW". The camera's other setting,
+    /// uncompressed raw, gives another number.
+    public static let compressedRaw = 2
+
     /// True only when the ARW says that it has no lens-correction data, as
     /// every frame from an adapted lens says. False for every other value,
     /// and when the ARW says nothing.
-    public let saysNoLensCorrection: Bool
+    public var saysNoLensCorrection: Bool { distortionCorrection == Self.noCorrectionData }
 
-    public init(model: String?, iso: Int?, daylightLevels: DaylightLevels?, saysNoLensCorrection: Bool) {
+    /// True only when the ARW says that it is compressed raw. False for
+    /// every other value, and when the ARW says nothing.
+    public var isCompressedRaw: Bool { rawFileType == Self.compressedRaw }
+
+    public init(model: String?, iso: Int?, daylightLevels: DaylightLevels?, distortionCorrection: Int?,
+                rawFileType: Int?) {
         self.model = model
         self.iso = iso
         self.daylightLevels = daylightLevels
-        self.saysNoLensCorrection = saysNoLensCorrection
+        self.distortionCorrection = distortionCorrection
+        self.rawFileType = rawFileType
     }
 
     /// The facts of a file that exiftool cannot read: none. Such a file has
     /// no full match. That is not an error.
-    public static let none = ARWFacts(model: nil, iso: nil, daylightLevels: nil, saysNoLensCorrection: false)
+    public static let none = ARWFacts(model: nil, iso: nil, daylightLevels: nil, distortionCorrection: nil,
+                                      rawFileType: nil)
 }
 
 /// Reads the facts. `DesqueezeJob` depends on this protocol, so its tests
@@ -55,16 +84,15 @@ public protocol ARWFactsReading: Sendable {
 /// Each tag is read with its group named, and with `-n`: the value as the
 /// file holds it, not as exiftool words it. So the lens fact is the number
 /// 255, which exiftool prints without `-n` as "No correction params
-/// available". The number is the stable form: the words are exiftool's, and
-/// a later exiftool can change them.
+/// available", and the raw kind is the number 2, which it prints as "Sony
+/// Compressed RAW". The number is the stable form: the words are exiftool's,
+/// and a later exiftool can change them.
 public struct ARWFactsReader: ARWFactsReading {
-    /// The four tags, in the order of the columns that `parse` reads.
+    /// The five tags, in the order of the columns that `parse` reads.
     static let tags = [
         "-IFD0:Model", "-ExifIFD:ISO", "-SR2SubIFD:WB_RGBLevelsDaylight", "-SubIFD:DistortionCorrection",
+        "-SubIFD:SonyRawFileType",
     ]
-    /// `SubIFD:DistortionCorrection` when the ARW has no lens-correction
-    /// data. A lens that reports itself gives 17 ("Auto fixed by lens").
-    static let noCorrectionData = "255"
     /// The most files on one exiftool command line. The list is the command
     /// line, and the system refuses a command line above about one megabyte.
     /// 200 paths of the longest length that a path can have (1024 bytes)
@@ -97,7 +125,7 @@ public struct ARWFactsReader: ARWFactsReading {
         return facts
     }
 
-    /// Parses the tab-separated read: the file name, then the four tags.
+    /// Parses the tab-separated read: the file name, then the five tags.
     /// exiftool prints `-` for a tag that a file does not have, and a row of
     /// them for a file that it cannot read. A line that is no such row is
     /// dropped.
@@ -110,7 +138,8 @@ public struct ARWFactsReader: ARWFactsReading {
                 model: cells[1] == "-" || cells[1].isEmpty ? nil : cells[1],
                 iso: wholeNumber(cells[2]).flatMap { $0 > 0 ? $0 : nil },
                 daylightLevels: daylightLevels(cells[3]),
-                saysNoLensCorrection: cells[4] == noCorrectionData)
+                distortionCorrection: wholeNumber(cells[4]),
+                rawFileType: wholeNumber(cells[5]))
         }
         return facts
     }

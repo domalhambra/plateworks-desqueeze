@@ -253,7 +253,7 @@ final class OperationsTests: XCTestCase {
                 return ok("")
             }
             if call.arguments.contains("-ext") { return ok("A.dng\t1.5 1\t-\nB.dng\t1.5 1\t-\n") }
-            if call.arguments.contains("-IFD0:Model") { return ok("X.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\n") }
+            if call.arguments.contains("-IFD0:Model") { return ok("X.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t2\n") }
             if call.arguments.contains("-overwrite_original") {
                 written = call.arguments.filter { $0.contains("=") }
                     .map { String($0[$0.index(after: $0.firstIndex(of: "=")!)...]) }
