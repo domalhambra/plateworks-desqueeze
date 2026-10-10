@@ -42,8 +42,9 @@ struct ToolEnvironment: Sendable {
     private func perform(_ call: ToolCall, cancel: CancelFlag, progress: (RunProgress) -> Void) throws -> String {
         guard let exiftool = locator.exiftool() else { throw ToolFailure(Self.missingExiftool) }
         let folder = try self.folder(at: call.folder)
-        let operations = DesqueezeOperations(exiftool: exiftool, dngConverter: locator.dngConverter(),
-                                             runner: runner, backups: backups)
+        let operations = DesqueezeOperations(exiftool: exiftool, dnglab: locator.dnglab(),
+                                             dngConverter: locator.dngConverter(), runner: runner,
+                                             backups: backups)
         switch call {
         case .scan:
             return try ReportJSON.text(try scanned(folder) { try operations.scan(folder) })

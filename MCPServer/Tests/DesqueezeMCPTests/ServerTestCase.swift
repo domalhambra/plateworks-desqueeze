@@ -141,7 +141,8 @@ class ServerTestCase: XCTestCase {
         struct MustNotDiscard: Error {}
         let locator = ToolLocator()
         return DesqueezeOperations(
-            exiftool: try XCTUnwrap(locator.exiftool()), dngConverter: locator.dngConverter(),
+            exiftool: try XCTUnwrap(locator.exiftool()), dnglab: locator.dnglab(),
+            dngConverter: locator.dngConverter(),
             backups: FileBackups(trash: { _ in throw MustNotDiscard() }))
     }
 

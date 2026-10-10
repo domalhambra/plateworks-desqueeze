@@ -141,10 +141,12 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertEqual(result.text, try ReportJSON.text(try operations().scan(folder)))
         let json = try result.json()
         XCTAssertEqual(Set(json.keys),
-                       ["folder", "writable", "exiftool", "dngConverter", "dngs", "pendingARWs", "orphanBackups"])
+                       ["folder", "writable", "exiftool", "dnglab", "dngConverter", "dngs", "pendingARWs",
+                        "orphanBackups"])
         XCTAssertEqual(json["folder"] as? String, folder.path)
         XCTAssertEqual(json["writable"] as? Bool, true)
         XCTAssertEqual(json["exiftool"] as? String, ToolLocator().exiftool()?.path)
+        XCTAssertEqual(json["dnglab"] as? String, ToolLocator().dnglab()?.path, "the path, or null")
         XCTAssertEqual(json["dngConverter"] as? String, ToolLocator().dngConverter()?.path)
         XCTAssertEqual(json["dngs"] as? [NSDictionary], [[
             "name": "already here.dng", "scale": "1 1", "originalRawFileName": "sample.ARW", "hasBackup": false,
@@ -185,7 +187,8 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertEqual(json["factor"] as? String, "1.5")
         XCTAssertEqual(counts(json), [1, 2, 0, 0, 0, 0], "the counts of the run it plans")
         XCTAssertEqual(json["steps"] as? [NSDictionary], [
-            ["name": "frame.ARW", "action": "convert"],
+            // The fixture is a full match: dnglab gets it when it is installed.
+            ["name": "frame.ARW", "action": "convert", "converter": ToolLocator().dnglab() == nil ? "adobe" : "dnglab"],
             ["name": "already here.dng", "action": "write"],
             ["name": "frame.dng", "action": "write"],
         ])
@@ -211,8 +214,11 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertFalse(run.isError, run.text)
         XCTAssertEqual(run.progress.count, 0)
         let json = try run.json()
-        XCTAssertEqual(Set(json.keys), ["folder", "factor", "dryRun", "converted", "set", "skipped", "blocked", "failed",
-                                        "stopped", "unconvertedARWs", "notes"])
+        XCTAssertEqual(Set(json.keys), ["folder", "factor", "dryRun", "converted", "convertedByDnglab",
+                                        "convertedByAdobe", "set", "skipped", "blocked", "failed", "stopped",
+                                        "unconvertedARWs", "notes"])
+        XCTAssertEqual([json["convertedByDnglab"], json["convertedByAdobe"]] as? [Int],
+                       ToolLocator().dnglab() == nil ? [0, 1] : [1, 0])
         XCTAssertEqual(json["folder"] as? String, folder.path)
         XCTAssertEqual(json["factor"] as? String, "1.5")
         XCTAssertEqual(json["dryRun"] as? Bool, false)
