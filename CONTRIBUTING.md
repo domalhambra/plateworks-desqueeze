@@ -66,11 +66,12 @@ scripts/make_fixtures.sh "/path/to/one file.ARW"
 ```
 
 The script needs Adobe DNG Converter in the Applications folder. It copies
-your ARW and does not change it. The tests pin the facts of the maintainer's
-frame: a Sony A7S III, an adapted lens, ISO 800, compressed raw, and its
-daylight levels. With any other frame, the tests that pin those facts fail.
-Say in your pull request which tests skipped or failed on your Mac for this
-reason.
+your ARW and does not change it. Any Sony ARW that dnglab and Adobe DNG
+Converter can read works: a test takes each value that it expects from the
+frame itself. The drift check and the tests of the real dnglab match need a
+frame that the match table covers: a Sony A7S III, compressed raw, ISO 50
+or 80 to 12800, adapted lens. With another frame they skip, and the other
+tests still run. Say in your pull request which tests skipped on your Mac.
 
 Never commit a photo.
 
@@ -94,13 +95,14 @@ fails when a Markdown file under `docs/` has no row in `docs/README.md`.
 Write documents
 in short sentences, in the active voice, with one word for one thing.
 `scripts/docs_check.py` is a copy of the documentation standard's check.
-Only its header comment differs. Do not edit its checks here.
+Its header comment differs, and it has no skip rule for paths outside the
+repo. Do not edit its checks here.
 
 ## Commit messages
 
 One line: `area: what changed`. It starts in lower case and has no period at
 the end. The area is the part of the repo: `core`, `cli`, `mcp`, `app`,
-`spec`, `plan`, `docs`.
+`tests`, `scripts`, `spec`, `plan`, `docs`.
 
 ```
 core: a leftover file of exiftool beside a photo stops its conversion, and the note names it
@@ -168,7 +170,9 @@ The method is in the design, section 13.2. The steps:
    the digits from the data file.
 10. **Run the drift check.** It converts the frame in `fixtures/` with Adobe
     DNG Converter and with dnglab plus your row, and compares every tag. Make
-    the fixtures from one of your frames, then run it:
+    the fixtures from one of your frames that the new row covers, then run
+    it. The check skips for a frame that the table does not cover, so see
+    that it ran:
 
     ```bash
     swift test --filter AdobeDriftTests

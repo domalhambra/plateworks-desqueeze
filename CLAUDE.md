@@ -28,9 +28,9 @@ New specs go in `docs/superpowers/specs/` and get a row in `docs/README.md`.
 1. **The original is never at risk.** The app never changes, moves, or deletes an ARW. A DNG keeps its `_original` backup until the tag reads back correctly. Then the backup goes to the Trash. Nothing is deleted.
 2. **No pixels change.** The app sets tags. It never resamples or exports an image.
 3. **The app does not touch a backup it did not make.** A DNG with an existing `_original` is blocked, not skipped: exiftool never replaces one. An orphan backup is reported and left.
-4. **Only a pending ARW goes to a converter, and no converter writes over a file.** For a taken name, dnglab refuses with exit code 6 and Adobe DNG Converter writes `_1.dng`. Never pass `-f` to dnglab. Never pass `-h` to Adobe DNG Converter: it opens a window and never returns.
-5. **A converter writes a hidden work file, and an exclusive rename gives the DNG its name.** A conversion passes only when the exit code is 0, the work file has bytes, and the rename passed. For dnglab, the match must also read back. Adobe returns 0 for a file it cannot read.
-6. **A failed conversion sends only its own work file to the Trash.** Nothing else of the user's ever goes there, except a backup after a good read-back.
+4. **Only a pending ARW goes to a converter, and no converter writes over a file.** No converter starts when anything has the name `<base>.dng`. For a taken output name, dnglab refuses with exit code 6 and Adobe DNG Converter writes a second file, `_1.dng`. Never pass `-f` to dnglab. Never pass `-h` to Adobe DNG Converter: it opens a window and never returns.
+5. **Each converter writes a hidden work file, and an exclusive rename gives the DNG its name.** Adobe DNG Converter gets the name with `-o`. A conversion passes only when the exit code is 0, the work file has bytes, and the rename passed. For dnglab, the match must also read back. Adobe returns 0 for a file it cannot read.
+6. **Only the app's own files and checked backups go to the Trash.** A failed conversion sends only the exact work file of its ARW. Before a conversion, a leftover work file and exiftool's `_exiftool_tmp` beside it go there, and only when each is a regular file. A backup goes there after a good read-back. Nothing else does.
 7. **Top level only.** The scan does not enter subfolders and ignores hidden files.
 8. **Every read and write of `DefaultScale` names `SubIFD`.** That is the directory Camera Raw reads. A DNG with an unknown scale is never skipped.
 9. **The match table's numbers come from measurement.** Never estimate one. The table is a copy of the data file, and the drift check guards both against a new converter version or new firmware.
@@ -41,13 +41,13 @@ New specs go in `docs/superpowers/specs/` and get a row in `docs/README.md`.
 ## Working here
 
 - Run the three suites before any claim of done: `swift test`, then `swift test --package-path MCPServer`, then `xcodegen generate` and `xcodebuild -project PlateworksDesqueeze.xcodeproj -scheme PlateworksDesqueeze -derivedDataPath build test`. The docs check runs inside the first and holds this file under 2,000 tokens.
-- The tests on the real programs skip until `fixtures/` exists. Make it with `scripts/make_fixtures.sh` and one ARW. `fixtures/` is gitignored: the photo is private.
-- The drift check, `AdobeDriftTests`, needs the fixtures and both converters. Run it after a new version of a converter or new camera firmware.
+- The tests on the real programs skip until `fixtures/` exists. Make it with `scripts/make_fixtures.sh` and one ARW. `fixtures/` is gitignored: the photo is private. Any Sony ARW that both converters can read works. The tests of the dnglab match skip for a frame that the match table does not cover.
+- The drift check, `AdobeDriftTests`, needs both converters and a fixture frame that the match table covers. Run it after a new version of a converter or new camera firmware.
 - A behavioral test counts only after it fails against a break.
 - Never test on a real shoot folder. Copy it first.
 - No test reaches the real Trash or the saved settings. `FileBackups` takes the trash function as a parameter, and a built tool takes `DESQUEEZE_TEST_BACKUP_FOLDER`.
 - The window's tests have no app host, so they start no app. For a check by hand, start the app with `-openFolder <path>`, `-simulateMissingTools YES`, `-simulateMissingConverter YES`, `-simulateMissingDnglab YES`, or `-simulateMissingAdobe YES`.
-- `scripts/docs_check.py` is a copy of the documentation standard's check. Only its header comment differs. Never edit its checks here.
+- `scripts/docs_check.py` is a copy of the documentation standard's check. Its header comment differs, and it has no skip rule for paths outside the repo. Never edit its checks here.
 - Commit messages: `area: what changed`, a lower-case start, no period.
 
 ## Session logging

@@ -42,13 +42,15 @@ The first version. It is built from source, and there is no download.
   touched.
 - A converter writes a hidden work file, and the DNG gets its name only when
   it is complete. A DNG that another program made is never replaced.
+- A hidden work file that a run left when it ended hard goes to the Trash
+  before its photo converts again. `--verbose` says so.
 - Control-C, a plain `kill` and a closed Terminal window stop a run after
   the current file.
 
 ### Known limits
 
 - The match table has one camera. Another frame goes to Adobe DNG Converter,
-  or converts with dnglab's own levels and a note.
+  or converts with dnglab and gets a note that says what the DNG lacks.
 - Finder and Quick Look ignore the tag, so their previews stay squeezed.
 - A DNG that got the tag is a new file: Finder shows the time of the run as
   its creation date, and Finder tags on the earlier file are gone.

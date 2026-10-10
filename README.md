@@ -128,7 +128,7 @@ desqueeze remove "/path/to/a folder"                       # set every DNG back 
 | `--dry-run` | For `run` and `remove`: lists what each file would get, and which converter gets each ARW. Changes no file. |
 | `--no-convert` | For `run`: leaves the ARW files alone. |
 | `--json` | Prints one JSON object on standard output, and nothing else there. |
-| `--verbose` | Prints each exiftool and converter command, its exit code and its output on standard error. |
+| `--verbose` | Prints each exiftool and converter command, its exit code and its output on standard error. Also says when it removed a leftover work file. |
 
 The exit code is 0 when the command completed and no file failed or was
 blocked. It is 1 when a file failed or was blocked, or when the run was
@@ -160,6 +160,9 @@ the same JSON. A person does not type to the server.
 
 - An ARW is never changed, moved or deleted. Its new DNG goes beside it,
   with the same base name.
+- A converter writes a hidden work file beside the ARW, and the DNG gets its
+  name only when it is complete. When a run ends hard, the hidden file can
+  stay. The next run moves it to the Trash before it converts that photo.
 - Before exiftool writes a DNG, it keeps the earlier file as a backup. The
   backup goes to the Trash only after the new tag reads back correctly.
   Nothing is deleted.
@@ -189,14 +192,16 @@ ARW of your own:
 scripts/make_fixtures.sh "/path/to/one file.ARW"
 ```
 
-The script needs Adobe DNG Converter. A test skips, and does not fail, when
-what it needs is absent:
+The script needs Adobe DNG Converter. Any Sony ARW that dnglab and Adobe DNG
+Converter can read works: a test takes each value that it expects from the
+frame itself. A test skips, and does not fail, when what it needs is absent:
 
 | Absent | What skips |
 |---|---|
 | `fixtures/` | Every test on the real programs, and the end-to-end tests of the tool and of the server that run on a photo |
 | dnglab | The tests of the real dnglab conversion, and the drift check |
 | Adobe DNG Converter | The tests of the real Adobe conversion, the drift check, and the end-to-end tests that run on a photo |
+| A frame that the match table covers (the section "One camera is measured") | The drift check, and the tests of the real dnglab match |
 
 Never test on a real shoot folder. Copy it first.
 

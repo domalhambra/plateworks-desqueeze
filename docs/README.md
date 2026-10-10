@@ -65,5 +65,6 @@ Both are kept outside the repo. No file here depends on them at build time.
 | Simplified Technical English (ASD-STE100) | The writing standard for these documents: short sentences, the active voice, one word for one thing, instructions in the imperative. |
 
 `scripts/docs_check.py` is a copy of the check that the documentation
-standard defines. Only its header comment differs, and its checks are not
-edited here. `Tests/DesqueezeCoreTests/DocsCheckTests.swift` runs it.
+standard defines. Its header comment differs, and it has no skip rule for
+paths outside the repo. Its checks are not edited here.
+`Tests/DesqueezeCoreTests/DocsCheckTests.swift` runs it.

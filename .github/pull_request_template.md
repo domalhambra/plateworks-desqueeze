@@ -14,5 +14,5 @@
 
 ## Tests that skipped on my Mac
 
-Say which tests skipped, and why: no `fixtures/`, no exiftool, no dnglab, or
-no Adobe DNG Converter.
+Say which tests skipped, and why: no `fixtures/`, no exiftool, no dnglab, no
+Adobe DNG Converter, or a fixture frame that the match table does not cover.

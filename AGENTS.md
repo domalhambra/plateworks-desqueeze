@@ -26,4 +26,4 @@ Four rules that an agent breaks most easily:
 - Never pass `-f` to dnglab. It writes over an existing file.
 - Never let a test reach the real Trash. Give `FileBackups` a function of
   your own, or set `DESQUEEZE_TEST_BACKUP_FOLDER` to a temporary folder for a
-  built tool.
+  built tool or a built server.

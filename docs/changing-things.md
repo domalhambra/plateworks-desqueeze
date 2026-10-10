@@ -43,9 +43,11 @@ folder is gitignored: the photo is yours and stays on your Mac.
    scripts/make_fixtures.sh "/path/to/one file.ARW"
    ```
 
-The tests pin the facts of the maintainer's frame: a Sony A7S III, an adapted
-lens, ISO 800, compressed raw, and its daylight levels. With any other
-frame, the tests that pin those facts fail. They are in
+Any Sony ARW that dnglab and Adobe DNG Converter can read works. A test
+takes each value that it expects from the frame itself. The drift check and
+the tests of the real dnglab match need a frame that the match table
+covers: a Sony A7S III, compressed raw, ISO 50 or 80 to 12800, adapted lens.
+With another frame they skip, and the other tests still run. They are in
 `Tests/DesqueezeCoreTests/DnglabIntegrationTests.swift`.
 
 ## Change a sentence that a front end says
@@ -205,8 +207,9 @@ Read design 4.3 step 1, 13.3 and 13.4 first. Then read the rules in
 
 | Rule | File | Test |
 |---|---|---|
-| A rule for every converter: the checks before the start, what counts as a partial output | `ConverterRules` in `Sources/DesqueezeCore/RawConverter.swift` | `Tests/DesqueezeCoreTests/RawConverterTests.swift` |
-| The dnglab steps: the work file, the tags, the read-back | `Sources/DesqueezeCore/DnglabConverter.swift` | `Tests/DesqueezeCoreTests/DnglabConverterTests.swift` |
+| A rule for every converter: the checks before the start, the leftovers of an earlier run, the work file, what counts as a partial output | `ConverterRules` in `Sources/DesqueezeCore/RawConverter.swift` | `Tests/DesqueezeCoreTests/RawConverterTests.swift` |
+| The command line of Adobe DNG Converter | `AdobeConverter` in `Sources/DesqueezeCore/RawConverter.swift` | `Tests/DesqueezeCoreTests/RawConverterTests.swift` |
+| The dnglab steps: its command, the tags, the read-back | `Sources/DesqueezeCore/DnglabConverter.swift` | `Tests/DesqueezeCoreTests/DnglabConverterTests.swift` |
 | The rename that never replaces | `Sources/DesqueezeCore/ExclusiveRename.swift` | `Tests/DesqueezeCoreTests/ExclusiveRenameTests.swift` |
 | Which converter gets an ARW | `Sources/DesqueezeCore/ConverterChoice.swift` | `Tests/DesqueezeCoreTests/ConverterChoiceTests.swift` |
 | What the run does after a failed conversion | `Sources/DesqueezeCore/DesqueezeJob.swift` | `Tests/DesqueezeCoreTests/DesqueezeJobTests.swift` |
@@ -297,8 +300,8 @@ there.
    ```
 
 `scripts/docs_check.py` is a copy of the check that the documentation
-standard defines. Only its header comment differs. Do not edit its checks
-here.
+standard defines. Its header comment differs, and it has no skip rule for
+paths outside the repo. Do not edit its checks here.
 
 ## Record a decision
 

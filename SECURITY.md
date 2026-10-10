@@ -9,10 +9,13 @@ can damage, lose or expose a person's files is a security problem here.
   writes DNG files in that folder: a tag in a DNG that exists, and a new DNG
   beside each ARW that it converts. It never changes, moves or deletes an
   ARW. It does not read subfolders.
-- **The Trash.** It moves two kinds of file to the Trash. The first is the
+- **The Trash.** It moves three kinds of file to the Trash. The first is the
   backup of a DNG, after the new tag reads back correctly. The second is its
   own hidden work file: after a conversion that failed, and when it finds
-  one that an earlier run left. It deletes nothing.
+  one that an earlier run left. The third is the temporary file that
+  exiftool can leave beside that work file. It moves a leftover of an
+  earlier run only when it is a regular file, not a folder and not a link.
+  It deletes nothing.
 - **Three external programs.** It starts exiftool, dnglab and Adobe DNG
   Converter as separate processes, with no shell. It looks for exiftool and
   dnglab in `/opt/homebrew/bin`, then `/usr/local/bin`, then each folder of
@@ -41,8 +44,6 @@ photo folders.
 Report a security problem in private, with a security advisory on the GitHub
 repo: open the "Security" tab of the repo, and select "Report a
 vulnerability". Do not open a public issue for it.
-
-The repo is not public yet. This section holds for the day it is.
 
 Say what you did, what you expected, and what happened. Give the output of
 the command with `--verbose` when you can. Do not attach a photo that you do

@@ -100,10 +100,10 @@ Test files are in `Tests/DesqueezeCoreTests/`.
 | `ToolLocator.swift` | Where the three programs are, and the sentences for a missing exiftool and for the dnglab install | `ToolLocatorTests.swift` |
 | `ScaleTag.swift` | `Scale`, and the three exiftool calls for `DefaultScale`: read a folder, write one file, read one file back | `ScaleTagTests.swift`. With the real exiftool: `IntegrationTests.swift` |
 | `Backups.swift` | The `_original` backup: exists, to the Trash, restore with one rename. The test variable `DESQUEEZE_TEST_BACKUP_FOLDER`. | `BackupsTests.swift`, `BackupTestFolderTests.swift` |
-| `RawConverter.swift` | The converter protocol, the pair of converters, the names of the output and of the work file, the rules that hold for every converter, and the Adobe converter | `RawConverterTests.swift`. With the real converter: `IntegrationTests.swift` |
-| `DnglabConverter.swift` | The dnglab conversion: the work file, the tag write, the read-back, the rename | `DnglabConverterTests.swift`. With the real dnglab: `DnglabIntegrationTests.swift` |
+| `RawConverter.swift` | The converter protocol, the pair of converters, the names of the output and of the work file, and the Adobe converter. The rules that hold for every converter: the checks before the start, the leftovers of an earlier run, the work file, the rename, and what counts as a partial output. | `RawConverterTests.swift`. With the real converter: `IntegrationTests.swift` |
+| `DnglabConverter.swift` | The steps that only dnglab has: its command, the match write into the work file, the read-back, and dnglab's own words for a failure | `DnglabConverterTests.swift`. With the real dnglab: `DnglabIntegrationTests.swift` |
 | `ExclusiveRename.swift` | A rename that fails when the name is taken, and the path for a volume that has no such call | `ExclusiveRenameTests.swift`, which also makes APFS and ExFAT disk images |
-| `ARWFacts.swift` | The five facts about an ARW, the exiftool read that gets them, and how exiftool prints a file name | `ARWFactsTests.swift` |
+| `ARWFacts.swift` | The five facts about an ARW, the exiftool read that gets them, and how exiftool prints a file name | `ARWFactsTests.swift`. With the real exiftool: `DnglabIntegrationTests.swift` |
 | `AdobeMatch.swift` | The match table, the five rules of a full match, the tags to write, and the compare of numbers at the read-back | `AdobeMatchTests.swift`. Against the real Adobe DNG Converter: the drift check in `DnglabIntegrationTests.swift` |
 | `ConverterChoice.swift` | Which converter gets an ARW, in which order. The names of the converters and the sentences about who converts. | `ConverterChoiceTests.swift` |
 | `RunPlan.swift` | The one decision for a DNG: skip, blocked, or write. The plan of a dry run. | `PlanTests.swift` |
@@ -156,7 +156,7 @@ tests check the bytes on the wire.
 
 | File | Owns | Tests |
 |---|---|---|
-| `AppModel.swift` | The window's state: the folder, the factor, the one job in flight, Cancel, the quit during a run, the launch arguments | `AppModelTests.swift` in `App/PlateworksDesqueezeTests/` |
+| `AppModel.swift` | The window's state: the folder, the factor, the one job in flight, Cancel, the quit during a run, the launch arguments | `AppModelTests.swift` in `App/PlateworksDesqueezeTests/`. `Fakes.swift` beside it holds its fakes. |
 | `ContentView.swift` | The one view: the drop zone, the factor row, the buttons, the progress bar, the result list | - |
 | `DesqueezeApp.swift` | The app and its delegate: one window, and the reply to a quit | - |
 | `Info.plist` | Written by XcodeGen from `project.yml`. A hand edit is lost. | - |
@@ -182,14 +182,17 @@ Each step has the rule that keeps the user's files safe. Design 4.3 and
    file. An ARW with no facts has no full match.
 3. **Check before the converter starts.** *Safety:* when anything has the name
    `<base>.dng`, the converter does not start. Neither converter may write
-   over a file. A leftover file of exiftool beside the photo stops that ARW,
-   and the note names the file.
-4. **Convert to a work file.** The converter writes the hidden file
-   `.<base>.desqueeze-work.dng`, not `<base>.dng`. A work file that an
-   earlier run left goes to the Trash first, and so does exiftool's leftover
-   of that work file. *Safety:* the scan, Finder and
-   Lightroom do not see a hidden file. So a run that ends hard never leaves a
-   DNG that looks complete.
+   over a file. A leftover file of exiftool beside the photo,
+   `<base>.dng_exiftool_tmp`, stops that ARW, and the note names the file.
+4. **Convert to a work file.** Each converter writes the hidden file
+   `.<base>.desqueeze-work.dng`, not `<base>.dng`. dnglab takes the path of
+   the work file. Adobe DNG Converter takes its name with `-o`. A work file
+   that an earlier run left goes to the Trash first, and so does exiftool's
+   leftover of that work file, `<work file>_exiftool_tmp`. Only a regular
+   file is taken: a folder or a link at either name stops that ARW, and the
+   note names it. *Safety:* the scan, Finder and Lightroom do not see a
+   hidden file. So a run that ends hard never leaves a DNG that looks
+   complete. No converter gets a name that is taken.
 5. **Match, for dnglab only.** One exiftool call writes Adobe's values and
    `OriginalRawFileName` into the work file. A second call reads them back.
    *Safety:* the conversion passes only when every value reads back.
@@ -203,8 +206,10 @@ Each step has the rule that keeps the user's files safe. Design 4.3 and
    the failure holds for every converter: the name is taken, a leftover file
    is in the way, or the Trash refused the work file. It is also not tried
    after a cancel. *Safety:* the work file is the only file that a failed
-   conversion sends to the Trash. The ARW is never changed, moved or
-   deleted. A work file that the Trash refused is named in the note.
+   conversion sends to the Trash. The job does not take the converter's
+   word: a file moves only when its path is exactly the work file of that
+   ARW. The ARW is never changed, moved or deleted. A work file that the
+   Trash refused is named in the note.
 8. **Decide for each DNG.** The found DNG files come first, then the new
    ones. A DNG at the factor is skipped. A DNG with an older backup beside
    it is blocked. Any other DNG is written. *Safety:* the run asks for the
@@ -283,7 +288,9 @@ it sends each discarded file to a folder in place of the Trash.
 The tests on the real programs copy `fixtures/sample.ARW` and
 `fixtures/sample.dng` to a temporary folder first. `fixtures/` is gitignored
 and is made with `scripts/make_fixtures.sh`. A test that needs a fixture or a
-program skips when it is absent. It does not fail.
+program skips when it is absent. It does not fail. The ARW can be any Sony
+ARW that dnglab and Adobe DNG Converter can read: a test takes each value
+that it expects from the frame itself.
 
 - **No fixtures:** the tests on the real programs skip. So do the end-to-end
   tests of the tool, and each server test that runs on a photo.
@@ -293,6 +300,12 @@ program skips when it is absent. It does not fail.
   skip. So do the end-to-end tests of the tool, and the end-to-end tests of
   the server that run on a photo.
 - **No exiftool:** all of these skip, and the server's tool-error tests too.
+- **A frame that the match table does not cover:** the drift check and the
+  tests of the real dnglab match skip. Each one says: "This test needs a
+  frame that the match table covers: a Sony A7S III, compressed raw, ISO 50
+  or 80 to 12800, adapted lens." The other tests on the real programs still
+  run. With both converters installed, Adobe DNG Converter converts such a
+  frame, and the end-to-end tests expect that.
 - **Two more skips:** the disk-image tests in `ExclusiveRenameTests.swift`
   skip when `hdiutil` cannot make or attach an image. One server test skips
   on a Mac that is too fast for it, and says so.
@@ -300,7 +313,8 @@ program skips when it is absent. It does not fail.
 **The drift check** is `AdobeDriftTests` in `DnglabIntegrationTests.swift`. It
 converts the fixture with Adobe DNG Converter and with the app's dnglab
 path, and compares every matched tag. It fails when a new version of either
-converter, or new camera firmware, changes a value.
+converter, or new camera firmware, changes a value. It needs a fixture frame
+that the match table covers.
 
 **The docs check** is `DocsCheckTests.swift`. It runs
 `scripts/docs_check.py`. So `swift test` fails when `README.md`, `CLAUDE.md`,
