@@ -727,10 +727,25 @@ Why a work file:
   converter. The note names the hidden file to delete, so no 12 MB file
   stays in the folder with no one told.
 
-Adobe DNG Converter cannot write to a name the app gives it, so its rule
-stays as 4.3 has it: the check before the start, and the partial-DNG rule.
+**Adobe DNG Converter uses the same work file.** Its command line takes an
+output name (`-o`, tested 2026-10-09: it wrote
+`.frame 1.desqueeze-work.dng`, and with that name taken it wrote
+`.frame 1.desqueeze-work_1.dng`). So the app gives it the work-file name, and
+steps 1 and 5 hold for it as they hold for dnglab. Steps 3 and 4 do not
+apply: Adobe's file needs no match. The conversion passes when the exit code
+is 0, the work file has bytes, and the rename passed. One rule then covers
+both converters: the only file a failed conversion sends to the Trash is the
+work file, and a `<base>.dng` that the run did not make is never touched.
+Where 4.3 step 1 says the app moves a partial `<base>.dng` to the Trash, read
+"the work file".
 
-Before either converter starts, a file named `<base>.dng_exiftool_tmp` stops
+Step 1 also removes `<work file>_exiftool_tmp`, which a hard end during step
+3 can leave. Both names are the app's own. Only a regular file is removed: a
+folder or a link at either name stops the conversion of that ARW with the
+leftover note, and nothing moves.
+
+Before either converter starts, a file named `<base>.dng_exiftool_tmp` (not
+the work file's own leftover, which step 1 removes) stops
 the conversion of that ARW, with a note that names it: exiftool refuses to
 write beside its own leftover, so the tag step could never pass.
 
@@ -842,5 +857,11 @@ condition.
   a period. The app compares such names as exiftool prints them. Two files
   whose names print the same get no facts, and so no full match.
 - On a volume with no exclusive rename (ExFAT, measured), the app checks the
-  name and then renames. A moment lies between the two.
+  name and then renames. A moment lies between the two system calls. A file
+  that another program makes at `<base>.dng` in that moment is replaced. This
+  is the one path left on which the app can replace a file it did not make.
+- A leftover work file is removed only when its ARW is converted again. If
+  the ARW is gone, or a DNG now claims it, the hidden work file stays.
+- A base name longer than about 235 bytes makes the work-file name too long
+  for the file system, and the conversion fails with the tool's own words.
 
