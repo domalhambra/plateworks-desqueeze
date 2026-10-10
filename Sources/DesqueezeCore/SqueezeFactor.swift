@@ -18,10 +18,24 @@ public struct SqueezeFactor: Equatable, Hashable, Sendable {
     /// MCP server both say it.
     ///
     /// It is a whole sentence: the MCP server gives it to a model as it is.
+    /// Text with a comma gets `decimalPointHint` after it: the rule alone
+    /// does not say what is wrong with "1,5".
     ///
     /// - Parameter text: the text as it was given.
     public static func errorMessage(got text: String) -> String {
-        "The factor must be \(ruleText). It was \(text)."
+        "The factor must be \(ruleText). It was \(text).\(hint(for: text))"
+    }
+
+    /// What every front end adds for text with a comma in it. The only
+    /// place that makes this sentence.
+    public static let decimalPointHint = "Use a period for the decimal point."
+
+    /// `decimalPointHint` with a space before it when `text` has a comma,
+    /// and an empty string for any other text. A front end puts it after its
+    /// sentence about the factor: the window after "Enter …", which has its
+    /// own first words.
+    public static func hint(for text: String) -> String {
+        text.contains(",") ? " " + decimalPointHint : ""
     }
 
     public static let presets: [SqueezeFactor] = [1.33, 1.5, 1.8, 2].compactMap { SqueezeFactor($0) }

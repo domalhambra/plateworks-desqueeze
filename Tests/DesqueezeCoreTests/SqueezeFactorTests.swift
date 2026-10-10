@@ -47,6 +47,21 @@ final class SqueezeFactorTests: XCTestCase {
                        "The factor must be \(SqueezeFactor.ruleText). It was 1.23456.")
     }
 
+    // "1,5" breaks the rule, and the rule alone does not say how. Every
+    // front end adds these words, from here.
+    func testAFactorWithACommaGetsTheHintAboutThePeriod() {
+        XCTAssertEqual(SqueezeFactor.errorMessage(got: "1,5"),
+                       "The factor must be a number from 1 to 4, with at most four decimal places. It was 1,5. "
+                           + "Use a period for the decimal point.")
+        XCTAssertEqual(SqueezeFactor.decimalPointHint, "Use a period for the decimal point.")
+        XCTAssertEqual(SqueezeFactor.hint(for: "1,5"), " Use a period for the decimal point.")
+        XCTAssertEqual(SqueezeFactor.hint(for: " 1,33 "), " Use a period for the decimal point.")
+        for text in ["5", "1.5", "abc", "", "1 5", "1.33333"] {
+            XCTAssertEqual(SqueezeFactor.hint(for: text), "", "no comma in \"\(text)\"")
+            XCTAssertFalse(SqueezeFactor.errorMessage(got: text).contains("period"), text)
+        }
+    }
+
     func testMatchesTellsAdjacentFactorsApart() {
         let factor = SqueezeFactor(1.5)!
         XCTAssertTrue(factor.matches(horizontal: 1.5, vertical: 1))
