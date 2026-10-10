@@ -332,6 +332,12 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
 /// Adobe version, a new dnglab version, or new camera firmware changes a
 /// value. Skips unless dnglab, Adobe DNG Converter and the fixtures are all
 /// there. It starts Adobe DNG Converter once.
+///
+/// The app's dnglab path is the one of design 13.3: dnglab writes the work
+/// file, the match goes into it, and the rename gives it the name
+/// `<base>.dng`. So the check also fails when a new dnglab or a new exiftool
+/// does not take the work file's name, or when the rename does not leave
+/// the DNG at its name with no work file beside it.
 final class AdobeDriftTests: RealDnglabTestCase {
     func testEveryMatchedTagOfADnglabDNGEqualsAdobeDNGConverters() throws {
         guard let adobe = ToolLocator().dngConverter() else {
@@ -349,6 +355,14 @@ final class AdobeDriftTests: RealDnglabTestCase {
         let facts = try facts(of: forDnglab)
         let ours = try converter.convert(forDnglab, facts: facts)
         XCTAssertNil(ours.unmatched, "the fixture is a full match: \(facts)")
+        // The work-file path: the DNG is at its name, it is the file that
+        // the tags are read from below, and no work file is left. The
+        // listing has hidden files too.
+        XCTAssertEqual(ours.dng, dnglabFolder.appendingPathComponent("frame.dng"))
+        XCTAssertEqual(try files.contentsOfDirectory(atPath: dnglabFolder.path).sorted(), ["frame.ARW", "frame.dng"],
+                       "the dnglab DNG is at <base>.dng, with no work file left")
+        XCTAssertEqual(try files.contentsOfDirectory(atPath: adobeFolder.path).sorted(), ["frame.ARW", "frame.dng"])
+        XCTAssertEqual(Self.matchedTags.count, 9, "all nine tags of the match are compared")
 
         let wanted = try read(Self.matchedTags, in: adobes)
         let found = try read(Self.matchedTags, in: ours.dng)

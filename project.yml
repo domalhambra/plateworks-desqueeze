@@ -1,9 +1,9 @@
 # XcodeGen spec for the Desqueeze app.
 # Regenerate the .xcodeproj with:  xcodegen generate
 #
-# macOS only. The app is NOT sandboxed: it starts exiftool and Adobe DNG
-# Converter, which a sandboxed app cannot do. No entitlements file exists on
-# purpose. Do not add one.
+# macOS only. The app is NOT sandboxed: it starts exiftool, dnglab and Adobe
+# DNG Converter, which a sandboxed app cannot do. No entitlements file exists
+# on purpose. Do not add one.
 name: PlateworksDesqueeze
 options:
   bundleIdPrefix: org.plateworks
