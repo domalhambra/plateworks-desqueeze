@@ -32,10 +32,6 @@ final class CallQueue: Sendable {
         state.withLock { $0.calls == 0 }
     }
 
-    var isClosed: Bool {
-        state.withLock { $0.isClosed }
-    }
-
     /// How many calls ended with no work done: `run` gave nil. Such a call
     /// gets no answer, so the transport does not wait for one.
     var callsWithNoWork: Int {

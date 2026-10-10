@@ -245,6 +245,29 @@ final class AnsweringTransportTests: XCTestCase {
 
     // MARK: Standard input closes
 
+    // The end of standard input closes the queue, at once and not after the
+    // answers. No test reads a flag of the queue: a call is the question.
+    // Before the queue closes, a call does its work. After it, a call does
+    // none. The request here gets no answer, so a transport that closed the
+    // queue only after the answers would wait for the patience, 30 seconds.
+    func testTheEndOfInputClosesTheQueueSoACallThatComesLaterDoesNoWork() async throws {
+        let pipe = FakePipe(writeTime: .milliseconds(1))
+        let queue = CallQueue()
+        let transport = AnsweringTransport(inner: pipe, logger: pipe.logger, queue: queue, patience: .seconds(30))
+        let events = Events()
+        await consume(transport, into: events)
+        pipe.read(Self.request(1))
+        try await eventually("the request is read") { events.has("read") }
+
+        pipe.endInput()
+        try await eventually("the end of input closes the queue", timeout: 2) {
+            await queue.run { 0 } == nil
+        }
+        // The one call that did no work is the one answer that will not
+        // come, so the stream ends now.
+        try await eventually("the stream ends", timeout: 2) { events.has("stream ended") }
+    }
+
     // The client has gone. The call in work completes and is answered. The
     // call that waits does not start, gets no answer, and does not hold the
     // program open: a wait for the patience, 30 seconds here, fails the test.
@@ -276,12 +299,12 @@ final class AnsweringTransportTests: XCTestCase {
             events.add(result == nil ? "second did no work" : "second worked")
         }
         pipe.endInput()
-        do {
-            try await eventually("the end of input closes the queue", timeout: 2) { queue.isClosed }
-        } catch {
-            gate.signal()
-            throw error
-        }
+        // The transport closes the queue at the end of input: the test
+        // above shows it. Here the first call holds the queue, so no call
+        // can ask whether it is closed yet. The test closes it too, which
+        // changes nothing in a closed queue, and that fixes the order:
+        // closed first, then the first call completes.
+        queue.close()
         gate.signal()
 
         try await eventually("the stream ends") { events.has("stream ended") && events.has("second did no work") }
@@ -363,7 +386,8 @@ final class AnsweringTransportTests: XCTestCase {
 
         try await eventually("the stream ends") { events.has("stream ended") }
         XCTAssertEqual(events.all, ["read", "written", "stream ended"])
-        XCTAssertTrue(queue.isClosed, "no call starts after a signal")
+        let late: Int? = await queue.run { 1 }
+        XCTAssertNil(late, "no call starts after a signal")
     }
 
     // A signal can come before the library has asked for the stream: the
@@ -382,7 +406,8 @@ final class AnsweringTransportTests: XCTestCase {
 
         try await eventually("the stream ends", timeout: 2) { events.has("stream ended") }
         XCTAssertEqual(events.all, ["stream ended"])
-        XCTAssertTrue(queue.isClosed, "no call starts after a signal")
+        let late: Int? = await queue.run { 1 }
+        XCTAssertNil(late, "no call starts after a signal")
     }
 
     // With nothing in work, the stream ends at once.

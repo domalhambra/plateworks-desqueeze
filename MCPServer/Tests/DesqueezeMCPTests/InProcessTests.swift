@@ -268,7 +268,8 @@ final class CallQueueTests: XCTestCase {
         let results = await [first, second]
         XCTAssertEqual(results, [1, nil])
         XCTAssertEqual(told.all, ["the call in work"])
-        XCTAssertTrue(queue.isClosed)
+        let late: Int? = await queue.run { 3 }
+        XCTAssertNil(late, "a stop closes the queue: no call starts after it")
     }
 
     // Ten calls that arrive at once. Each one fails the test when another
