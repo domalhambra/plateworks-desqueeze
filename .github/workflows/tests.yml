@@ -1,0 +1,73 @@
+# Runs the three test suites.
+#
+# NOT YET RUN. This workflow was written before the repo was on GitHub, so it
+# has never started. The suites were run on one Mac only (macOS 27.2, Xcode
+# 27.0, Swift 6.4). Check these on the first run:
+#
+#   1. The runner image. Read the output of the "Versions" step. The package
+#      has the tools version 5.9. The app sets SWIFT_VERSION 6.0 in
+#      project.yml, so the Xcode of the image must have a Swift 6 compiler.
+#      If the default Xcode cannot build, pin `runs-on` to an image that can,
+#      or select another Xcode with `sudo xcode-select -s`.
+#   2. Homebrew. `brew install` must find exiftool, dnglab and xcodegen. The
+#      tests were run with exiftool 13.55, dnglab 0.8.0 and XcodeGen 2.44.1.
+#   3. What skips. The repo has no fixtures/, because the photo is private,
+#      and the image has no Adobe DNG Converter. So every test on the real
+#      programs skips, and so do the end-to-end tests that run on a photo.
+#      A green run here proves the unit tests, the tests that start the
+#      built tool and the built server with no photo, and the checks of the
+#      documents. It does not prove the conversion or the drift check. Read
+#      the "Skipped tests" step.
+#   4. The tests that make disk images with hdiutil. They skip when the
+#      runner cannot make or attach an image.
+#   5. The tests with real signals and real pipes: InterruptTests, and the
+#      end-to-end tests of the server. They were never run on a shared
+#      runner.
+#   6. The window's tests. The targets are signed to run locally
+#      (CODE_SIGN_IDENTITY "-"). See that xcodebuild can sign on the runner.
+#   7. This workflow runs on every push and on every pull request. A push to
+#      the branch of an open pull request starts it twice. Narrow `push` to
+#      the main branch if that is too much.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Versions
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Install exiftool, dnglab and XcodeGen
+        run: |
+          brew install exiftool dnglab xcodegen
+          exiftool -ver
+          dnglab --version
+          xcodegen --version
+
+      - name: The root package
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee swift-test.log
+
+      - name: Skipped tests
+        run: grep -i "skipped" swift-test.log || echo "No test skipped."
+
+      - name: The server package
+        run: swift test --package-path MCPServer
+
+      - name: The window
+        run: |
+          xcodegen generate
+          xcodebuild -project PlateworksDesqueeze.xcodeproj -scheme PlateworksDesqueeze -derivedDataPath build test

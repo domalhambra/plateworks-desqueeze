@@ -1,0 +1,79 @@
+# XcodeGen spec for the Desqueeze app.
+# Regenerate the .xcodeproj with:  xcodegen generate
+#
+# macOS only. The app is NOT sandboxed: it starts exiftool, dnglab and Adobe
+# DNG Converter, which a sandboxed app cannot do. No entitlements file exists
+# on purpose. Do not add one.
+name: PlateworksDesqueeze
+options:
+  bundleIdPrefix: org.plateworks
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+packages:
+  DesqueezeCore:
+    path: .
+
+targets:
+  PlateworksDesqueeze:
+    type: application
+    platform: macOS
+    dependencies:
+      - package: DesqueezeCore
+        product: DesqueezeCore
+    sources:
+      - path: App/PlateworksDesqueeze
+    # XcodeGen writes Info.plist from the properties below. A hand edit of Info.plist is lost.
+    info:
+      path: App/PlateworksDesqueeze/Info.plist
+      properties:
+        CFBundleDisplayName: Desqueeze
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LSApplicationCategoryType: public.app-category.photography
+        NSHumanReadableCopyright: "Copyright © 2026 Plateworks. MIT License."
+        # macOS asks before an app reads these folders. The text says why.
+        NSDesktopFolderUsageDescription: Desqueeze sets a tag on the DNG photos in the folder you choose.
+        NSDocumentsFolderUsageDescription: Desqueeze sets a tag on the DNG photos in the folder you choose.
+        NSDownloadsFolderUsageDescription: Desqueeze sets a tag on the DNG photos in the folder you choose.
+        NSRemovableVolumesUsageDescription: Desqueeze sets a tag on the DNG photos in the folder you choose.
+        NSNetworkVolumesUsageDescription: Desqueeze sets a tag on the DNG photos in the folder you choose.
+    settings:
+      base:
+        PRODUCT_NAME: Desqueeze
+        PRODUCT_BUNDLE_IDENTIFIER: org.plateworks.desqueeze
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        # Sign to run locally. A release needs a Developer ID and notarization.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: NO
+    # The scheme PlateworksDesqueeze builds the app, and its test action runs
+    # the bundle below.
+    scheme:
+      testTargets:
+        - PlateworksDesqueezeTests
+
+  # The unit tests of the window's state (AppModel). The bundle has no app
+  # host: it compiles AppModel.swift itself, so a test run starts no app and
+  # opens no window. Do not add TEST_HOST or BUNDLE_LOADER, and do not make
+  # this target depend on the app target.
+  PlateworksDesqueezeTests:
+    type: bundle.unit-test
+    platform: macOS
+    dependencies:
+      - package: DesqueezeCore
+        product: DesqueezeCore
+    sources:
+      - path: App/PlateworksDesqueezeTests
+      - path: App/PlateworksDesqueeze/AppModel.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.plateworks.desqueeze.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
