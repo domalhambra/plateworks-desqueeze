@@ -113,7 +113,7 @@ public enum DesqueezeTool {
         _ work: (DesqueezeOperations, URL) throws -> (output: String, exitCode: Int32)
     ) -> Int32 {
         if let testFolder = environment.testBackupFolder {
-            environment.standardError("Test mode: backups go to \(testFolder.path), not to the Trash.")
+            environment.standardError(FileBackups.testModeNotice(folder: testFolder))
         }
         guard let exiftool = environment.exiftool else {
             // The line is the core's, so the MCP server says the same.

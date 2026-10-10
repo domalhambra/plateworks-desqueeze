@@ -121,7 +121,7 @@ final class ArgumentsTests: XCTestCase {
     func testAFactorOutOfRangeOrNotANumberIsAUsageError() {
         for bad in ["0.99", "4.0001", "0", "5", "abc", "1.33333", "1,5", "1.5x", "-1.5", "1e0", " ", "inf", "nan"] {
             XCTAssertEqual(usageError("run", "Shoot", "--factor", bad),
-                           "The factor must be a number from 1 to 4, with at most four decimal places. Got: \(bad)",
+                           "The factor must be a number from 1 to 4, with at most four decimal places. It was \(bad).",
                            bad)
         }
     }

@@ -10,7 +10,8 @@ public enum TextOutput {
     /// the messages about the folder, then where the three tools are:
     /// exiftool, dnglab, and Adobe DNG Converter, in this order. The line
     /// of advice about the converters is last, when there is one
-    /// (`FolderText.converterAdvice`, design 13.5).
+    /// (`FolderText.converterAdvice`, design 13.5). With neither converter, a
+    /// line before it says that the ARW files cannot be converted.
     public static func scan(_ report: ScanReport) -> [String] {
         var lines = [report.folder, ""]
         if report.isEmpty {
@@ -42,9 +43,12 @@ public enum TextOutput {
 
         lines.append("exiftool: \(report.exiftool)")
         lines.append("\(ConverterKind.dnglab.name): \(report.dnglab ?? "not installed")")
-        // dnglab converts. Adobe DNG Converter is not needed, and the line
-        // says so where it is missing.
-        lines.append("\(ConverterKind.adobe.name): \(report.dngConverter ?? "not installed (optional backup)")")
+        // The advice line says what a missing converter means, so this one
+        // says only that it is missing.
+        lines.append("\(ConverterKind.adobe.name): \(report.dngConverter ?? "not installed")")
+        // With neither converter: that the ARW files cannot convert, then
+        // what to do about it.
+        if let cannot = report.arwsCannotConvertLine { lines.append(cannot) }
         if let advice = report.converterAdvice { lines.append(advice) }
         return lines
     }

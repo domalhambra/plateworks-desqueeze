@@ -38,14 +38,12 @@ public enum Usage {
           --verbose          Prints each exiftool and converter command, its exit
                              code, and its output on standard error.
 
-        dnglab converts the ARW files. Each DNG that it makes gets the values that
-        Adobe DNG Converter writes, so Lightroom shows the same photo. Adobe DNG
-        Converter is the optional backup, for a photo that dnglab cannot match.
-        With no converter, run still sets the stretch on the DNG files.
-        Install dnglab with: \(ToolLocator.dnglabInstallCommand)
+        \(wrapped("\(ConverterText.whoConverts) \(ConverterText.matchedValues) "
+            + "With no converter, run still sets the stretch on the DNG files."))
+        \(ToolLocator.dnglabInstallLine)
 
-        Progress goes to standard error. Control-C stops a run after the current
-        file, and the result so far is still printed.
+        \(wrapped("Progress goes to standard error. Control-C, or a closed Terminal window, stops a run "
+            + "after the current file, and the result so far is still printed."))
 
         A change is reversible: remove sets each DNG back. No pixel changes.
         \(RunSummary.lightroomHint)
@@ -58,6 +56,30 @@ public enum Usage {
              is missing.
           2  The command line was wrong.
         """
+
+    /// The widest line of the help. The rule is under 80 columns.
+    static let helpWidth = 79
+
+    /// `text` broken at spaces into lines of at most `helpWidth` columns. A
+    /// word is never cut, and a line has no space at either end. The core
+    /// makes a sentence that more than one front end says as one line, and
+    /// the help is the front end that must wrap it.
+    static func wrapped(_ text: String) -> String {
+        var lines: [String] = []
+        var line = ""
+        for word in text.split(separator: " ") {
+            if line.isEmpty {
+                line = String(word)
+            } else if line.count + 1 + word.count <= helpWidth {
+                line += " " + word
+            } else {
+                lines.append(line)
+                line = String(word)
+            }
+        }
+        if !line.isEmpty { lines.append(line) }
+        return lines.joined(separator: "\n")
+    }
 
     /// What standard error gets for a usage error: the reason, and one line
     /// that points to the help.

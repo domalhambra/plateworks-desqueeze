@@ -37,23 +37,51 @@ final class CommandsTests: XCTestCase {
         XCTAssertFalse(h.out.text.contains(FileBackups.testFolderVariable), "the test variable is in no help text")
     }
 
-    // dnglab converts, and Adobe DNG Converter is the optional backup
-    // (design 13). The help names no converter as "the" converter, and it
-    // names three tools, not two.
-    func testHelpSaysThatDnglabConvertsAndThatAdobeIsTheOptionalBackup() {
+    // The help says who converts the long way, from the core's sentence
+    // (design 13.5): "dnglab converts first" is not the rule. It names three
+    // tools, not two. The paragraph wraps, so the text is read on one line.
+    func testHelpSaysWhoConvertsTheLongWayAndNotThatDnglabConvertsFirst() {
         h.run("--help")
         let text = h.out.lines.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: " ")
         for words in [
             "where exiftool, dnglab and Adobe DNG Converter are",
-            "dnglab converts the ARW files.",
-            "Adobe DNG Converter is the optional backup, for a photo that dnglab cannot match.",
+            "dnglab converts each photo that it can match. "
+                + "Adobe DNG Converter, when it is installed, converts the others.",
+            "Each DNG that dnglab makes gets the values that Adobe DNG Converter writes, "
+                + "so Lightroom shows the same photo.",
+            "With no converter, run still sets the stretch on the DNG files.",
             "Install dnglab with: brew install dnglab",
         ] {
             XCTAssertTrue(text.contains(words), words)
         }
+        XCTAssertTrue(text.contains(ConverterText.whoConverts), "the core's sentence")
+        XCTAssertTrue(text.contains(ConverterText.matchedValues), "the core's sentence")
+        XCTAssertFalse(text.contains("converts first"), text)
+        XCTAssertFalse(text.contains("converts the ARW files"), text)
         XCTAssertFalse(text.contains("the two tools"), text)
-        XCTAssertTrue(text.contains("Install dnglab with: \(ToolLocator.dnglabInstallCommand)"),
-                      "the command is the core's constant")
+    }
+
+    // Control-C, and the Terminal window that closes (the tool takes the
+    // hangup signal). The result so far is still printed.
+    func testHelpSaysThatAClosedTerminalWindowStopsARunLikeControlC() {
+        h.run("--help")
+        let text = h.out.lines.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: " ")
+        XCTAssertTrue(text.contains("Control-C, or a closed Terminal window, stops a run after the current file, "
+            + "and the result so far is still printed."), text)
+    }
+
+    // The core makes the sentences, and the help only wraps them. A word is
+    // never cut, and no line is wider than the rule.
+    func testWrappedBreaksAtSpacesAndNeverCutsAWord() {
+        let text = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen " +
+            "sixteen seventeen eighteen nineteen twenty"
+        let lines = Usage.wrapped(text).split(separator: "\n").map(String.init)
+        XCTAssertGreaterThan(lines.count, 1)
+        XCTAssertEqual(lines.joined(separator: " "), text)
+        XCTAssertTrue(lines.allSatisfy { $0.count <= Usage.helpWidth })
+        XCTAssertEqual(Usage.wrapped("short"), "short")
+        let longWord = String(repeating: "x", count: 100)
+        XCTAssertEqual(Usage.wrapped("a \(longWord) b"), "a\n\(longWord)\nb")
     }
 
     // The rule is one sentence in the core. The help shows it on one line.
@@ -65,7 +93,7 @@ final class CommandsTests: XCTestCase {
     func testHelpIsPlain() {
         h.run("--help")
         XCTAssertFalse(h.out.text.contains("!"))
-        XCTAssertEqual(h.out.lines.filter { $0.count > 80 }, [], "no line is over 80 columns")
+        XCTAssertEqual(h.out.lines.filter { $0.count >= 80 }, [], "every line is under 80 columns")
         // Sentence case: a heading has one capital, and the text starts with one.
         XCTAssertEqual(h.out.lines.filter { $0.hasSuffix(":") && !$0.hasPrefix(" ") },
                        ["Usage:", "Commands:", "Options:", "Exit codes:"])
@@ -344,8 +372,9 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual(Array(h.out.lines.suffix(4)), [
             "exiftool: /fake/bin/exiftool",
             "dnglab: /fake/bin/dnglab",
-            "Adobe DNG Converter: not installed (optional backup)",
-            "Adobe DNG Converter is not installed. Adobe DNG Converter is an optional backup for photos that dnglab cannot match.",
+            "Adobe DNG Converter: not installed",
+            "Adobe DNG Converter is not installed. "
+                + "Adobe DNG Converter is an optional backup for photos that dnglab cannot match.",
         ])
         XCTAssertFalse(h.out.text.contains("cannot be converted"), h.out.text)
     }
@@ -375,10 +404,11 @@ final class CommandsTests: XCTestCase {
 
         h.hasConverter = false
         XCTAssertEqual(h.run("scan", "Shoot 1"), 0, "a scan that completed gives 0, also with no converter")
-        XCTAssertEqual(Array(h.out.lines.suffix(4)), [
+        XCTAssertEqual(Array(h.out.lines.suffix(5)), [
             "exiftool: /fake/bin/exiftool",
             "dnglab: not installed",
-            "Adobe DNG Converter: not installed (optional backup)",
+            "Adobe DNG Converter: not installed",
+            "1 ARW cannot be converted: no converter is installed",
             "Install dnglab with: brew install dnglab",
         ])
     }

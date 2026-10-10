@@ -58,7 +58,7 @@ final class TextOutputTests: XCTestCase {
             "",
             "exiftool: /opt/homebrew/bin/exiftool",
             "dnglab: not installed",
-            "Adobe DNG Converter: not installed (optional backup)",
+            "Adobe DNG Converter: not installed",
         ])
     }
 
@@ -84,8 +84,9 @@ final class TextOutputTests: XCTestCase {
         XCTAssertEqual(tools(dnglab: "/opt/homebrew/bin/dnglab", converter: nil), [
             "exiftool: /opt/homebrew/bin/exiftool",
             "dnglab: /opt/homebrew/bin/dnglab",
-            "Adobe DNG Converter: not installed (optional backup)",
-            "Adobe DNG Converter is not installed. Adobe DNG Converter is an optional backup for photos that dnglab cannot match.",
+            "Adobe DNG Converter: not installed",
+            "Adobe DNG Converter is not installed. "
+                + "Adobe DNG Converter is an optional backup for photos that dnglab cannot match.",
         ])
     }
 
@@ -98,13 +99,27 @@ final class TextOutputTests: XCTestCase {
         ])
     }
 
-    func testWithNeitherConverterAScanGivesTheInstallCommandOfDnglab() {
-        XCTAssertEqual(tools(dnglab: nil, converter: nil), [
+    // The scan says that the ARW files cannot be converted, then what to do
+    // about it. Before, the two "not installed" lines and the install line
+    // never said that the ARW files wait.
+    func testWithNeitherConverterAScanSaysThatTheARWFilesCannotConvertThenGivesTheInstallCommand() {
+        XCTAssertEqual(tools(arws: ["b.ARW", "c.ARW"], dnglab: nil, converter: nil), [
             "exiftool: /opt/homebrew/bin/exiftool",
             "dnglab: not installed",
-            "Adobe DNG Converter: not installed (optional backup)",
+            "Adobe DNG Converter: not installed",
+            "2 ARW cannot be converted: no converter is installed",
             "Install dnglab with: brew install dnglab",
         ])
+    }
+
+    // With no ARW pending, the ARW files are not the topic: no sentence, no
+    // advice. Nor does one converter make the sentence true.
+    func testTheSentenceAboutARWFilesThatCannotConvertNeedsAPendingARWAndNeitherConverter() {
+        XCTAssertEqual(tools(arws: [], dnglab: nil, converter: nil), [
+            "exiftool: /opt/homebrew/bin/exiftool", "dnglab: not installed", "Adobe DNG Converter: not installed",
+        ])
+        XCTAssertFalse(tools(dnglab: nil, converter: Self.adobe).joined().contains("cannot be converted"))
+        XCTAssertFalse(tools(dnglab: "/opt/homebrew/bin/dnglab", converter: nil).joined().contains("cannot be converted"))
     }
 
     // The advice is the core's line, so the window says the same words. With
