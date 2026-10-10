@@ -4,8 +4,7 @@ Date: 2026-10-05. Red-teamed 2026-10-09; section 2.1 holds the findings and
 each one's fix is in the body. Revised 2026-10-09 after the code reviews of
 the job and the window, and extended with section 12 (command line and MCP)
 and section 13 (dnglab first). Extended 2026-10-10 with section 14 (the
-originals to the Trash, on request). Status: approved by Dom. Sections 1 to
-13 are built.
+originals to the Trash, on request). Status: approved by Dom, and built.
 
 **How to read this document.** It grew in one week, and the later sections
 changed earlier decisions. Sections 12, 13 and 14 are the newest. Where they
@@ -942,8 +941,9 @@ condition.
   clear. Run it again after the run ends.
 - The match table's numbers were measured from files that Adobe DNG
   Converter wrote. The repo publishes them as measurements, as open-source
-  raw tools publish values of the same origin. Dom decides this before the
-  first public commit, and `docs/decisions.md` records it.
+  raw tools publish values of the same origin. Dom decided this on
+  2026-10-10, before the first public commit, and `docs/decisions.md`
+  records it.
 
 ## 14. The originals to the Trash, on request
 
