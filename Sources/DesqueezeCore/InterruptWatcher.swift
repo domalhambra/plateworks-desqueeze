@@ -2,8 +2,9 @@ import Foundation
 
 /// Sets a flag at a signal, so a run stops after its current file.
 ///
-/// The command line tool takes Control-C and a plain `kill` this way. The
-/// MCP server takes the signals with which a client stops it (design 12.2).
+/// The command line tool takes Control-C, a plain `kill`, and the `SIGHUP`
+/// of a Terminal window that closes this way. The MCP server takes the
+/// signals with which a client stops it (design 12.2).
 ///
 /// exiftool and the converter normally do not get the Control-C. Checked on
 /// this Mac (macOS 27): `Process` starts each program as the leader of a
@@ -24,6 +25,9 @@ import Foundation
 /// pins the group. `InterruptTests` does not pin the group. It pins the
 /// result: the run stops after its current file, and no file is damaged.
 /// A plain `kill` (SIGTERM) goes to the tool alone, and is taken the same way.
+/// So is `SIGHUP`: the tool goes on to the end of its current file, also
+/// when its window is gone, and then stops. What it prints after that goes
+/// nowhere, and a write that fails is not an error (`SIGPIPE` is ignored).
 ///
 /// **What a caller must know**
 ///
@@ -42,7 +46,8 @@ public final class InterruptWatcher: @unchecked Sendable {
     private var sources: [DispatchSourceSignal] = []
 
     /// - Parameters:
-    ///   - signals: the signals to take, for example `[SIGINT, SIGTERM]`.
+    ///   - signals: the signals to take, for example
+    ///     `[SIGINT, SIGTERM, SIGHUP]`.
     ///     Each one stays ignored for the rest of the process.
     ///   - onFirst: called once, at the first signal, and only when the
     ///     flag is not set by then.

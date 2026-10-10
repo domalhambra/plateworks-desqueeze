@@ -1,7 +1,8 @@
 import DesqueezeCore
 import XCTest
 
-/// Control-C on the built tool, in the middle of a real run.
+/// A signal to the built tool, in the middle of a real run: Control-C, and
+/// the `SIGHUP` of a Terminal window that closes.
 final class InterruptTests: BuiltToolTestCase {
     static let fileCount = 8
 
@@ -17,6 +18,30 @@ final class InterruptTests: BuiltToolTestCase {
     }
 
     func testControlCStopsAfterTheCurrentFilePrintsTheResultSoFarAndGivesOne() throws {
+        try assertTheRunStopsAfterItsCurrentFile(allowedSignal: SIGINT) { interrupt($0) }
+    }
+
+    // A Terminal window that closes sends SIGHUP. With the system's action
+    // the tool would end at once, in the middle of a file. The signal goes
+    // to the tool alone, by the process id of the process that this test
+    // started, so no exiftool gets it and no file may fail.
+    func testAClosedTerminalWindowStopsTheRunAfterItsCurrentFile() throws {
+        try assertTheRunStopsAfterItsCurrentFile(allowedSignal: nil) { process in
+            XCTAssertTrue(process.isRunning)
+            XCTAssertEqual(kill(process.processIdentifier, SIGHUP), 0)
+        }
+    }
+
+    /// Starts a run on eight DNG files, sends the signal after the first
+    /// file, and checks that the run stopped after its current file with
+    /// every file whole.
+    ///
+    /// - Parameters:
+    ///   - allowedSignal: the signal that one program in work may have got,
+    ///     when the signal went to the tool's group. Nil when it went to the
+    ///     tool alone: no file may fail then.
+    ///   - send: sends the signal to the tool that this test started.
+    func assertTheRunStopsAfterItsCurrentFile(allowedSignal: Int32?, send: (Process) -> Void) throws {
         for number in 1...Self.fileCount { try copyFixture("sample.dng", as: "photo \(number).dng") }
 
         let process = process(["run", folder.path, "--factor", "1.5", "--json"])
@@ -28,7 +53,7 @@ final class InterruptTests: BuiltToolTestCase {
                 usleep(2_000)
             }
             sawProgress = standardError().contains("1/\(Self.fileCount) ")
-            interrupt(process)
+            send(process)
         }
         XCTAssertTrue(sawProgress, "the run did not start: \(result.stderr)")
 
@@ -42,19 +67,22 @@ final class InterruptTests: BuiltToolTestCase {
         XCTAssertLessThan(set, Self.fileCount, "the run must stop before the last file")
         XCTAssertTrue(result.messages.contains("Stopping after the current file."), result.stderr)
 
-        // The tools normally do not get the Control-C. One that is just
-        // starting can (design 12.1). That one file is then `failed`, its
-        // detail names signal 2, and it is left as it was. Nothing else may
-        // fail: not a second file, and not for another reason.
+        // The tools normally do not get a signal that went to the tool's
+        // group. One that is just starting can (design 12.1). That one file
+        // is then `failed`, its detail names the signal, and it is left as
+        // it was. Nothing else may fail: not a second file, and not for
+        // another reason.
         XCTAssertEqual(failed, notes.count, "every failed file has its note")
-        XCTAssertLessThanOrEqual(failed, 1, "at most one program was just starting: \(notes)")
+        XCTAssertLessThanOrEqual(failed, allowedSignal == nil ? 0 : 1,
+                                 "at most one program was just starting, and none when the tool alone got the signal: \(notes)")
         var failedName: String?
-        if let note = notes.first {
+        if let note = notes.first, let allowedSignal {
             failedName = note["name"] as? String
             XCTAssertEqual(note["kind"] as? String, "failed")
             let detail = try XCTUnwrap(note["detail"] as? String)
             // With its period: "signal 20" to "signal 29" must not pass.
-            XCTAssertTrue(detail.contains("signal 2."), "the only allowed failure is signal 2: \(detail)")
+            XCTAssertTrue(detail.contains("signal \(allowedSignal)."),
+                          "the only allowed failure is signal \(allowedSignal): \(detail)")
         }
 
         // Each file is whole: set and checked with its backup gone, or not

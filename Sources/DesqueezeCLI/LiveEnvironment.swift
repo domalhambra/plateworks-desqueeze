@@ -27,7 +27,7 @@ extension ToolEnvironment {
             interruptFlag: {
                 // The watcher lives as long as the process: the run that asked
                 // for it is the last thing the tool does.
-                let watcher = InterruptWatcher(signals: [SIGINT, SIGTERM]) {
+                let watcher = InterruptWatcher(signals: stopSignals) {
                     standardError("Stopping after the current file.")
                 }
                 return Unmanaged.passRetained(watcher).takeUnretainedValue().flag
@@ -35,6 +35,12 @@ extension ToolEnvironment {
             standardOutput: { write($0, to: .standardOutput) },
             standardError: standardError)
     }
+
+    /// The signals that stop a run after its current file: Control-C, a
+    /// plain `kill`, and the `SIGHUP` of a Terminal window that closes. With
+    /// the system's action for `SIGHUP`, the tool would end in the middle of
+    /// a file.
+    static let stopSignals = [SIGINT, SIGTERM, SIGHUP]
 
     fileprivate static func write(_ text: String, to handle: FileHandle) {
         // A closed pipe is not worth a crash.
