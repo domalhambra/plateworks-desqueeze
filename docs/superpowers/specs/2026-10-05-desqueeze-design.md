@@ -509,8 +509,9 @@ desqueeze --help
   file, or a package such as an app, is not a folder: exit 1.
 - Exit code 0: the command completed, no file failed, and no file was
   blocked. Exit code 1: a file failed or was blocked, the run was stopped, the
-  folder could not be scanned, a run or a dry run met a read-only folder, or
-  exiftool is missing. Exit code 2: a usage error.
+  folder could not be scanned, a run or a dry run met a read-only folder,
+  another run is working in the folder (13.9), or exiftool is missing. Exit
+  code 2: a usage error.
 - `scan` exits 0 whenever the scan completed, also for a read-only folder: the
   report says `"writable": false`.
 - When a command fails with no report to print, `--json` prints one object,
