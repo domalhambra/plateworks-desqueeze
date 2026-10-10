@@ -12,8 +12,8 @@ factors. The photos are squeezed. A DNG file can carry a `DefaultScale`
 tag, and Lightroom and Camera Raw stretch the image by that tag when they render
 it. No pixels change, and the tag is reversible.
 
-Until now Dom wrote the tag with six terminal steps
-(`~/My Drive/To file/dng-desqueeze-guide.md`). Desqueeze is one Mac window that
+Until now Dom wrote the tag with six terminal steps, from a guide of his own.
+Desqueeze is one Mac window that
 does the same job: drop a folder, pick a factor, run.
 
 **Done for version 1:** Dom drops a shoot folder on the window, picks a factor,
@@ -99,8 +99,8 @@ until Dom asks for it.
 | A bundled dnglab | dnglab is the first converter since 2026-10-09 (section 13). Version 1 finds the one Homebrew installed. A shipped app must carry its own. |
 | A match table for cameras other than the A7S III | Section 13 has one measured row. Each other camera needs its own. |
 | Code signing and notarization | Needed only for other people's Macs. |
-| Brand marks, accent color, app icon art | `00_Resources/brand-marks.md` and `00_Resources/color-standards.md` govern them. Version 1 uses system colors and the system font. |
-| Register row in `00_Resources/plateworks-principles.md` | A register belongs to a published property. |
+| Brand marks, accent color, app icon art | The Plateworks brand standards, kept outside this repo, govern them. Version 1 uses system colors and the system font. |
+| A register row in the Plateworks principles | A register belongs to a published property. |
 | Privacy page | Same reason. |
 | Subfolder scan | Shoot folders hold `Exports` and `CaptureOne` subfolders that must stay untouched. |
 | Folder drop on the Dock icon | The window drop does the job. |
@@ -172,7 +172,7 @@ Then the run does these steps in order. One file at a time.
 1. **Convert.** For each pending ARW, call Adobe DNG Converter:
 
    ```
-   "<Adobe DNG Converter>" -c -d <folder> <file.ARW>
+   "<Adobe DNG Converter>" -c -d <folder> -o <work file name> <file.ARW>
    ```
 
    The conversion passes when the exit code is 0 and `<base>.dng` exists. Both
@@ -414,15 +414,22 @@ a detail line below the plain sentence.
 
 ## 10. Documentation and filing
 
-- Documentation tier: Floor, plus `PROJECT_CHARTER.md`
-  (`00_Resources/documentation-standard.md`). The docs check is vendored to
-  `scripts/docs_check.py` and run by a test, as Undercurrent does.
-- Workspace filing: a row in `00.00 JDex.md` and a `local` row in the
-  allowlist ledger at charter time. The Projects row in the workspace
-  `CLAUDE.md`, the repository row in `00_Resources/system-architecture.md`, and
-  the section in the workspace docs index land with this repo's own
-  `CLAUDE.md`.
-- GitHub: `plateworks-desqueeze`, private. Created when Dom confirms.
+Revised 2026-10-09. The first version of this section said Floor tier and a
+private repo.
+
+- Documentation tier: Medium, plus `PROJECT_CHARTER.md`, by the Plateworks
+  documentation standard, which is kept outside this repo. The standard's
+  check is copied to `scripts/docs_check.py` and run by a test. The copy
+  names no path outside the repo.
+- License: MIT. Copyright Plateworks.
+- The repo carries what an open-source repo carries: `CONTRIBUTING.md`,
+  `SECURITY.md`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`, and issue and
+  pull-request templates.
+- A documentation site is built from a DocC catalog in the core package.
+- GitHub: `plateworks-desqueeze`, public. It starts with one first commit of
+  the cleaned files.
+- No document, comment or test in the repo names a path on the maintainer's
+  Mac or a private repository.
 
 ## 11. Decisions
 

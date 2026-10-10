@@ -28,16 +28,13 @@ file.
 | `superpowers/specs/2026-10-05-desqueeze-design.md` | You change any behavior. It is the contract: the scan, the factor, the run, the window, the errors, the command line tool, the MCP server, and the converters. Sections 12 and 13 are the newest, and they win where they differ from an earlier section. Section 2.1 records what was tested by hand. |
 | `superpowers/plans/2026-10-09-desqueeze-v1.md` | You want to know how version 1 was built, task by task. It is history. Its code blocks are the first version of each file, not the code as it is now. |
 
-Three files in those folders are not Markdown:
+Two files in those folders are not Markdown:
 
 - `superpowers/specs/2026-10-09-ilce-7sm3-adobe-values.json` is the data file
   of the match table: the values that Adobe DNG Converter wrote for the Sony
   A7S III at 23 ISO settings. The table in
   `Sources/DesqueezeCore/AdobeMatch.swift` is a copy of it, and a unit test
   fails when the two differ.
-- `superpowers/specs/2026-10-09-adobe-vs-dnglab-render.png` is the render
-  comparison that section 2.1 of the design describes: one frame, converted
-  by both converters, the two renders side by side.
 - `superpowers/plans/2026-10-09-desqueeze-v1.md.tasks.json` is the task list
   of the plan, as data.
 
