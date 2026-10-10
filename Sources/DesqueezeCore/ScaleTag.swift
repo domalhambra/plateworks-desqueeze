@@ -6,7 +6,7 @@ public struct Scale: Equatable, Sendable {
     public let horizontal: Double
     public let vertical: Double
 
-    /// No stretch: 1 and 1. A DNG that the converter just made holds this.
+    /// No stretch: 1 and 1. A DNG that a converter just made holds this.
     public static let noStretch = Scale(horizontal: 1, vertical: 1)
 
     public init(horizontal: Double, vertical: Double) {

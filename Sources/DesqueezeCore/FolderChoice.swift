@@ -17,8 +17,10 @@ public enum FolderChoice {
     }
 
     /// Why `folder(at:)` gives nil for `url`: one sentence for a person.
-    /// Every front end says these words after the path, so a file, a
-    /// package and a path with nothing at it read the same everywhere.
+    /// The command line tool and the MCP server say these words after the
+    /// path, so a file, a package and a path with nothing at it read the
+    /// same in both. The window does not: it says "Drop a folder" for each
+    /// of the three.
     public static func whyNotAFolder(_ url: URL) -> String {
         let resolved = url.resolvingSymlinksInPath()
         guard FileManager.default.fileExists(atPath: resolved.path) else { return "Nothing is at this path." }

@@ -6,7 +6,9 @@ public struct DNGFile: Equatable, Sendable {
     /// The current `DefaultScale`. Nil when it is not known: exiftool gave no
     /// value, or no row, for this file. Unknown is not "no stretch".
     public var scale: Scale?
-    /// The source file name that the converter recorded, when it did.
+    /// The source file name that the DNG records in `OriginalRawFileName`,
+    /// when it has one. Adobe DNG Converter writes it, and the app writes it
+    /// into each DNG that dnglab makes.
     public var originalRawFileName: String?
     /// True when `<name>_original` was beside the file at scan time.
     public var hasBackup: Bool

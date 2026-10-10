@@ -30,6 +30,8 @@ import Foundation
 /// program took the name `<base>.dng` while the converter worked, or a
 /// leftover file is in the way: `<base>.dng_exiftool_tmp`, a work file that
 /// the Trash refused, or a folder or a link at the name of the work file.
+/// Or the name of the work file would be longer than a file name can be
+/// (design 13.9).
 /// The ARW is then failed with that converter's words, and the next
 /// converter does not start. The same holds when the Trash refuses the work
 /// file of a failed conversion: a work file that cannot be removed stops
@@ -70,7 +72,8 @@ public struct DesqueezeJob: Sendable {
     /// - Parameter backups: where a backup goes after a write that passed its
     ///   check, and where the partial output of a failed conversion goes. There
     ///   is no default, so no caller reaches the Trash by
-    ///   leaving it out. The window and the tool name the Trash themselves.
+    ///   leaving it out. Each of the three front ends names the Trash
+    ///   itself.
     /// - Parameter lock: the lock that keeps a second run out of the folder.
     ///   The default is the system's. It makes no file and reaches nothing
     ///   outside the folder, so every front end takes it by leaving it out.

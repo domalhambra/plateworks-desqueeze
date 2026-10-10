@@ -31,8 +31,9 @@ public struct DesqueezeOperations: Sendable {
     ///   - backups: where a backup goes after a write that passed its check,
     ///     and where the partial output of a failed conversion and the
     ///     leftover work file of an earlier run go. There is no default, so
-    ///     no caller reaches the Trash by leaving it out. The window and the
-    ///     tool name the Trash themselves.
+    ///     no caller reaches the Trash by leaving it out. The command line
+    ///     tool and the MCP server name the Trash themselves, as the window
+    ///     does for its own job.
     ///   - verbose: gets one line for each leftover work file that a
     ///     converter removed before it started: `Removed a leftover work
     ///     file: <name>`. Give it the sink of the `LoggingProcessRunner`.
@@ -86,8 +87,10 @@ public struct DesqueezeOperations: Sendable {
     ///   - dryRun: true changes no file, and the report has the steps.
     ///   - cancel: stops the run after its current file, when it is set.
     ///   - progress: called after each step of a real run.
-    /// - Throws: only when the folder cannot be scanned. No file is changed
-    ///   then. A file that fails is a note in the report.
+    /// - Throws: `FolderLock.Busy` when another run works in the folder,
+    ///   for a real run only: a dry run takes no lock (design 13.9). Any
+    ///   other error only when the folder cannot be scanned. No file is
+    ///   changed then. A file that fails is a note in the report.
     public func run(
         _ folder: URL,
         factor: SqueezeFactor,
@@ -101,7 +104,7 @@ public struct DesqueezeOperations: Sendable {
     }
 
     /// Design 4.3 with factor 1 and no conversion. It reports no ARW files
-    /// left: Remove has no ARW work.
+    /// left: Remove has no ARW work. It throws as `run` does.
     public func remove(
         _ folder: URL,
         dryRun: Bool = false,

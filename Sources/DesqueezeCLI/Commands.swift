@@ -150,7 +150,7 @@ public enum DesqueezeTool {
             // MCP server say the same.
             return fail(FolderLock.busyMessage, detail: nil, invocation, environment)
         } catch {
-            // Only a scan throws. No file was tried.
+            // Every other error is a scan that failed. No file was tried.
             return fail(FolderText.unreadable(path: url.path), detail: describe(error), invocation, environment)
         }
     }

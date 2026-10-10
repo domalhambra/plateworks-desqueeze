@@ -1,10 +1,11 @@
 import Foundation
 
-/// Everything the window and the job need to know about one folder.
+/// Everything a front end and the job need to know about one folder.
 public struct FolderSnapshot: Equatable, Sendable {
     public let folder: URL
     public var dngs: [DNGFile]
-    /// The ARW files that no DNG claims. Only these may go to the converter.
+    /// The ARW files that no DNG claims. Only these may go to a converter:
+    /// dnglab, or Adobe DNG Converter.
     public var pendingARWs: [URL]
     /// Each `<name>.dng_original` whose DNG is not beside it. exiftool leaves
     /// one when it stops between its two renames. It may be the only copy of

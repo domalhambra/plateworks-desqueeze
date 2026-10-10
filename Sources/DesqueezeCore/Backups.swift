@@ -29,7 +29,8 @@ public struct FileBackups: BackupHandling {
     }
 
     /// Backups that move a discarded file to the real Trash. The window
-    /// and the command line tool name it. No test does.
+    /// names it, and `fromEnvironment` gives it to the command line tool and
+    /// to the MCP server. No test does.
     public static let systemTrash = FileBackups(trash: {
         try FileManager.default.trashItem(at: $0, resultingItemURL: nil)
     })
@@ -107,7 +108,7 @@ extension FileBackups {
         public static let detail = "It is for tests only. Unset it, then run again."
     }
 
-    /// The backups for a command line tool.
+    /// The backups for the command line tool and for the MCP server.
     ///
     /// - Parameter environment: the environment of the process.
     /// - Returns: with no variable, backups that go to the Trash, and a nil

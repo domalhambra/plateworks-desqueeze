@@ -76,7 +76,7 @@ public struct SqueezeFactor: Equatable, Hashable, Sendable {
     }
 
     /// An unknown scale matches no factor. So a file that gave no value is
-    /// never counted as "already set", for Apply or for Remove.
+    /// never counted as "already at this value", for a run or for Remove.
     public func matches(_ scale: Scale?) -> Bool {
         guard let scale else { return false }
         return matches(horizontal: scale.horizontal, vertical: scale.vertical)

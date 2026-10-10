@@ -6,7 +6,7 @@ import Foundation
 /// of a Terminal window that closes this way. The MCP server takes the
 /// signals with which a client stops it (design 12.2).
 ///
-/// exiftool and the converter normally do not get the Control-C. Checked on
+/// exiftool and the converters normally do not get the Control-C. Checked on
 /// this Mac (macOS 27): `Process` starts each program as the leader of a
 /// process group of its own, so its group id is its own process id and not the
 /// tool's. A terminal sends Control-C to the foreground group, which holds the
