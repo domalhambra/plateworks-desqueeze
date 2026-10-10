@@ -46,7 +46,7 @@ New specs go in `docs/superpowers/specs/` and get a row in `docs/README.md`.
 - A behavioral test counts only after it fails against a break.
 - Never test on a real shoot folder. Copy it first.
 - No test reaches the real Trash or the saved settings. `FileBackups` takes the trash function as a parameter, and a built tool takes `DESQUEEZE_TEST_BACKUP_FOLDER`.
-- The window's tests have no app host, so they start no app. For a check by hand, start the app with `-openFolder <path>`, `-simulateMissingTools YES`, `-simulateMissingConverter YES`, `-simulateMissingDnglab YES`, or `-simulateMissingAdobe YES`.
+- The window's tests have no app host, so they start no app. For a check by hand, start the app with `-openFolder <path>`, `-simulateMissingTools YES`, `-simulateMissingDnglab YES`, or `-simulateMissingAdobe YES`. The last two together hide both converters.
 - `scripts/docs_check.py` is a copy of the documentation standard's check. Its header comment differs, and it has no skip rule for paths outside the repo. Never edit its checks here.
 - Commit messages: `area: what changed`, a lower-case start, no period.
 

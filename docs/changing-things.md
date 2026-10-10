@@ -271,9 +271,9 @@ saved settings.
 |---|---|
 | `-openFolder <path>` | The folder, loaded at launch. Use a copy of a shoot folder. |
 | `-simulateMissingTools YES` | The window on a Mac with no exiftool and no converter |
-| `-simulateMissingConverter YES` | The window with exiftool and with neither converter |
 | `-simulateMissingDnglab YES` | The window with no dnglab |
 | `-simulateMissingAdobe YES` | The window with no Adobe DNG Converter |
+| The last two together | The window with exiftool and with neither converter |
 
 The arguments are in `LaunchOptions`, at the end of
 `App/PlateworksDesqueeze/AppModel.swift`. Design 9 has the full acceptance

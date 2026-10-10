@@ -490,17 +490,13 @@ struct LaunchOptions: Equatable {
     /// places, so a rename of one proves nothing.
     var hidesExiftool: Bool
     /// `-simulateMissingAdobe YES` shows the window as it is on a Mac with
-    /// no Adobe DNG Converter. `-simulateMissingConverter` and
-    /// `-simulateMissingTools` hide it too.
+    /// no Adobe DNG Converter. `-simulateMissingTools` hides it too.
     var hidesAdobe: Bool
     /// `-simulateMissingDnglab YES` shows the window as it is on a Mac with
-    /// no dnglab. `-simulateMissingConverter` and `-simulateMissingTools`
-    /// hide it too.
-    var hidesDnglab: Bool
-    /// True when both converters are hidden. `-simulateMissingConverter YES`
-    /// does that: the window as it is on a Mac with exiftool and with no
+    /// no dnglab. `-simulateMissingTools` hides it too. Both arguments
+    /// together show the window as it is with exiftool and with neither
     /// converter.
-    var hidesConverter: Bool { hidesAdobe && hidesDnglab }
+    var hidesDnglab: Bool
     /// `-openFolder <path>` loads a folder at launch. The standard Open panel
     /// runs in another process that a test script cannot drive, so checks by
     /// hand and by script start here.
@@ -511,9 +507,8 @@ struct LaunchOptions: Equatable {
     init(arguments: [String: Any]) {
         func isOn(_ key: String) -> Bool { (arguments[key] as? NSString)?.boolValue ?? false }
         hidesExiftool = isOn("simulateMissingTools")
-        let hidesBoth = hidesExiftool || isOn("simulateMissingConverter")
-        hidesAdobe = hidesBoth || isOn("simulateMissingAdobe")
-        hidesDnglab = hidesBoth || isOn("simulateMissingDnglab")
+        hidesAdobe = hidesExiftool || isOn("simulateMissingAdobe")
+        hidesDnglab = hidesExiftool || isOn("simulateMissingDnglab")
         openFolder = arguments["openFolder"] as? String
     }
 }

@@ -659,52 +659,45 @@ final class AppModelTests: XCTestCase {
 
     // MARK: The launch arguments
 
-    // "The converter" is both converters: dnglab, and Adobe DNG Converter.
-    func testSimulateMissingConverterHidesBothConvertersAndNotExiftool() {
-        let options = LaunchOptions(arguments: ["simulateMissingConverter": "YES"])
-        XCTAssertTrue(options.hidesConverter)
-        XCTAssertTrue(options.hidesAdobe)
-        XCTAssertTrue(options.hidesDnglab)
-        XCTAssertFalse(options.hidesExiftool)
-        XCTAssertNil(options.openFolder)
-    }
-
     func testSimulateMissingAdobeHidesAdobeDNGConverterAlone() {
         let options = LaunchOptions(arguments: ["simulateMissingAdobe": "YES"])
         XCTAssertTrue(options.hidesAdobe)
-        XCTAssertFalse(options.hidesDnglab)
-        XCTAssertFalse(options.hidesConverter, "dnglab is there, so a converter is there")
+        XCTAssertFalse(options.hidesDnglab, "dnglab is there, so a converter is there")
         XCTAssertFalse(options.hidesExiftool)
+        XCTAssertNil(options.openFolder)
     }
 
     func testSimulateMissingDnglabHidesDnglabAlone() {
         let options = LaunchOptions(arguments: ["simulateMissingDnglab": "YES"])
         XCTAssertTrue(options.hidesDnglab)
-        XCTAssertFalse(options.hidesAdobe)
-        XCTAssertFalse(options.hidesConverter, "Adobe DNG Converter is there, so a converter is there")
+        XCTAssertFalse(options.hidesAdobe, "Adobe DNG Converter is there, so a converter is there")
         XCTAssertFalse(options.hidesExiftool)
     }
 
-    func testTheTwoArgumentsTogetherHideBothConverters() {
+    // The window with exiftool and with neither converter is the two
+    // arguments together. No third argument hides both.
+    func testTheTwoArgumentsTogetherHideBothConvertersAndNotExiftool() {
         let options = LaunchOptions(arguments: ["simulateMissingAdobe": "YES", "simulateMissingDnglab": "YES"])
-        XCTAssertTrue(options.hidesConverter)
+        XCTAssertTrue(options.hidesAdobe)
+        XCTAssertTrue(options.hidesDnglab)
         XCTAssertFalse(options.hidesExiftool)
     }
 
     func testSimulateMissingToolsHidesEveryTool() {
         let options = LaunchOptions(arguments: ["simulateMissingTools": "YES"])
-        XCTAssertTrue(options.hidesConverter)
         XCTAssertTrue(options.hidesAdobe)
         XCTAssertTrue(options.hidesDnglab)
         XCTAssertTrue(options.hidesExiftool)
     }
 
     func testWithNoLaunchArgumentNoToolIsHiddenAndNoFolderLoads() {
-        let off: [String: Any] = ["simulateMissingConverter": "NO", "simulateMissingTools": "NO",
-                                  "simulateMissingAdobe": "NO", "simulateMissingDnglab": "NO"]
-        for arguments: [String: Any] in [[:], off] {
+        let off: [String: Any] = ["simulateMissingTools": "NO", "simulateMissingAdobe": "NO",
+                                  "simulateMissingDnglab": "NO"]
+        // An argument that the app does not have hides nothing. The app had
+        // `-simulateMissingConverter` once.
+        let unknown: [String: Any] = ["simulateMissingConverter": "YES"]
+        for arguments: [String: Any] in [[:], off, unknown] {
             let options = LaunchOptions(arguments: arguments)
-            XCTAssertFalse(options.hidesConverter)
             XCTAssertFalse(options.hidesAdobe)
             XCTAssertFalse(options.hidesDnglab)
             XCTAssertFalse(options.hidesExiftool)
