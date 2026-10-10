@@ -656,6 +656,45 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertEqual(try names(in: folder), ["1.dng", "2.dng"], "no backup is left")
     }
 
+    // Two calls, and the client goes away during the first. The run in work
+    // completes and is answered. The call that waited for it does not
+    // start: its folder is as it was, to the byte and to the date. A server
+    // that closes its queue only when no call is in work runs the second
+    // call for nobody: this test fails against that (seen 2026-10-10).
+    func testAtTheEndOfInputACallThatWaitsForTheRunInWorkDoesNotStart() throws {
+        try requireFixturesAndTools()
+        try makeDNGs(4)
+        let second = base.appendingPathComponent("Second shoot")
+        try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+        for name in ["1.dng", "2.dng"] {
+            try FileManager.default.copyItem(at: Self.fixtures.appendingPathComponent("sample.dng"),
+                                             to: second.appendingPathComponent(name))
+        }
+        let before = try state(of: second)
+        let server = try start()
+
+        let run = try server.send("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5],
+                                                         progressToken: "first"))
+        // The first step is complete, so the run is in work, with three
+        // files to go.
+        let firstStep = try server.nextMessage(timeout: ServerProcess.longWait)
+        XCTAssertEqual(firstStep["method"] as? String, "notifications/progress", "\(firstStep)")
+        let waiting = try server.send("tools/call", toolCall("desqueeze_run", ["folder": second.path, "factor": 2]))
+        server.closeInput()
+
+        let result = try toolResult(server, id: run)
+        XCTAssertEqual(counts(try result.json()), [0, 4, 0, 0, 0, 0], "the run in work completes")
+        XCTAssertEqual(server.waitForExit(timeout: ServerProcess.longWait), 0)
+        XCTAssertTrue(server.waitForEndOfOutput())
+        let answered = try server.outputLines.compactMap { line -> Int? in
+            (try JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any])?["id"] as? Int
+        }
+        XCTAssertFalse(answered.contains(waiting), "the call that waited got an answer: \(server.outputLines)")
+        XCTAssertEqual(try state(of: second), before, "the call that waited changed its folder")
+        XCTAssertEqual(try names(in: second), ["1.dng", "2.dng"])
+        XCTAssertEqual(try scales().values.sorted(), Array(repeating: "1.5 1", count: 4))
+    }
+
     // The idle rule, with the real server. The client goes away during a
     // run that lasts longer than the 2 seconds for which the server waits
     // for an answer that no call is working on. The answer still arrives

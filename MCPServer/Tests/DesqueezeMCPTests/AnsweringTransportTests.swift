@@ -268,9 +268,18 @@ final class AnsweringTransportTests: XCTestCase {
         try await eventually("the stream ends", timeout: 2) { events.has("stream ended") }
     }
 
+    /// How long a test gives the transport to see the end of input, when
+    /// nothing shows that it has. Far longer than the transport needs.
+    static let timeForTheEndOfInput: Duration = .milliseconds(500)
+
     // The client has gone. The call in work completes and is answered. The
     // call that waits does not start, gets no answer, and does not hold the
     // program open: a wait for the patience, 30 seconds here, fails the test.
+    //
+    // The transport alone closes the queue here, and it must do so while
+    // the first call is in work. A transport that closes the queue only
+    // when the queue is idle lets the second call start after the client
+    // has gone: this test fails against that (seen 2026-10-10).
     func testAtTheEndOfInputACallThatWaitsDoesNotStart() async throws {
         let pipe = FakePipe(writeTime: .milliseconds(1))
         let queue = CallQueue()
@@ -299,16 +308,20 @@ final class AnsweringTransportTests: XCTestCase {
             events.add(result == nil ? "second did no work" : "second worked")
         }
         pipe.endInput()
-        // The transport closes the queue at the end of input: the test
-        // above shows it. Here the first call holds the queue, so no call
-        // can ask whether it is closed yet. The test closes it too, which
-        // changes nothing in a closed queue, and that fixes the order:
-        // closed first, then the first call completes.
-        queue.close()
+        // The first call holds the queue, so no call can ask whether the
+        // queue is closed yet. The test does not close it: that is the
+        // transport's work, and the thing in test. It gives the transport
+        // a fixed time for the end of input, and then lets the first call
+        // complete.
+        try await Task.sleep(for: Self.timeForTheEndOfInput)
         gate.signal()
 
-        try await eventually("the stream ends") { events.has("stream ended") && events.has("second did no work") }
-        XCTAssertFalse(events.has("second starts"), "\(events.all)")
+        try await eventually("the second call ends") {
+            events.has("second did no work") || events.has("second worked")
+        }
+        XCTAssertFalse(events.has("second starts"), "a call started after the client had gone: \(events.all)")
+        XCTAssertTrue(events.has("second did no work"), "\(events.all)")
+        try await eventually("the stream ends") { events.has("stream ended") }
         XCTAssertLessThan(try XCTUnwrap(events.all.firstIndex(of: "first answered")),
                           try XCTUnwrap(events.all.firstIndex(of: "stream ended")), "\(events.all)")
         let lines = await pipe.lines
