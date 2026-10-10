@@ -7,9 +7,10 @@ final class TextOutputTests: XCTestCase {
     let folder = URL(fileURLWithPath: "/Volumes/Card/Shoot 1")
 
     func scan(dngs: [ScanReport.DNG] = [], arws: [String] = [], orphans: [String] = [], writable: Bool = true,
+              dnglab: String? = nil,
               converter: String? = "/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter")
         -> ScanReport {
-        ScanReport(folder: folder.path, writable: writable, exiftool: "/opt/homebrew/bin/exiftool",
+        ScanReport(folder: folder.path, writable: writable, exiftool: "/opt/homebrew/bin/exiftool", dnglab: dnglab,
                    dngConverter: converter, dngs: dngs, pendingARWs: arws, orphanBackups: orphans)
     }
 
@@ -57,6 +58,16 @@ final class TextOutputTests: XCTestCase {
         ])
     }
 
+    // "ARW files cannot be converted" is false when dnglab is installed, so
+    // the sentence does not show then.
+    func testAScanWithDnglabAndNoAdobeDoesNotSayThatARWFilesCannotBeConverted() {
+        let lines = TextOutput.scan(scan(arws: ["b.ARW"], dnglab: "/opt/homebrew/bin/dnglab", converter: nil))
+        XCTAssertEqual(lines.last, "Adobe DNG Converter: not installed.")
+        XCTAssertFalse(lines.contains { $0.contains("cannot be converted") }, "\(lines)")
+        XCTAssertEqual(TextOutput.scan(scan(arws: ["b.ARW"], dnglab: nil, converter: nil)).last,
+                       "Adobe DNG Converter: not installed. ARW files cannot be converted.")
+    }
+
     func testAScanOfAnEmptyFolderSaysSo() {
         XCTAssertEqual(Array(TextOutput.scan(scan()).prefix(4)), [
             "/Volumes/Card/Shoot 1",
@@ -101,7 +112,7 @@ final class TextOutputTests: XCTestCase {
 
     func testARunShowsTheLineOfTheWindowThenOneLineForEachNote() {
         let report = RunReport(folder: folder, factor: SqueezeFactor(1.5)!, summary: summary {
-            $0.converted = 1
+            $0.convertedByAdobe = 1
             $0.set = 3
             $0.notes = [
                 .orphanBackup(named: "lost.dng_original"),
@@ -141,13 +152,35 @@ final class TextOutputTests: XCTestCase {
         ])
     }
 
+    // A DNG with no full match has a note as every other file has: the
+    // line, then the reason below it. Its sentences are the core's.
+    func testARunShowsTheNoteOfADNGWithNoFullMatch() {
+        let report = RunReport(folder: folder, factor: SqueezeFactor(1.5)!, summary: summary {
+            $0.convertedByDnglab = 1
+            $0.set = 1
+            $0.notes = [FileNote(
+                name: "frame.dng", kind: .convertedUnmatched,
+                message: "Converted. The DNG has no built-in lens correction. "
+                    + "Install Adobe DNG Converter for the same file that Lightroom makes.",
+                detail: "The ARW holds lens-correction data, and dnglab does not write it into the DNG.")]
+        })
+        XCTAssertEqual(TextOutput.run(report, converterInstalled: true), [
+            "1 converted · 1 set · 0 skipped · 0 failed",
+            "frame.dng: Converted. The DNG has no built-in lens correction. "
+                + "Install Adobe DNG Converter for the same file that Lightroom makes.",
+            "    The ARW holds lens-correction data, and dnglab does not write it into the DNG.",
+            "Photos already in Lightroom: Metadata › Read Metadata from File.",
+        ])
+    }
+
     func testADryRunShowsEachStepThenTheResultOfThatRun() {
         let plan = RunPlan(
-            steps: [RunPlan.Step(name: "frame.ARW", action: .convert), RunPlan.Step(name: "a.dng", action: .write),
+            steps: [RunPlan.Step(name: "frame.ARW", action: .convert, converter: .dnglab),
+                    RunPlan.Step(name: "a.dng", action: .write),
                     RunPlan.Step(name: "c.dng", action: .skip), RunPlan.Step(name: "d.dng", action: .blocked),
                     RunPlan.Step(name: "frame.dng", action: .write)],
             summary: summary {
-                $0.converted = 1
+                $0.convertedByDnglab = 1
                 $0.set = 2
                 $0.skipped = 1
                 $0.blocked = 1

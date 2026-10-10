@@ -208,3 +208,81 @@ final class AdobeDriftTests: RealDnglabTestCase {
         XCTAssertEqual(try read(["IFD0:OriginalRawFileName"], in: ours.dng), ["frame.ARW"])
     }
 }
+
+/// A real run with dnglab first. The fixture is a full match, so Adobe DNG
+/// Converter is never started here, also when it is installed.
+final class DnglabRunIntegrationTests: RealDnglabTestCase {
+    // Tests discard backups for good. The real Trash is checked by hand.
+    var backups: FileBackups { FileBackups(trash: { try FileManager.default.removeItem(at: $0) }) }
+    var tag: ScaleTag { ScaleTag(exiftool: exiftool) }
+
+    /// - Parameter withAdobe: gives the job Adobe DNG Converter when this Mac
+    ///   has it. With no Adobe on this Mac, the job has dnglab alone.
+    func job(withAdobe: Bool) -> DesqueezeJob {
+        DesqueezeJob(tag: tag, converters: RawConverters(
+            exiftool: exiftool, dnglab: dnglab, adobe: withAdobe ? ToolLocator().dngConverter() : nil),
+            backups: backups)
+    }
+
+    func testARealPlanAndRunWithDnglabFirstConvertMatchTagAndClearTheBackups() throws {
+        let sampleDNG = IntegrationTests.fixtures.appendingPathComponent("sample.dng")
+        guard FileManager.default.fileExists(atPath: sampleDNG.path) else {
+            throw XCTSkip("No fixtures. Run scripts/make_fixtures.sh with one ARW file.")
+        }
+        try FileManager.default.copyItem(at: sampleDNG, to: folder.appendingPathComponent("already here.dng"))
+        let arw = try copyFixture(as: "frame.ARW")
+        let arwBefore = try Data(contentsOf: arw)
+        let factor = SqueezeFactor(1.5)!
+        let job = job(withAdobe: true)
+
+        let plan = try job.plan(folder: folder, factor: factor, convert: true)
+        XCTAssertEqual(try names(), ["already here.dng", "frame.ARW"], "a plan makes no file")
+        XCTAssertEqual(plan.steps, [
+            RunPlan.Step(name: "frame.ARW", action: .convert, converter: .dnglab),
+            RunPlan.Step(name: "already here.dng", action: .write),
+            RunPlan.Step(name: "frame.dng", action: .write),
+        ])
+
+        let summary = try job.run(folder: folder, factor: factor, convert: true)
+        XCTAssertEqual(summary, plan.summary, "the run gives the counts and the notes of the plan")
+        XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.convertedByAdobe], [1, 1, 0])
+        XCTAssertEqual([summary.set, summary.failed], [2, 0])
+        XCTAssertEqual(summary.notes, [])
+        XCTAssertEqual(try names(), ["already here.dng", "frame.ARW", "frame.dng"],
+                       "no backup stays, and no second DNG")
+        XCTAssertEqual(try Data(contentsOf: arw), arwBefore, "the ARW must not change")
+
+        // The match is in the DNG, and the stretch too: the tag step ran on
+        // the file that the match wrote.
+        let dng = folder.appendingPathComponent("frame.dng")
+        XCTAssertEqual(try read(["SubIFD:WhiteLevel", "IFD0:BaselineExposure", "IFD0:OriginalRawFileName"], in: dng),
+                       ["16383", "0.15", "frame.ARW"])
+        XCTAssertEqual(try tag.read(dng), Scale(horizontal: 1.5, vertical: 1))
+        let validate = try SystemProcessRunner().run(exiftool, ["-validate", "-s3", dng.path])
+        XCTAssertEqual(validate.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "OK", validate.stderr)
+
+        // A second run finds the ARW claimed, and both files at the value.
+        let rerun = try job.run(folder: folder, factor: factor, convert: true)
+        XCTAssertEqual([rerun.converted, rerun.set, rerun.skipped, rerun.unconvertedARWs], [0, 0, 2, 0])
+
+        let removed = try job.run(folder: folder, factor: .noStretch, convert: false, remove: true)
+        XCTAssertEqual([removed.set, removed.failed], [2, 0])
+        XCTAssertEqual(try tag.read(dng), .noStretch)
+        XCTAssertEqual(try read(["SubIFD:WhiteLevel"], in: dng), ["16383"], "Remove keeps the match")
+    }
+
+    // dnglab alone, and a file that is no photo: failed, with dnglab's words.
+    // dnglab made no DNG, so the folder holds what it held.
+    func testARealRunWithDnglabAloneReportsAFileThatDnglabCannotRead() throws {
+        _ = try copyFixture(as: "frame.ARW")
+        try Data("not a photo".utf8).write(to: folder.appendingPathComponent("junk.ARW"))
+
+        let summary = try job(withAdobe: false).run(folder: folder, factor: .noStretch, convert: true)
+
+        XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.failed, summary.unconvertedARWs],
+                       [1, 1, 1, 1])
+        XCTAssertEqual(summary.notes, [FileNote(name: "junk.ARW", kind: .notConverted, message: "Not converted.",
+                                                detail: "dnglab returned 7.")])
+        XCTAssertEqual(try names(), ["frame.ARW", "frame.dng", "junk.ARW"])
+    }
+}

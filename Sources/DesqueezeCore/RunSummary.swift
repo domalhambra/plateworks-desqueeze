@@ -21,6 +21,10 @@ public struct FileNote: Equatable, Sendable, Identifiable, Codable {
         case backupKept
         /// The folder is read-only. No file was tried.
         case folderReadOnly
+        /// A DNG that dnglab made with no full match, because Adobe DNG
+        /// Converter is not installed (design 13.4). The file counts as
+        /// converted. It is not failed and not blocked.
+        case convertedUnmatched
     }
 
     public let name: String
@@ -68,8 +72,47 @@ extension FileNote {
                  message: "This folder is read-only. No file was changed.", detail: nil)
     }
 
+    /// - Parameter detail: each converter's own words, one line for each
+    ///   converter that was tried, in the order of the tries.
     static func notConverted(_ arw: String, detail: String) -> FileNote {
         FileNote(name: arw, kind: .notConverted, message: "Not converted.", detail: detail)
+    }
+
+    /// How each note about a DNG with no full match ends (design 13.4).
+    static let installAdobeForTheSameFile = "Install Adobe DNG Converter for the same file that Lightroom makes."
+
+    /// The note for a DNG that dnglab made with no full match (design 13.4).
+    /// The only place that makes these sentences.
+    ///
+    /// When only rule 4 failed, every tag of the match is in the DNG, and it
+    /// has no lens correction. When rule 1, 2 or 3 failed, no tag of the
+    /// match is in it.
+    ///
+    /// - Parameters:
+    ///   - rule: the first rule that failed, from `AdobeMatch`.
+    ///   - facts: the facts of the ARW. The detail line names the one that
+    ///     has no row in the table.
+    static func convertedUnmatched(_ dng: String, rule: AdobeMatch.Rule, facts: ARWFacts) -> FileNote {
+        let what: String
+        let why: String
+        switch rule {
+        case .model:
+            what = "The levels are dnglab's own."
+            why = facts.model.map { "The table of Adobe's values has no camera \($0)." }
+                ?? "The camera model could not be read from the ARW."
+        case .iso:
+            what = "The levels are dnglab's own."
+            why = facts.iso.map { "The table of Adobe's values has no row for ISO \($0)." }
+                ?? "The ISO could not be read from the ARW."
+        case .daylightLevels:
+            what = "The levels are dnglab's own."
+            why = "The ARW has no daylight levels that the table of Adobe's values can use."
+        case .noLensCorrection:
+            what = "The DNG has no built-in lens correction."
+            why = "The ARW holds lens-correction data, and dnglab does not write it into the DNG."
+        }
+        return FileNote(name: dng, kind: .convertedUnmatched,
+                        message: "Converted. \(what) \(installAdobeForTheSameFile)", detail: why)
     }
 
     static func failed(_ dng: String, message: String, detail: String) -> FileNote {
@@ -94,7 +137,13 @@ extension FileNote {
 }
 
 public struct RunSummary: Equatable, Sendable {
-    public var converted = 0
+    /// ARW files that dnglab converted. A DNG with no full match is in it
+    /// too, and has a `convertedUnmatched` note.
+    public var convertedByDnglab = 0
+    /// ARW files that Adobe DNG Converter converted.
+    public var convertedByAdobe = 0
+    /// Every ARW that the run converted: the sum of the two counts above.
+    public var converted: Int { convertedByDnglab + convertedByAdobe }
     public var set = 0
     /// DNG files already at the value. Nothing else counts here.
     public var skipped = 0
@@ -140,13 +189,15 @@ extension RunSummary {
     public static let lightroomHint = "Photos already in Lightroom: Metadata › Read Metadata from File."
 
     /// True when a file failed or was blocked. A front end then marks the
-    /// result as one to look at. A stopped run with no such file is not one.
+    /// result as one to look at. A stopped run with no such file is not one,
+    /// and a DNG with no full match (`convertedUnmatched`) is not one.
     public var needsAttention: Bool { failed > 0 || blocked > 0 }
 
     /// The sentence about the ARW files the run left, with the count. Nil
     /// when it left none.
     ///
-    /// - Parameter converterAvailable: false adds the reason.
+    /// - Parameter converterAvailable: true when one converter or the other
+    ///   is installed (`RawConverters.canConvert`). False adds the reason.
     public func unconvertedARWsLine(converterAvailable: Bool) -> String? {
         Self.unconvertedARWsLine(count: unconvertedARWs, dryRun: false, converterAvailable: converterAvailable)
     }

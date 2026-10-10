@@ -128,26 +128,79 @@ final class FakeTag: ScaleTagging, @unchecked Sendable {
     }
 }
 
+/// Either converter. `label` is the first word of its log entry: the fake
+/// for Adobe DNG Converter says "convert", and the fake for dnglab "dnglab".
 final class FakeConverter: RawConverter, @unchecked Sendable {
     let log: CallLog
+    let label: String
+    /// The converter, as its failure sentence names it.
+    let name: String
+    /// True for the dnglab fake: its result carries the rule that kept the
+    /// DNG from a full match, as `DnglabConverter` gives it.
+    let reportsTheMatch: Bool
     var fail: Set<String> = []
     /// ARW names whose failed conversion also left a partial DNG.
     var failWithPartial: Set<String> = []
     /// What a failed conversion names as its partial DNG, in place of the
     /// output of the ARW. A correct converter never does this.
     var reportedPartial: URL?
+    /// ARW names that the converter refuses before it starts.
+    var refuse: Set<String> = []
+    /// The facts that each call got, by ARW name.
+    var facts: [String: ARWFacts] = [:]
     var onConvert: (() -> Void)?
+
+    init(log: CallLog, label: String = "convert", name: String = "Adobe DNG Converter",
+         reportsTheMatch: Bool = false) {
+        self.log = log
+        self.label = label
+        self.name = name
+        self.reportsTheMatch = reportsTheMatch
+    }
+
+    func convert(_ arw: URL, facts: ARWFacts) throws -> Conversion {
+        log.entries.append("\(label) \(arw.lastPathComponent)")
+        self.facts[arw.lastPathComponent] = facts
+        onConvert?()
+        if refuse.contains(arw.lastPathComponent) {
+            throw ConvertError.failed("A DNG with this name exists already. Not converted.")
+        }
+        if fail.contains(arw.lastPathComponent) { throw ConvertError.failed("made no DNG") }
+        if failWithPartial.contains(arw.lastPathComponent) {
+            throw ConvertError.failed("\(name) returned 1.",
+                                      partial: reportedPartial ?? AdobeConverter.outputURL(for: arw))
+        }
+        return Conversion(dng: AdobeConverter.outputURL(for: arw),
+                          unmatched: reportsTheMatch ? AdobeMatch.match(facts).failed : nil)
+    }
+}
+
+/// Gives the facts that a test sets, and records each read.
+final class FakeFacts: ARWFactsReading, @unchecked Sendable {
+    let log: CallLog
+    /// By ARW name. A name with no entry has no facts.
+    var facts: [String: ARWFacts] = [:]
 
     init(log: CallLog) { self.log = log }
 
-    func convert(_ arw: URL, facts: ARWFacts) throws -> Conversion {
-        log.entries.append("convert \(arw.lastPathComponent)")
-        onConvert?()
-        if fail.contains(arw.lastPathComponent) { throw ConvertError.failed("made no DNG") }
-        if failWithPartial.contains(arw.lastPathComponent) {
-            throw ConvertError.failed("Adobe DNG Converter returned 1.",
-                                      partial: reportedPartial ?? AdobeConverter.outputURL(for: arw))
-        }
-        return Conversion(dng: AdobeConverter.outputURL(for: arw), unmatched: nil)
+    func read(_ arws: [URL]) -> [String: ARWFacts] {
+        log.entries.append("facts " + arws.map(\.lastPathComponent).joined(separator: " "))
+        return facts
     }
+}
+
+extension ARWFacts {
+    /// A frame from an adapted lens at ISO 800, as every anamorphic frame
+    /// is: a full match.
+    static let adapted = ARWFacts(model: "ILCE-7SM3", iso: 800,
+                                  daylightLevels: DaylightLevels(red: 2597, green: 1024, blue: 1556),
+                                  saysNoLensCorrection: true)
+    /// A frame from a lens that reports itself: only rule 4 fails.
+    static let lens = ARWFacts(model: "ILCE-7SM3", iso: 80,
+                               daylightLevels: DaylightLevels(red: 2496, green: 1024, blue: 1617),
+                               saysNoLensCorrection: false)
+    /// An adapted lens at an ISO with no row in the table: rule 2 fails.
+    static let iso1250 = ARWFacts(model: "ILCE-7SM3", iso: 1250,
+                                  daylightLevels: DaylightLevels(red: 2597, green: 1024, blue: 1556),
+                                  saysNoLensCorrection: true)
 }

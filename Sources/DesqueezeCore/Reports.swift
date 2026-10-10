@@ -1,6 +1,7 @@
 import Foundation
 
-/// What a scan found, in the JSON shape of design 12.1.
+/// What a scan found, in the JSON shape of design 12.1, with the `dnglab`
+/// key of design 13.6.
 ///
 /// The command line tool and the MCP server both print this type, so the two
 /// print the same JSON. Every key is always there. A value that is not known
@@ -34,28 +35,32 @@ public struct ScanReport: Codable, Equatable, Sendable {
     public let folder: String
     public let writable: Bool
     public let exiftool: String
-    /// Nil when Adobe DNG Converter is not installed.
+    /// Where dnglab is. Nil when it is not installed (design 13.6).
+    public let dnglab: String?
+    /// Where Adobe DNG Converter is. Nil when it is not installed.
     public let dngConverter: String?
     public let dngs: [DNG]
     public let pendingARWs: [String]
     public let orphanBackups: [String]
 
-    public init(folder: String, writable: Bool, exiftool: String, dngConverter: String?, dngs: [DNG],
-                pendingARWs: [String], orphanBackups: [String]) {
+    public init(folder: String, writable: Bool, exiftool: String, dnglab: String?, dngConverter: String?,
+                dngs: [DNG], pendingARWs: [String], orphanBackups: [String]) {
         self.folder = folder
         self.writable = writable
         self.exiftool = exiftool
+        self.dnglab = dnglab
         self.dngConverter = dngConverter
         self.dngs = dngs
         self.pendingARWs = pendingARWs
         self.orphanBackups = orphanBackups
     }
 
-    public init(snapshot: FolderSnapshot, exiftool: URL, dngConverter: URL?) {
+    public init(snapshot: FolderSnapshot, exiftool: URL, dnglab: URL?, dngConverter: URL?) {
         self.init(
             folder: snapshot.folder.path,
             writable: snapshot.isWritable,
             exiftool: exiftool.path,
+            dnglab: dnglab?.path,
             dngConverter: dngConverter?.path,
             dngs: snapshot.dngs.map {
                 DNG(name: $0.name, scale: $0.scale?.text, originalRawFileName: $0.originalRawFileName,
@@ -73,6 +78,7 @@ public struct ScanReport: Codable, Equatable, Sendable {
         try container.encode(folder, forKey: .folder)
         try container.encode(writable, forKey: .writable)
         try container.encode(exiftool, forKey: .exiftool)
+        try container.encode(dnglab, forKey: .dnglab)
         try container.encode(dngConverter, forKey: .dngConverter)
         try container.encode(dngs, forKey: .dngs)
         try container.encode(pendingARWs, forKey: .pendingARWs)
@@ -80,13 +86,17 @@ public struct ScanReport: Codable, Equatable, Sendable {
     }
 }
 
-/// The result of a run or of a dry run, in the JSON shape of design 12.1.
+/// The result of a run or of a dry run, in the JSON shape of design 12.1,
+/// with the two counts of design 13.6.
 public struct RunReport: Codable, Equatable, Sendable {
     public let folder: String
     /// The factor as text, with no trailing zeros: `1.5`, `2`, `1`.
     public let factor: String
     public let dryRun: Bool
+    /// `convertedByDnglab` plus `convertedByAdobe`.
     public let converted: Int
+    public let convertedByDnglab: Int
+    public let convertedByAdobe: Int
     public let set: Int
     public let skipped: Int
     public let blocked: Int
@@ -107,7 +117,8 @@ public struct RunReport: Codable, Equatable, Sendable {
     public private(set) var folderIsEmpty = false
 
     private enum CodingKeys: String, CodingKey {
-        case folder, factor, dryRun, converted, set, skipped, blocked, failed, stopped, unconvertedARWs, notes, steps
+        case folder, factor, dryRun, converted, convertedByDnglab, convertedByAdobe, set, skipped, blocked, failed,
+             stopped, unconvertedARWs, notes, steps
     }
 
     init(folder: URL, factor: SqueezeFactor, summary: RunSummary, steps: [RunPlan.Step]?) {
@@ -115,6 +126,8 @@ public struct RunReport: Codable, Equatable, Sendable {
         self.factor = factor.label
         dryRun = steps != nil
         converted = summary.converted
+        convertedByDnglab = summary.convertedByDnglab
+        convertedByAdobe = summary.convertedByAdobe
         set = summary.set
         skipped = summary.skipped
         blocked = summary.blocked
@@ -144,6 +157,9 @@ public struct RunReport: Codable, Equatable, Sendable {
 
     /// The sentence of `RunSummary.unconvertedARWsLine`. A dry run says
     /// "would not be".
+    ///
+    /// - Parameter converterAvailable: true when one converter or the other
+    ///   is installed.
     public func unconvertedARWsLine(converterAvailable: Bool) -> String? {
         RunSummary.unconvertedARWsLine(count: unconvertedARWs, dryRun: dryRun, converterAvailable: converterAvailable)
     }

@@ -42,8 +42,11 @@ final class IntegrationTests: XCTestCase {
     var backups: FileBackups { FileBackups(trash: { try FileManager.default.removeItem(at: $0) }) }
     var tag: ScaleTag { ScaleTag(exiftool: exiftool) }
     var scanner: FolderScanner { FolderScanner(tag: tag, backups: backups) }
+    /// As on a Mac with Adobe DNG Converter and no dnglab. The run with both
+    /// converters is in `DnglabRunIntegrationTests`.
     var job: DesqueezeJob {
-        DesqueezeJob(tag: tag, converter: AdobeConverter(executable: converterTool), backups: backups)
+        DesqueezeJob(tag: tag, converters: RawConverters(exiftool: exiftool, dnglab: nil, adobe: converterTool),
+                     backups: backups)
     }
 
     func names(withSuffix suffix: String) throws -> [String] {
@@ -284,7 +287,7 @@ final class IntegrationTests: XCTestCase {
 
         XCTAssertEqual(try folderState(), before, "a plan must change no byte, no date, and no name")
         XCTAssertEqual(plan.steps, [
-            RunPlan.Step(name: "frame.ARW", action: .convert),
+            RunPlan.Step(name: "frame.ARW", action: .convert, converter: .adobe),
             RunPlan.Step(name: "already here.dng", action: .write),
             RunPlan.Step(name: "held.dng", action: .blocked),
             RunPlan.Step(name: "frame.dng", action: .write),

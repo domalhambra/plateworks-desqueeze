@@ -23,6 +23,18 @@ final class ExitCodeTests: XCTestCase {
         XCTAssertEqual(note["detail"] as? String, "Error: Not a valid TIFF")
     }
 
+    // A DNG with no full match is converted. Its note does not make the
+    // code 1 (design 13.4).
+    func testANoteForADNGWithNoFullMatchGivesZero() {
+        var summary = RunSummary()
+        summary.convertedByDnglab = 1
+        summary.notes = [FileNote(name: "X.dng", kind: .convertedUnmatched, message: "Converted.", detail: nil)]
+        let folder = URL(fileURLWithPath: "/tmp/Shoot 1")
+        XCTAssertEqual(DesqueezeTool.exitCode(RunReport(folder: folder, factor: .noStretch, summary: summary)), 0)
+        summary.failed = 1
+        XCTAssertEqual(DesqueezeTool.exitCode(RunReport(folder: folder, factor: .noStretch, summary: summary)), 1)
+    }
+
     func testABlockedFileGivesOneInARunAndInADryRun() throws {
         try h.touch("A.dng", "A.dng_original")
         h.tools.scales = ["A.dng": "1 1"]
@@ -112,8 +124,8 @@ final class ExitCodeTests: XCTestCase {
         XCTAssertEqual(h.run("remove", "Shoot 1", "--json"), 0)
         let json = try h.json()
         XCTAssertEqual(Set(json.allKeys.compactMap { $0 as? String }),
-                       ["folder", "factor", "dryRun", "converted", "set", "skipped", "blocked", "failed", "stopped",
-                        "unconvertedARWs", "notes"])
+                       ["folder", "factor", "dryRun", "converted", "convertedByDnglab", "convertedByAdobe", "set",
+                        "skipped", "blocked", "failed", "stopped", "unconvertedARWs", "notes"])
         XCTAssertFalse(h.out.text.contains("No DNG or ARW"))
     }
 

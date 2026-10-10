@@ -28,20 +28,55 @@ final class OperationsTests: XCTestCase {
         scripts.forEach(removeTemporaryFolder)
     }
 
-    func operations(withConverter: Bool = true) -> DesqueezeOperations {
-        DesqueezeOperations(exiftool: exiftool, dngConverter: withConverter ? converterTool : nil,
-                            tag: h.tag, converter: withConverter ? h.converter : nil, backups: h.backups)
+    let dnglabTool = URL(fileURLWithPath: "/opt/homebrew/bin/dnglab")
+
+    /// As on a Mac with Adobe DNG Converter alone, unless the test says so.
+    func operations(withConverter: Bool = true, withDnglab: Bool = false) -> DesqueezeOperations {
+        DesqueezeOperations(exiftool: exiftool, dnglab: withDnglab ? dnglabTool : nil,
+                            dngConverter: withConverter ? converterTool : nil, tag: h.tag,
+                            converters: h.converters(withConverter: withConverter, withDnglab: withDnglab),
+                            backups: h.backups)
     }
 
-    func testScanReportsTheFolderAndTheTwoToolsAndChangesNothing() throws {
-        let report = try operations().scan(shoot)
+    func testScanReportsTheFolderAndTheThreeToolsAndChangesNothing() throws {
+        let report = try operations(withDnglab: true).scan(shoot)
         XCTAssertEqual(report, ScanReport(
-            folder: shoot.path, writable: true, exiftool: exiftool.path, dngConverter: converterTool.path,
+            folder: shoot.path, writable: true, exiftool: exiftool.path, dnglab: dnglabTool.path,
+            dngConverter: converterTool.path,
             dngs: [.init(name: "A.dng", scale: "1 1", originalRawFileName: nil, hasBackup: false),
                    .init(name: "B.dng", scale: "1.5 1", originalRawFileName: "B.ARW", hasBackup: false)],
             pendingARWs: ["X.ARW"], orphanBackups: ["gone.dng_original"]))
-        XCTAssertEqual(h.log.entries, ["readFolder"])
-        XCTAssertNil(try operations(withConverter: false).scan(shoot).dngConverter)
+        XCTAssertEqual(h.log.entries, ["readFolder"], "a scan does not read the ARW facts")
+        XCTAssertNil(try operations(withConverter: false, withDnglab: true).scan(shoot).dngConverter)
+        XCTAssertNil(try operations().scan(shoot).dnglab)
+        XCTAssertEqual(try operations().scan(shoot).dngConverter, converterTool.path)
+    }
+
+    // "ARW files that can convert" is true when either converter is installed.
+    func testAnARWCanConvertWhenOneConverterOrTheOtherIsInstalled() {
+        XCTAssertTrue(operations(withConverter: true, withDnglab: true).canConvert)
+        XCTAssertTrue(operations(withConverter: false, withDnglab: true).canConvert)
+        XCTAssertTrue(operations(withConverter: true, withDnglab: false).canConvert)
+        XCTAssertFalse(operations(withConverter: false, withDnglab: false).canConvert)
+        XCTAssertTrue(h.converters(withConverter: false, withDnglab: true).canConvert)
+        XCTAssertFalse(h.converters(withConverter: false, withDnglab: false).canConvert)
+        XCTAssertFalse(RawConverters.none.canConvert)
+    }
+
+    // The same choice in the run and in the dry run, through the entry points.
+    func testWithBothConvertersAFullMatchGoesToDnglabInTheRunAndInTheDryRun() throws {
+        h.facts.facts = ["X.ARW": .adapted]
+        let dry = try operations(withDnglab: true).run(shoot, factor: factor, dryRun: true)
+        XCTAssertEqual(h.log.entries, ["readFolder", "facts X.ARW"], "two reads, and no converter")
+        XCTAssertEqual(dry.steps?.first, RunPlan.Step(name: "X.ARW", action: .convert, converter: .dnglab))
+        XCTAssertEqual([dry.converted, dry.convertedByDnglab, dry.convertedByAdobe], [1, 1, 0])
+
+        h.log.entries = []
+        let real = try operations(withDnglab: true).run(shoot, factor: factor)
+        XCTAssertEqual(Array(h.log.entries.prefix(3)), ["readFolder", "facts X.ARW", "dnglab X.ARW"])
+        XCTAssertFalse(h.log.entries.contains("convert X.ARW"), "Adobe DNG Converter is not started")
+        XCTAssertEqual([real.converted, real.convertedByDnglab, real.convertedByAdobe], [1, 1, 0])
+        XCTAssertEqual(real.notes, dry.notes)
     }
 
     func testRunDoesTheRunAndReportsIt() throws {
@@ -65,7 +100,8 @@ final class OperationsTests: XCTestCase {
         XCTAssertEqual(h.log.entries, ["readFolder"], "no conversion, no write, no backup moved")
         XCTAssertTrue(dry.dryRun)
         XCTAssertEqual(dry.steps, [
-            RunPlan.Step(name: "X.ARW", action: .convert), RunPlan.Step(name: "A.dng", action: .write),
+            RunPlan.Step(name: "X.ARW", action: .convert, converter: .adobe),
+            RunPlan.Step(name: "A.dng", action: .write),
             RunPlan.Step(name: "B.dng", action: .skip), RunPlan.Step(name: "X.dng", action: .write),
         ])
 
@@ -163,7 +199,7 @@ final class OperationsTests: XCTestCase {
     func testAnExiftoolThatASignalEndedMakesTheFileFailedWithTheSignalInTheDetail() throws {
         // It reads the folder, and is ended at the first write.
         let fake = try script(#"case "$*" in *" -T "*) printf 'A.dng\t1 1\t-\n';; *) kill -TERM $$;; esac"#)
-        let operations = DesqueezeOperations(exiftool: fake, dngConverter: nil, backups: h.backups)
+        let operations = DesqueezeOperations(exiftool: fake, dnglab: nil, dngConverter: nil, backups: h.backups)
         let report = try operations.run(shoot, factor: factor)
         XCTAssertEqual(report.failed, 2, "A.dng, and B.dng whose scale the script does not give")
         XCTAssertEqual(report.set, 0)
@@ -175,13 +211,76 @@ final class OperationsTests: XCTestCase {
 
     func testAConverterThatASignalEndedMakesTheARWNotConvertedWithTheSignalInTheDetail() throws {
         let fake = try script("kill -TERM $$")
-        let operations = DesqueezeOperations(exiftool: exiftool, dngConverter: fake,
-                                             tag: h.tag, converter: AdobeConverter(executable: fake), backups: h.backups)
+        let operations = DesqueezeOperations(
+            exiftool: exiftool, dnglab: nil, dngConverter: fake, tag: h.tag,
+            converters: RawConverters(dnglab: nil, adobe: AdobeConverter(executable: fake), facts: nil),
+            backups: h.backups)
         let report = try operations.run(shoot, factor: factor)
         let note = try XCTUnwrap(report.notes.first { $0.kind == .notConverted })
         XCTAssertEqual(note.name, "X.ARW")
         XCTAssertEqual(note.detail, "The program was ended by signal 15.")
         XCTAssertEqual(report.unconvertedARWs, 1)
+    }
+
+    // dnglab is ended by a signal, and there is no Adobe DNG Converter: the
+    // ARW failed, with dnglab's line.
+    func testADnglabThatASignalEndedMakesTheARWNotConvertedWithTheSignalInTheDetail() throws {
+        let fake = try script("kill -TERM $$")
+        let operations = DesqueezeOperations(
+            exiftool: exiftool, dnglab: fake, dngConverter: nil, tag: h.tag,
+            converters: RawConverters(dnglab: DnglabConverter(executable: fake, exiftool: exiftool), adobe: nil,
+                                      facts: h.facts),
+            backups: h.backups)
+        let report = try operations.run(shoot, factor: factor)
+        let note = try XCTUnwrap(report.notes.first { $0.kind == .notConverted })
+        XCTAssertEqual(note.name, "X.ARW")
+        XCTAssertEqual(note.detail, "The program was ended by signal 15.")
+        XCTAssertEqual([report.converted, report.failed, report.unconvertedARWs], [0, 1, 1])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: shoot.appendingPathComponent("X.dng").path))
+    }
+
+    // The public way in: one runner starts every program, also dnglab and
+    // the exiftool calls of its match. So `--verbose` shows them all.
+    func testWithDnglabEveryProgramIsStartedThroughTheGivenRunner() throws {
+        let runner = FakeRunner()
+        let shoot = shoot!
+        var written: [String] = []
+        runner.handler = { call in
+            func ok(_ text: String) -> ProcessResult { ProcessResult(exitCode: 0, stdout: text, stderr: "") }
+            if call.executable == "/opt/homebrew/bin/dnglab" {
+                FileManager.default.createFile(atPath: call.arguments.last!, contents: Data("a DNG".utf8))
+                return ok("")
+            }
+            if call.arguments.contains("-ext") { return ok("A.dng\t1.5 1\t-\nB.dng\t1.5 1\t-\n") }
+            if call.arguments.contains("-IFD0:Model") { return ok("X.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\n") }
+            if call.arguments.contains("-overwrite_original") {
+                written = call.arguments.filter { $0.contains("=") }
+                    .map { String($0[$0.index(after: $0.firstIndex(of: "=")!)...]) }
+                return ok("    1 image files updated\n")
+            }
+            if call.arguments.contains("-T") { return ok(written.joined(separator: "\t") + "\n") }
+            if call.arguments.first == "-s3" { return ok("1.5 1\n") }
+            return ok("    1 image files updated\n")
+        }
+        let operations = DesqueezeOperations(exiftool: exiftool, dnglab: dnglabTool, dngConverter: converterTool,
+                                             runner: runner, backups: h.backups)
+        let report = try operations.run(shoot, factor: factor)
+
+        XCTAssertEqual(runner.calls.map { URL(fileURLWithPath: $0.executable).lastPathComponent }, [
+            "exiftool",             // the scan
+            "exiftool",             // the ARW facts
+            "dnglab",               // the conversion
+            "exiftool", "exiftool", // the match: the write, then the read-back
+            "exiftool", "exiftool", // X.dng: the scale, then its check
+        ])
+        XCTAssertEqual(runner.calls[2].arguments.map { URL(fileURLWithPath: $0).lastPathComponent },
+                       ["convert", "--embed-raw", "false", "X.ARW", "X.dng"])
+        XCTAssertFalse(runner.calls.contains { $0.executable == converterTool.path },
+                       "a full match does not start Adobe DNG Converter")
+        XCTAssertEqual([report.converted, report.convertedByDnglab, report.convertedByAdobe], [1, 1, 0])
+        XCTAssertEqual([report.set, report.skipped, report.failed], [1, 2, 0])
+        XCTAssertEqual(report.notes.map(\.kind), [.orphanBackup])
+        XCTAssertEqual(try Data(contentsOf: shoot.appendingPathComponent("X.dng")), Data("a DNG".utf8))
     }
 
     // The public way in: one runner starts both tools.
@@ -191,8 +290,8 @@ final class OperationsTests: XCTestCase {
             ProcessResult(exitCode: 0, stdout: call.arguments.contains("-T") ? "A.dng\t1.5 1\t-\nB.dng\t1.5 1\t-\n" : "",
                           stderr: "")
         }
-        let operations = DesqueezeOperations(exiftool: exiftool, dngConverter: converterTool, runner: runner,
-                                             backups: h.backups)
+        let operations = DesqueezeOperations(exiftool: exiftool, dnglab: nil, dngConverter: converterTool,
+                                             runner: runner, backups: h.backups)
         let report = try operations.run(shoot, factor: factor)
         XCTAssertEqual(runner.calls.map(\.executable), [exiftool.path, converterTool.path])
         // The scan gives each file's path with its links resolved, so the names are compared.

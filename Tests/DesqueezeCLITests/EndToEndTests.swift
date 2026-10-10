@@ -1,10 +1,20 @@
 import DesqueezeCore
 import XCTest
 
-/// The built tool with the real exiftool and the real converter. Each test
+/// The built tool with the real exiftool and the real converters. Each test
 /// asserts on standard output, standard error, and the exit code. Skips when
-/// a fixture or a tool is absent.
+/// a fixture, exiftool or Adobe DNG Converter is absent.
+///
+/// The fixture ARW is a full match, so on a Mac with dnglab the tool converts
+/// it with dnglab, and Adobe DNG Converter does not start. With no dnglab,
+/// Adobe converts it. `firstConverter` is the one that this Mac gives.
 final class EndToEndTests: BuiltToolTestCase {
+    /// The converter that gets the fixture ARW on this Mac.
+    var firstConverter: String { ToolLocator().dnglab() == nil ? "adobe" : "dnglab" }
+
+    /// The two counts of design 13.6, for one ARW converted on this Mac.
+    var oneConversion: [Int] { ToolLocator().dnglab() == nil ? [0, 1] : [1, 0] }
+
     // MARK: scan
 
     func testScanJSON() throws {
@@ -17,10 +27,12 @@ final class EndToEndTests: BuiltToolTestCase {
         XCTAssertEqual(result.messages, [], "a scan has no progress")
         let json = try result.json()
         XCTAssertEqual(Set(json.allKeys.compactMap { $0 as? String }),
-                       ["folder", "writable", "exiftool", "dngConverter", "dngs", "pendingARWs", "orphanBackups"])
+                       ["folder", "writable", "exiftool", "dnglab", "dngConverter", "dngs", "pendingARWs",
+                        "orphanBackups"])
         XCTAssertEqual(json["folder"] as? String, folder.path)
         XCTAssertEqual(json["writable"] as? Bool, true)
         XCTAssertEqual(json["exiftool"] as? String, ToolLocator().exiftool()?.path)
+        XCTAssertEqual(json["dnglab"] as? String, ToolLocator().dnglab()?.path, "the path, or null")
         XCTAssertEqual(json["dngConverter"] as? String, ToolLocator().dngConverter()?.path)
         XCTAssertEqual(json["dngs"] as? [NSDictionary], [[
             "name": "already here.dng", "scale": "1 1", "originalRawFileName": "sample.ARW", "hasBackup": false,
@@ -136,11 +148,12 @@ final class EndToEndTests: BuiltToolTestCase {
         XCTAssertEqual(json["dryRun"] as? Bool, true)
         XCTAssertEqual(json["factor"] as? String, "1.5")
         XCTAssertEqual(json["steps"] as? [NSDictionary], [
-            ["name": "frame.ARW", "action": "convert"],
+            ["name": "frame.ARW", "action": "convert", "converter": firstConverter],
             ["name": "already here.dng", "action": "write"],
             ["name": "frame.dng", "action": "write"],
         ])
         XCTAssertEqual(counts(json), [1, 2, 0, 0, 0, 0])
+        XCTAssertEqual([json["convertedByDnglab"], json["convertedByAdobe"]] as? [Int], oneConversion)
         XCTAssertEqual(json["notes"] as? [NSDictionary], [])
         XCTAssertEqual(try folderState(), before, "no byte, no date, and no name may change")
         XCTAssertEqual(try names(in: discard), [])
@@ -156,8 +169,9 @@ final class EndToEndTests: BuiltToolTestCase {
         XCTAssertEqual(first.exitCode, 0)
         var json = try first.json()
         XCTAssertEqual(Set(json.allKeys.compactMap { $0 as? String }),
-                       ["folder", "factor", "dryRun", "converted", "set", "skipped", "blocked", "failed", "stopped",
-                        "unconvertedARWs", "notes"])
+                       ["folder", "factor", "dryRun", "converted", "convertedByDnglab", "convertedByAdobe", "set",
+                        "skipped", "blocked", "failed", "stopped", "unconvertedARWs", "notes"])
+        XCTAssertEqual([json["convertedByDnglab"], json["convertedByAdobe"]] as? [Int], oneConversion)
         XCTAssertEqual(json["folder"] as? String, folder.path)
         XCTAssertEqual(json["factor"] as? String, "1.5")
         XCTAssertEqual(json["dryRun"] as? Bool, false)
@@ -257,7 +271,31 @@ final class EndToEndTests: BuiltToolTestCase {
         XCTAssertTrue(result.messages.contains(
             "$ \(exiftool) -m -T -filename -SubIFD:DefaultScale -OriginalRawFileName -ext dng '\(folder.path)'"),
             result.stderr)
-        XCTAssertTrue(hasLine("$ '\(converter)' -c -d '/", "/Shoot with spaces/frame.ARW'"), result.stderr)
+        if let dnglab = ToolLocator().dnglab()?.path {
+            // dnglab's command, and the three exiftool commands around it:
+            // the facts, the match write, and its read-back.
+            XCTAssertTrue(hasLine("$ \(exiftool) -m -n -T -filename -IFD0:Model -ExifIFD:ISO "
+                + "-SR2SubIFD:WB_RGBLevelsDaylight -SubIFD:DistortionCorrection '/", "/Shoot with spaces/frame.ARW'"),
+                result.stderr)
+            XCTAssertTrue(result.messages.contains { $0.hasSuffix("frame.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255") },
+                          result.stderr)
+            XCTAssertTrue(result.messages.contains {
+                $0.hasPrefix("$ \(dnglab) convert --embed-raw false '/")
+                    && $0.contains("/Shoot with spaces/frame.ARW' '/") && $0.hasSuffix("/Shoot with spaces/frame.dng'")
+            }, result.stderr)
+            XCTAssertTrue(result.messages.contains {
+                $0.hasPrefix("$ \(exiftool) -m -overwrite_original -SubIFD:WhiteLevel=16383 "
+                    + "-IFD0:BaselineExposure=0.15 '-IFD0:CameraCalibration1=0.9888 0 0 0 1 0 0 0 0.9955' ")
+                    && $0.contains(" -IFD0:OriginalRawFileName=frame.ARW '/")
+                    && $0.hasSuffix("/Shoot with spaces/frame.dng'")
+            }, result.stderr)
+            XCTAssertTrue(hasLine("$ \(exiftool) -m -n -T -SubIFD:WhiteLevel ", "/Shoot with spaces/frame.dng'"),
+                          result.stderr)
+            XCTAssertFalse(result.messages.contains { $0.contains(converter) },
+                           "a full match does not start Adobe DNG Converter")
+        } else {
+            XCTAssertTrue(hasLine("$ '\(converter)' -c -d '/", "/Shoot with spaces/frame.ARW'"), result.stderr)
+        }
         XCTAssertTrue(hasLine("$ \(exiftool) -m '-SubIFD:DefaultScale=1.5 1' '/", "/Shoot with spaces/already here.dng'"),
                       result.stderr)
         XCTAssertTrue(hasLine("$ \(exiftool) -s3 -SubIFD:DefaultScale '/", "/Shoot with spaces/frame.dng'"),

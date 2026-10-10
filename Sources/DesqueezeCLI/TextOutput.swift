@@ -37,16 +37,19 @@ public enum TextOutput {
         if !messages.isEmpty { lines += messages + [""] }
 
         lines.append("exiftool: \(report.exiftool)")
-        lines.append("Adobe DNG Converter: "
-            + (report.dngConverter ?? "not installed. ARW files cannot be converted."))
+        // "ARW files cannot be converted" is true only with neither converter.
+        // With dnglab installed, that sentence does not show.
+        lines.append("Adobe DNG Converter: " + (report.dngConverter
+            ?? (report.dnglab == nil ? "not installed. ARW files cannot be converted." : "not installed.")))
         return lines
     }
 
     /// The window's line of counts, then one line for each note, with the
     /// tool's own words below it. A dry run shows its steps first.
     ///
-    /// - Parameter converterInstalled: false adds the reason to the line
-    ///   about the ARW files that the run left.
+    /// - Parameter converterInstalled: true when one converter or the other
+    ///   is installed. False adds the reason to the line about the ARW files
+    ///   that the run left.
     public static func run(_ report: RunReport, converterInstalled: Bool) -> [String] {
         var lines: [String] = []
         if let steps = report.steps {

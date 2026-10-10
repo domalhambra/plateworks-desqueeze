@@ -48,7 +48,82 @@ final class PlanTests: XCTestCase {
 
     // MARK: The dry run
 
-    func step(_ name: String, _ action: RunPlan.Action) -> RunPlan.Step { RunPlan.Step(name: name, action: action) }
+    /// The harness has Adobe DNG Converter alone unless a test says so, so a
+    /// `convert` step names it unless the test names dnglab.
+    func step(_ name: String, _ action: RunPlan.Action, by converter: ConverterKind? = nil) -> RunPlan.Step {
+        RunPlan.Step(name: name, action: action, converter: converter ?? (action == .convert ? .adobe : nil))
+    }
+
+    // MARK: The converter of each `convert` step (design 13.4 and 13.6)
+
+    /// Three pending files: a full match, a lens frame, and a file with no facts.
+    func threeKinds() -> FolderSnapshot {
+        h.facts.facts = ["full.ARW": .adapted, "lens.ARW": .lens]
+        return h.snapshot(pending: ["full.ARW", "lens.ARW", "unread.ARW"])
+    }
+
+    func testWithBothConvertersAPlanGivesAFullMatchToDnglabAndEveryOtherARWToAdobe() {
+        let plan = h.job(withDnglab: true).plan(threeKinds(), factor: factor, convert: true)
+        XCTAssertEqual(Array(plan.steps.prefix(3)), [
+            step("full.ARW", .convert, by: .dnglab), step("lens.ARW", .convert, by: .adobe),
+            step("unread.ARW", .convert, by: .adobe),
+        ])
+        XCTAssertEqual([plan.summary.converted, plan.summary.convertedByDnglab, plan.summary.convertedByAdobe],
+                       [3, 1, 2])
+        XCTAssertEqual(plan.summary.notes, [], "Adobe DNG Converter makes the file that Lightroom makes: no note")
+        XCTAssertEqual(h.log.entries, ["facts full.ARW lens.ARW unread.ARW"], "one read, and no converter")
+    }
+
+    func testWithDnglabAloneAPlanGivesEveryARWToDnglabWithANoteForEachOneWithNoFullMatch() {
+        let plan = h.job(withConverter: false, withDnglab: true).plan(threeKinds(), factor: factor, convert: true)
+        XCTAssertEqual(Array(plan.steps.prefix(3)), [
+            step("full.ARW", .convert, by: .dnglab), step("lens.ARW", .convert, by: .dnglab),
+            step("unread.ARW", .convert, by: .dnglab),
+        ])
+        XCTAssertEqual([plan.summary.converted, plan.summary.convertedByDnglab, plan.summary.convertedByAdobe],
+                       [3, 3, 0])
+        XCTAssertEqual(plan.summary.notes, [
+            .convertedUnmatched("lens.dng", rule: .noLensCorrection, facts: .lens),
+            .convertedUnmatched("unread.dng", rule: .model, facts: .none),
+        ])
+        XCTAssertEqual(plan.summary.failed, 0)
+        XCTAssertEqual(plan.summary.unconvertedARWs, 0)
+        XCTAssertEqual(h.log.entries, ["facts full.ARW lens.ARW unread.ARW"])
+    }
+
+    // With Adobe alone no fact changes the choice, so the plan does not read them.
+    func testWithAdobeAloneAPlanGivesEveryARWToAdobeAndReadsNoFacts() {
+        let plan = h.job().plan(threeKinds(), factor: factor, convert: true)
+        XCTAssertEqual(Array(plan.steps.prefix(3)), [
+            step("full.ARW", .convert, by: .adobe), step("lens.ARW", .convert, by: .adobe),
+            step("unread.ARW", .convert, by: .adobe),
+        ])
+        XCTAssertEqual([plan.summary.convertedByDnglab, plan.summary.convertedByAdobe], [0, 3])
+        XCTAssertEqual(h.log.entries, [])
+    }
+
+    func testAPlanThatConvertsNothingReadsNoFacts() {
+        let state = threeKinds()
+        XCTAssertEqual(h.job(withConverter: false).plan(state, factor: factor, convert: true).steps, [])
+        XCTAssertEqual(h.job(withDnglab: true).plan(state, factor: factor, convert: false).steps, [])
+        XCTAssertEqual(h.job(withDnglab: true).plan(state, factor: factor, convert: true, remove: true).steps, [])
+        let readOnly = h.snapshot(pending: ["full.ARW"], writable: false)
+        XCTAssertEqual(h.job(withDnglab: true).plan(readOnly, factor: factor, convert: true).steps, [])
+        let noARW = h.snapshot(dngs: [h.dng("A.dng", at: 1.5)])
+        XCTAssertEqual(h.job(withDnglab: true).plan(noARW, factor: factor, convert: true).steps, [step("A.dng", .skip)])
+        XCTAssertEqual(h.log.entries, [], "no read of the facts, and no converter")
+    }
+
+    // Only a `convert` step has a converter.
+    func testNoOtherStepHasAConverter() {
+        h.backups.existing = ["held.dng"]
+        let state = h.snapshot(dngs: [h.dng("Z.dng"), h.dng("done.dng", at: 1.5), h.dng("held.dng")],
+                               pending: ["A.ARW"])
+        h.facts.facts = ["A.ARW": .adapted]
+        let plan = h.job(withDnglab: true).plan(state, factor: factor, convert: true)
+        XCTAssertEqual(plan.steps.map(\.converter), [.dnglab, nil, nil, nil, nil])
+        XCTAssertEqual(plan.steps.map(\.action), [.convert, .write, .skip, .blocked, .write])
+    }
 
     func testAPlanListsEachConversionThenEachDNGTheNewOnesLast() {
         h.backups.existing = ["held.dng"]
@@ -157,7 +232,10 @@ final class PlanTests: XCTestCase {
         let convert: Bool
         var remove = false
         var withConverter = true
+        var withDnglab = false
         let build: (JobHarness) -> FolderSnapshot
+
+        func job(_ h: JobHarness) -> DesqueezeJob { h.job(withConverter: withConverter, withDnglab: withDnglab) }
     }
 
     var scenarios: [Scenario] {
@@ -169,7 +247,26 @@ final class PlanTests: XCTestCase {
                        h.dng("held unknown.dng", at: nil), h.dng("unstretched.dng", at: 1)],
                 pending: ["X.ARW", "Y.ARW"], orphans: ["gone.dng_original", "LOUD.DNG_ORIGINAL"])
         }
+        // A full match, a lens frame, an ISO with no row, and a file with no facts.
+        let kinds: (JobHarness) -> FolderSnapshot = { h in
+            h.facts.facts = ["full.ARW": .adapted, "lens.ARW": .lens, "iso.ARW": .iso1250]
+            return h.snapshot(dngs: [h.dng("plain.dng"), h.dng("at value.dng", at: 1.5)],
+                              pending: ["full.ARW", "iso.ARW", "lens.ARW", "unread.ARW"])
+        }
         return [
+            Scenario(name: "both converters", factor: factor, convert: true, withDnglab: true, build: kinds),
+            Scenario(name: "both converters at factor 1", factor: .noStretch, convert: true, withDnglab: true,
+                     build: kinds),
+            Scenario(name: "dnglab alone", factor: factor, convert: true, withConverter: false, withDnglab: true,
+                     build: kinds),
+            Scenario(name: "Adobe alone", factor: factor, convert: true, build: kinds),
+            Scenario(name: "neither converter", factor: factor, convert: true, withConverter: false, build: kinds),
+            Scenario(name: "both converters, no convert", factor: factor, convert: false, withDnglab: true,
+                     build: kinds),
+            Scenario(name: "both converters, remove", factor: .noStretch, convert: true, remove: true,
+                     withDnglab: true, build: kinds),
+            Scenario(name: "both converters, the mixed folder", factor: factor, convert: true, withDnglab: true,
+                     build: mixed),
             Scenario(name: "apply", factor: factor, convert: true, build: mixed),
             Scenario(name: "apply at factor 1", factor: .noStretch, convert: true, build: mixed),
             Scenario(name: "apply, no convert", factor: factor, convert: false, build: mixed),
@@ -196,16 +293,16 @@ final class PlanTests: XCTestCase {
     func testThePlanSummaryIsTheSummaryOfARunWhereEveryStepPasses() {
         for scenario in scenarios {
             let planned = JobHarness()
-            let plan = planned.job(withConverter: scenario.withConverter)
+            let plan = scenario.job(planned)
                 .plan(scenario.build(planned), factor: scenario.factor, convert: scenario.convert,
                       remove: scenario.remove)
             let real = JobHarness()
-            let summary = real.job(withConverter: scenario.withConverter)
+            let summary = scenario.job(real)
                 .run(scenario.build(real), factor: scenario.factor, convert: scenario.convert,
                      remove: scenario.remove)
 
             XCTAssertEqual(plan.summary, summary, scenario.name)
-            XCTAssertEqual(planned.log.entries, [], scenario.name)
+            XCTAssertEqual(planned.log.entries.filter { !$0.hasPrefix("facts ") }, [], scenario.name)
         }
     }
 
@@ -214,11 +311,11 @@ final class PlanTests: XCTestCase {
     func testThePlanStepsAreTheCallsOfTheRunInOrder() {
         for scenario in scenarios {
             let planned = JobHarness()
-            let plan = planned.job(withConverter: scenario.withConverter)
+            let plan = scenario.job(planned)
                 .plan(scenario.build(planned), factor: scenario.factor, convert: scenario.convert,
                       remove: scenario.remove)
             let real = JobHarness()
-            _ = real.job(withConverter: scenario.withConverter)
+            _ = scenario.job(real)
                 .run(scenario.build(real), factor: scenario.factor, convert: scenario.convert,
                      remove: scenario.remove)
 
@@ -226,14 +323,36 @@ final class PlanTests: XCTestCase {
             let written = scenario.remove ? SqueezeFactor.noStretch : scenario.factor
             let expected = plan.steps.compactMap { step -> String? in
                 switch step.action {
-                case .convert: return "convert \(step.name)"
+                // The fake for Adobe DNG Converter says "convert", and the
+                // fake for dnglab "dnglab".
+                case .convert: return "\(step.converter == .dnglab ? "dnglab" : "convert") \(step.name)"
                 case .write: return "write \(written.tagValue) \(step.name)"
                 case .skip, .blocked: return nil
                 }
             }
-            let calls = real.log.entries.filter { $0.hasPrefix("convert ") || $0.hasPrefix("write ") }
+            let calls = real.log.entries.filter {
+                $0.hasPrefix("convert ") || $0.hasPrefix("dnglab ") || $0.hasPrefix("write ")
+            }
             XCTAssertEqual(calls, expected, scenario.name)
+            // The plan made the read of the facts that the run makes, and no other call.
+            XCTAssertEqual(planned.log.entries, real.log.entries.filter { $0.hasPrefix("facts ") }, scenario.name)
         }
+    }
+
+    // The scenarios must reach both converters and the note, or the tests
+    // above prove less than they say.
+    func testTheScenariosReachBothConvertersAndTheNoteOfADNGWithNoFullMatch() {
+        var converters = Set<ConverterKind>()
+        var kinds = Set<FileNote.Kind>()
+        for scenario in scenarios {
+            let h = JobHarness()
+            let plan = scenario.job(h).plan(scenario.build(h), factor: scenario.factor, convert: scenario.convert,
+                                            remove: scenario.remove)
+            converters.formUnion(plan.steps.compactMap(\.converter))
+            kinds.formUnion(plan.summary.notes.map(\.kind))
+        }
+        XCTAssertEqual(converters, [.dnglab, .adobe])
+        XCTAssertTrue(kinds.contains(.convertedUnmatched))
     }
 
     // The scenarios must reach every action, or the two tests above prove less
@@ -242,7 +361,7 @@ final class PlanTests: XCTestCase {
         var seen = Set<RunPlan.Action>()
         for scenario in scenarios {
             let h = JobHarness()
-            let plan = h.job(withConverter: scenario.withConverter)
+            let plan = scenario.job(h)
                 .plan(scenario.build(h), factor: scenario.factor, convert: scenario.convert,
                       remove: scenario.remove)
             seen.formUnion(plan.steps.map(\.action))
@@ -280,6 +399,27 @@ final class PlanTests: XCTestCase {
         let second = try h.job().plan(folder: shoot, factor: factor, convert: true)
         XCTAssertEqual(second.steps.first(where: { $0.name == "A.dng" })?.action, .skip)
         XCTAssertEqual(h.log.entries, ["readFolder", "readFolder"])
+    }
+
+    // With dnglab the plan makes a second read, of the ARW facts. It is a
+    // read: no file changes, and no converter starts.
+    func testAPlanFromAFolderWithDnglabReadsTheFactsAndChangesNoFile() throws {
+        let shoot = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(shoot) }
+        for name in ["A.dng", "X.ARW", "Y.ARW"] { try Data(name.utf8).write(to: shoot.appendingPathComponent(name)) }
+        h.tag.rows = [TagRow(fileName: "A.dng", scale: .noStretch, originalRawFileName: nil)]
+        h.facts.facts = ["X.ARW": .adapted, "Y.ARW": .lens]
+
+        let plan = try h.job(withDnglab: true).plan(folder: shoot, factor: factor, convert: true)
+
+        XCTAssertEqual(plan.steps, [step("X.ARW", .convert, by: .dnglab), step("Y.ARW", .convert, by: .adobe),
+                                    step("A.dng", .write), step("X.dng", .write), step("Y.dng", .write)])
+        XCTAssertEqual(h.log.entries, ["readFolder", "facts X.ARW Y.ARW"])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: shoot.path).sorted(),
+                       ["A.dng", "X.ARW", "Y.ARW"])
+        for name in ["A.dng", "X.ARW", "Y.ARW"] {
+            XCTAssertEqual(try Data(contentsOf: shoot.appendingPathComponent(name)), Data(name.utf8))
+        }
     }
 
     func testAPlanFromAFolderThrowsWhenTheScanFails() throws {

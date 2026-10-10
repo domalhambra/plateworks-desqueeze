@@ -115,7 +115,8 @@ final class FolderScannerTests: XCTestCase {
     // the ARW is claimed, so it is not pending.
     func testARunOnAnOrphanBackupAndItsARWConvertsNothingAndGivesOneNote() throws {
         for name in ["frame.dng_original", "frame.ARW"] { try touch(name) }
-        let job = DesqueezeJob(tag: tag, converter: FakeConverter(log: log), backups: backups)
+        let job = DesqueezeJob(tag: tag, converters: RawConverters(dnglab: nil, adobe: FakeConverter(log: log),
+                                                                   facts: nil), backups: backups)
 
         let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
 

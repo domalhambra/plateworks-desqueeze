@@ -209,6 +209,158 @@ final class CommandsTests: XCTestCase {
         ])
     }
 
+    // MARK: dnglab first (design 13)
+
+    func testWithBothConvertersAFullMatchIsConvertedByDnglabAndAdobeIsNotStarted() throws {
+        try h.touch("A.dng", "X.ARW")
+        h.tools.scales = ["A.dng": "1 1"]
+        h.tools.facts = ["X.ARW": FakeTools.adapted]
+        h.hasDnglab = true
+
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5", "--json"), 0)
+        let json = try h.json()
+        XCTAssertEqual([json["converted"], json["convertedByDnglab"], json["convertedByAdobe"]] as? [Int], [1, 1, 0])
+        XCTAssertEqual([json["set"], json["failed"], json["unconvertedARWs"]] as? [Int], [2, 0, 0])
+        XCTAssertEqual(json["notes"] as? [NSDictionary], [])
+        XCTAssertTrue(h.tools.commands.contains("dnglab convert --embed-raw false X.ARW X.dng"), "\(h.tools.commands)")
+        XCTAssertFalse(h.tools.commands.contains { $0.hasPrefix("Adobe") }, "\(h.tools.commands)")
+        XCTAssertEqual(h.err.lines, ["1/3 X.ARW", "2/3 A.dng", "3/3 X.dng"], "one step for the conversion")
+        XCTAssertEqual(try Data(contentsOf: h.shoot.appendingPathComponent("X.dng")), Data("converted by dnglab".utf8))
+    }
+
+    // A lens frame has no full match. With both installed it goes to Adobe.
+    func testWithBothConvertersAnARWWithNoFullMatchIsConvertedByAdobe() throws {
+        try h.touch("X.ARW", "Y.ARW")
+        h.tools.facts = ["X.ARW": FakeTools.lens]
+        h.hasDnglab = true
+
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1", "--json"), 0)
+        let json = try h.json()
+        XCTAssertEqual([json["converted"], json["convertedByDnglab"], json["convertedByAdobe"]] as? [Int], [2, 0, 2])
+        XCTAssertFalse(h.tools.commands.contains { $0.hasPrefix("dnglab") }, "\(h.tools.commands)")
+        XCTAssertEqual(json["notes"] as? [NSDictionary], [])
+    }
+
+    // `--verbose` shows dnglab's command, and the exiftool commands of its
+    // match: every program goes through the one logging runner.
+    func testVerboseShowsTheDnglabCommandAndTheCommandsOfItsMatch() throws {
+        try h.touch("X.ARW")
+        h.tools.facts = ["X.ARW": FakeTools.adapted]
+        h.hasDnglab = true
+
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1", "--json", "--verbose"), 0)
+
+        XCTAssertEqual(try h.json()["convertedByDnglab"] as? Int, 1, "standard output is still one object")
+        // The scan gives each file's path with its links resolved, so a
+        // line is compared by how it starts and how it ends.
+        let commands = h.err.lines.filter { $0.hasPrefix("$ ") }
+        func isCommand(_ number: Int, _ start: String, _ end: String) -> Bool {
+            commands.count > number && commands[number].hasPrefix(start) && commands[number].hasSuffix(end)
+        }
+        XCTAssertEqual(commands.count, 4, "the facts, dnglab, the match write, and its read-back: \(commands)")
+        XCTAssertTrue(isCommand(0, "$ /fake/bin/exiftool -m -n -T -filename -IFD0:Model -ExifIFD:ISO "
+            + "-SR2SubIFD:WB_RGBLevelsDaylight -SubIFD:DistortionCorrection '/", "/Shoot 1/X.ARW'"), "\(commands)")
+        XCTAssertTrue(isCommand(1, "$ /fake/bin/dnglab convert --embed-raw false '/", "/Shoot 1/X.dng'"),
+                      "\(commands)")
+        XCTAssertTrue(commands.count > 1 && commands[1].contains("/Shoot 1/X.ARW' '/"), "\(commands)")
+        XCTAssertTrue(isCommand(2, "$ /fake/bin/exiftool -m -overwrite_original -SubIFD:WhiteLevel=16383 ",
+                                "/Shoot 1/X.dng'"), "\(commands)")
+        XCTAssertTrue(commands.count > 2 && commands[2].contains(" -IFD0:OriginalRawFileName=X.ARW '/"), "\(commands)")
+        XCTAssertTrue(isCommand(3, "$ /fake/bin/exiftool -m -n -T -SubIFD:WhiteLevel ", "/Shoot 1/X.dng'"),
+                      "\(commands)")
+        XCTAssertTrue(h.err.lines.contains("  stdout: X.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255"))
+        XCTAssertTrue(h.err.lines.contains("1/2 X.ARW"), "progress is still there")
+    }
+
+    // dnglab alone, and a frame with no full match: converted, with a note.
+    // The file is not failed and not blocked, so the exit code stays 0.
+    func testWithDnglabAloneAnARWWithNoFullMatchIsConvertedWithANoteAndTheExitCodeIsZero() throws {
+        try h.touch("X.ARW")
+        h.tools.facts = ["X.ARW": FakeTools.lens]
+        h.hasDnglab = true
+        h.hasConverter = false
+
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5", "--json"), 0)
+        let json = try h.json()
+        XCTAssertEqual([json["converted"], json["convertedByDnglab"], json["convertedByAdobe"]] as? [Int], [1, 1, 0])
+        XCTAssertEqual([json["set"], json["failed"], json["blocked"], json["unconvertedARWs"]] as? [Int], [1, 0, 0, 0])
+        XCTAssertEqual(json["notes"] as? [NSDictionary], [[
+            "name": "X.dng", "kind": "convertedUnmatched",
+            "message": "Converted. The DNG has no built-in lens correction. "
+                + "Install Adobe DNG Converter for the same file that Lightroom makes.",
+            "detail": "The ARW holds lens-correction data, and dnglab does not write it into the DNG.",
+        ]])
+
+        // The same as a dry run: the same note, the same code.
+        try FileManager.default.removeItem(at: h.shoot.appendingPathComponent("X.dng"))
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5", "--dry-run", "--json"), 0)
+        let dry = try h.json()
+        XCTAssertEqual(dry["notes"] as? [NSDictionary], json["notes"] as? [NSDictionary])
+        XCTAssertEqual(dry["steps"] as? [NSDictionary], [
+            ["name": "X.ARW", "action": "convert", "converter": "dnglab"], ["name": "X.dng", "action": "write"],
+        ])
+    }
+
+    // "Adobe DNG Converter is not installed" is the reason for the ARW files
+    // that a run left only when neither converter is there.
+    func testWithDnglabAloneTheARWLineDoesNotSayThatAdobeIsNotInstalled() throws {
+        try h.touch("A.dng", "X.ARW")
+        h.tools.scales = ["A.dng": "1 1"]
+        h.hasDnglab = true
+        h.hasConverter = false
+
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5", "--no-convert"), 0)
+        XCTAssertEqual(h.out.lines, [
+            "1 set · 0 skipped · 0 failed",
+            "1 ARW file was not converted.",
+            "Photos already in Lightroom: Metadata › Read Metadata from File.",
+        ])
+
+        XCTAssertEqual(h.run("scan", "Shoot 1"), 0)
+        XCTAssertEqual(h.out.lines.last, "Adobe DNG Converter: not installed.")
+        XCTAssertFalse(h.out.text.contains("cannot be converted"), h.out.text)
+    }
+
+    func testScanJSONSaysWhereEachConverterIs() throws {
+        try h.touch("A.dng")
+        h.tools.scales = ["A.dng": "1 1"]
+        XCTAssertEqual(h.run("scan", "Shoot 1", "--json"), 0)
+        var json = try h.json()
+        XCTAssertTrue(json["dnglab"] is NSNull)
+        XCTAssertEqual(json["dngConverter"] as? String, "/fake/Adobe DNG Converter")
+
+        h.hasDnglab = true
+        h.hasConverter = false
+        XCTAssertEqual(h.run("scan", "Shoot 1", "--json"), 0)
+        json = try h.json()
+        XCTAssertEqual(json["dnglab"] as? String, "/fake/bin/dnglab")
+        XCTAssertTrue(json["dngConverter"] is NSNull)
+    }
+
+    // The dry run reads the facts to name the converter. It starts no
+    // converter and changes no file.
+    func testADryRunWithDnglabReadsTheFactsNamesTheConverterAndChangesNoFile() throws {
+        try h.touch("A.dng", "X.ARW", "Y.ARW")
+        h.tools.scales = ["A.dng": "1 1"]
+        h.tools.facts = ["X.ARW": FakeTools.adapted, "Y.ARW": FakeTools.lens]
+        h.hasDnglab = true
+
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5", "--dry-run", "--json"), 0)
+        let json = try h.json()
+        XCTAssertEqual(json["steps"] as? [NSDictionary], [
+            ["name": "X.ARW", "action": "convert", "converter": "dnglab"],
+            ["name": "Y.ARW", "action": "convert", "converter": "adobe"],
+            ["name": "A.dng", "action": "write"], ["name": "X.dng", "action": "write"],
+            ["name": "Y.dng", "action": "write"],
+        ])
+        XCTAssertEqual([json["converted"], json["convertedByDnglab"], json["convertedByAdobe"]] as? [Int], [2, 1, 1])
+        XCTAssertEqual(h.tools.commands.count, 2, "the scan's read, and the read of the facts: \(h.tools.commands)")
+        XCTAssertTrue(h.tools.commands.allSatisfy { $0.hasPrefix("exiftool ") })
+        XCTAssertEqual(h.err.lines, [])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: h.shoot.path).sorted(),
+                       ["A.dng", "X.ARW", "Y.ARW"])
+    }
+
     // MARK: JSON, text, and standard error
 
     func testJSONModePrintsOneObjectOnStandardOutputAndProgressOnStandardError() throws {

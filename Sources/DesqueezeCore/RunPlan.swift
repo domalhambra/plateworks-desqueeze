@@ -56,16 +56,22 @@ public struct RunPlan: Equatable, Sendable {
     public struct Step: Equatable, Sendable, Codable {
         public let name: String
         public let action: Action
+        /// The converter that gets the ARW first (design 13.6). Only a
+        /// `convert` step has it. In the JSON, every other step has no
+        /// `converter` key.
+        public let converter: ConverterKind?
 
-        public init(name: String, action: Action) {
+        public init(name: String, action: Action, converter: ConverterKind? = nil) {
             self.name = name
             self.action = action
+            self.converter = converter
         }
     }
 
     /// In run order: each conversion, then each DNG, the new ones last.
     public var steps: [Step]
-    /// The counts and the notes that a real run gives when every step passes.
+    /// The counts and the notes that a real run gives when every step
+    /// passes, each conversion with the first converter of its list.
     public var summary: RunSummary
 
     public init(steps: [Step], summary: RunSummary) {

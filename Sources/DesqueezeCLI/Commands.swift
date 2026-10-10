@@ -7,7 +7,10 @@ public struct ToolEnvironment: Sendable {
     public var workingFolder: URL
     /// Nil when exiftool is not installed. No command can run then.
     public var exiftool: URL?
-    /// Nil when Adobe DNG Converter is not installed. The DNG files still run.
+    /// Nil when dnglab is not installed. Adobe DNG Converter then converts.
+    public var dnglab: URL?
+    /// Nil when Adobe DNG Converter is not installed. It is the optional
+    /// backup. With neither converter the DNG files still run.
     public var dngConverter: URL?
     public var runner: ProcessRunner
     public var backups: BackupHandling
@@ -21,12 +24,14 @@ public struct ToolEnvironment: Sendable {
     public var standardError: @Sendable (String) -> Void
 
     public init(
-        workingFolder: URL, exiftool: URL?, dngConverter: URL?, runner: ProcessRunner, backups: BackupHandling,
+        workingFolder: URL, exiftool: URL?, dnglab: URL?, dngConverter: URL?, runner: ProcessRunner,
+        backups: BackupHandling,
         testBackupFolder: URL?, interruptFlag: @escaping @Sendable () -> CancelFlag,
         standardOutput: @escaping @Sendable (String) -> Void, standardError: @escaping @Sendable (String) -> Void
     ) {
         self.workingFolder = workingFolder
         self.exiftool = exiftool
+        self.dnglab = dnglab
         self.dngConverter = dngConverter
         self.runner = runner
         self.backups = backups
@@ -80,14 +85,14 @@ public enum DesqueezeTool {
                 let report = try operations.run(
                     url, factor: factor, convert: convert, dryRun: dryRun,
                     cancel: dryRun ? CancelFlag() : environment.interruptFlag(), progress: progress(to: environment))
-                return (try output(report, runText(report, environment), invocation), exitCode(report))
+                return (try output(report, runText(report, operations), invocation), exitCode(report))
             }
         case .remove(let folder, let dryRun):
             return perform(invocation, folder, in: environment) { operations, url in
                 let report = try operations.remove(
                     url, dryRun: dryRun, cancel: dryRun ? CancelFlag() : environment.interruptFlag(),
                     progress: progress(to: environment))
-                return (try output(report, runText(report, environment), invocation), exitCode(report))
+                return (try output(report, runText(report, operations), invocation), exitCode(report))
             }
         }
     }
@@ -97,7 +102,8 @@ public enum DesqueezeTool {
     /// The code of a run or a remove: 1 when a file failed or was blocked,
     /// the run was stopped, or the folder is read-only. A dry run gives the
     /// code of the run it plans. A scan has no such code: when it completed,
-    /// it gives 0.
+    /// it gives 0. A DNG with no full match (`convertedUnmatched`) is
+    /// converted: it does not make the code 1 (design 13.4).
     static func exitCode(_ report: RunReport) -> Int32 {
         let readOnly = report.notes.contains { $0.kind == .folderReadOnly }
         return report.failed > 0 || report.blocked > 0 || report.stopped || readOnly ? 1 : 0
@@ -130,8 +136,11 @@ public enum DesqueezeTool {
         if invocation.verbose {
             runner = LoggingProcessRunner(wrapping: runner, sink: environment.standardError)
         }
-        let operations = DesqueezeOperations(exiftool: exiftool, dngConverter: environment.dngConverter,
-                                             runner: runner, backups: environment.backups)
+        // One runner starts exiftool, dnglab and Adobe DNG Converter, so
+        // `--verbose` shows each command of all three.
+        let operations = DesqueezeOperations(exiftool: exiftool, dnglab: environment.dnglab,
+                                             dngConverter: environment.dngConverter, runner: runner,
+                                             backups: environment.backups)
         do {
             let result = try work(operations, url)
             environment.standardOutput(result.output)
@@ -164,8 +173,11 @@ public enum DesqueezeTool {
         invocation.json ? try ReportJSON.text(report) : text().joined(separator: "\n")
     }
 
-    private static func runText(_ report: RunReport, _ environment: ToolEnvironment) -> [String] {
-        TextOutput.run(report, converterInstalled: environment.dngConverter != nil)
+    /// The reason "Adobe DNG Converter is not installed" follows the ARW
+    /// line only when neither converter is there. With dnglab installed the
+    /// sentence would be the wrong reason.
+    private static func runText(_ report: RunReport, _ operations: DesqueezeOperations) -> [String] {
+        TextOutput.run(report, converterInstalled: operations.canConvert)
     }
 
     private static func progress(to environment: ToolEnvironment) -> (RunProgress) -> Void {

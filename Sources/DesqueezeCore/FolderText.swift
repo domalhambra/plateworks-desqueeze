@@ -3,8 +3,9 @@ import Foundation
 /// The words and the counts that a front end shows about a folder (design,
 /// sections 5 and 7).
 ///
-/// Each one is a pure function of a `FolderSnapshot` and of whether Adobe DNG
-/// Converter is there. The window and the command line tool only show them,
+/// Each one is a pure function of a `FolderSnapshot` and of whether a
+/// converter is there: dnglab, or Adobe DNG Converter, or both
+/// (`RawConverters.canConvert`). The window and the command line tool only show them,
 /// so the two cannot say different things about one folder. The sentence
 /// about an orphan backup is made at `FileNote.orphanBackup`, and nowhere
 /// else: a front end and a run both show that note's `line`.
@@ -57,7 +58,8 @@ extension FolderSnapshot {
     /// A folder that holds only an orphan backup is not empty: its counts
     /// show, and `messages` names the backup.
     ///
-    /// - Parameter converterAvailable: false says why the ARW files wait.
+    /// - Parameter converterAvailable: true when one converter or the other
+    ///   is installed. False says why the ARW files wait.
     public func countsLine(converterAvailable: Bool) -> String {
         if isEmpty { return FolderText.noPhotos }
         var parts = ["\(dngs.count) DNG"]
@@ -70,7 +72,7 @@ extension FolderSnapshot {
     }
 
     /// The photos a run works on: the DNG files, plus the pending ARW files
-    /// that can convert. With no converter the ARW files are not in it.
+    /// that can convert. With neither converter the ARW files are not in it.
     public func runCount(converterAvailable: Bool) -> Int {
         dngs.count + (converterAvailable ? pendingARWs.count : 0)
     }

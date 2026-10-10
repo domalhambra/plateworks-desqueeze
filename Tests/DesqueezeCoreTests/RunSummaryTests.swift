@@ -12,11 +12,73 @@ final class RunSummaryTests: XCTestCase {
     // MARK: The kind of each note
 
     // The raw values are the JSON values. A front end reads them.
-    func testTheKindsAreTheSevenNamesOfTheDesign() {
+    func testTheKindsAreTheSevenNamesOfTheDesignAndTheOneOfSection13() {
         XCTAssertEqual(FileNote.Kind.allCases.map(\.rawValue), [
             "orphanBackup", "notConverted", "failed", "blockedByBackup", "leftoverBackup", "backupKept",
-            "folderReadOnly",
+            "folderReadOnly", "convertedUnmatched",
         ])
+    }
+
+    // MARK: A DNG with no full match (design 13.4)
+
+    static let ending = "Install Adobe DNG Converter for the same file that Lightroom makes."
+
+    // Only rule 4 failed: every tag is written, and the lens correction is
+    // what the DNG does not have.
+    func testTheNoteOfALensFrameSaysThatTheDNGHasNoLensCorrection() {
+        XCTAssertEqual(FileNote.convertedUnmatched("X.dng", rule: .noLensCorrection, facts: .lens), FileNote(
+            name: "X.dng", kind: .convertedUnmatched,
+            message: "Converted. The DNG has no built-in lens correction. \(Self.ending)",
+            detail: "The ARW holds lens-correction data, and dnglab does not write it into the DNG."))
+    }
+
+    // Rule 1, 2 or 3 failed: no tag of the match is in the DNG.
+    func testTheNoteOfAFrameWithNoTableRowSaysThatTheLevelsAreDnglabsOwn() {
+        let levels = "Converted. The levels are dnglab's own. \(Self.ending)"
+        let other = ARWFacts(model: "ILCE-7M4", iso: 800, daylightLevels: nil, saysNoLensCorrection: true)
+        let cases: [(AdobeMatch.Rule, ARWFacts, String)] = [
+            (.model, other, "The table of Adobe's values has no camera ILCE-7M4."),
+            (.model, .none, "The camera model could not be read from the ARW."),
+            (.iso, .iso1250, "The table of Adobe's values has no row for ISO 1250."),
+            (.iso, .none, "The ISO could not be read from the ARW."),
+            (.daylightLevels, .none, "The ARW has no daylight levels that the table of Adobe's values can use."),
+        ]
+        for (rule, facts, detail) in cases {
+            XCTAssertEqual(FileNote.convertedUnmatched("X.dng", rule: rule, facts: facts), FileNote(
+                name: "X.dng", kind: .convertedUnmatched, message: levels, detail: detail))
+        }
+    }
+
+    func testEachNoteOfADNGWithNoFullMatchEndsWithTheSentenceOfTheDesign() {
+        XCTAssertEqual(FileNote.installAdobeForTheSameFile, Self.ending)
+        for rule in AdobeMatch.Rule.allCases {
+            let note = FileNote.convertedUnmatched("X.dng", rule: rule, facts: .none)
+            XCTAssertTrue(note.message.hasPrefix("Converted. "), note.message)
+            XCTAssertTrue(note.message.hasSuffix(" " + Self.ending), note.message)
+            XCTAssertEqual(note.kind, .convertedUnmatched)
+        }
+    }
+
+    // Such a file is converted. It is not failed and not blocked, so the
+    // result is not one to look at.
+    func testADNGWithNoFullMatchCountsAsConvertedAndNeedsNoAttention() {
+        h.facts.facts = ["X.ARW": .lens]
+        let summary = h.job(withConverter: false, withDnglab: true)
+            .run(h.snapshot(pending: ["X.ARW"]), factor: factor, convert: true)
+        XCTAssertEqual(summary.notes.map(\.kind), [.convertedUnmatched])
+        XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.convertedByAdobe], [1, 1, 0])
+        XCTAssertEqual([summary.failed, summary.blocked, summary.unconvertedARWs], [0, 0, 0])
+        XCTAssertFalse(summary.needsAttention)
+        XCTAssertEqual(summary.countsLine, "1 converted · 1 set · 0 skipped · 0 failed")
+    }
+
+    func testConvertedIsTheSumOfTheTwoConverters() {
+        var summary = RunSummary()
+        XCTAssertEqual(summary.converted, 0)
+        summary.convertedByDnglab = 3
+        summary.convertedByAdobe = 4
+        XCTAssertEqual(summary.converted, 7)
+        XCTAssertEqual(summary.countsLine, "7 converted · 0 set · 0 skipped · 0 failed")
     }
 
     func testAnOrphanBackupNoteHasItsKind() {
@@ -282,7 +344,7 @@ final class RunSummaryTests: XCTestCase {
     }
 
     func testTheCountsLineOfTheDesign() {
-        XCTAssertEqual(line { $0.converted = 1; $0.set = 3 }, "1 converted · 3 set · 0 skipped · 0 failed")
+        XCTAssertEqual(line { $0.convertedByDnglab = 1; $0.set = 3 }, "1 converted · 3 set · 0 skipped · 0 failed")
     }
 
     func testTheCountsLineLeavesOutConvertedAndBlockedAtZero() {

@@ -5,20 +5,32 @@ import Foundation
 /// Order: scan the folder, convert every pending ARW, then tag every DNG, the
 /// new ones last. One file at a time. Cancel is honored between files.
 ///
-/// **A failed conversion.** The ARW is listed as failed and the run goes on.
-/// When the converter left a partial DNG, the job moves it to the Trash
-/// through `BackupHandling.trashFile` and says so on the note's detail line,
+/// **Which converter.** Before the first conversion, the run reads the facts
+/// of every pending ARW with one call, and `ConverterChoice` gives each ARW
+/// its list of converters (design 13.4). The run tries them in order. The
+/// dry run asks the same function, and names the first one.
+///
+/// **A failed conversion.** When a converter fails, the next one in the list
+/// gets the ARW. The ARW is listed as failed only when the last one failed,
+/// and the run goes on. The note's detail has one line for each converter
+/// that was tried, with that converter's own words.
+/// When a converter left a partial DNG, the job moves it to the Trash
+/// through `BackupHandling.trashFile` and says so on that converter's line,
 /// or names the file to delete when the Trash refuses (design 4.3). It moves
 /// only the output of that ARW, and never a DNG that the scan found. The ARW
 /// is never touched.
+///
+/// **A DNG with no full match.** With dnglab alone, an ARW that the table
+/// does not cover still converts. It counts as converted, and it gets a
+/// `convertedUnmatched` note. It is not failed and not blocked.
 ///
 /// The notes of a run start with one note for each orphan backup in the
 /// folder, so every front end reports them.
 ///
 /// **The ARW files a run left.** `RunSummary.unconvertedARWs` is the number of
 /// pending ARW files in the run's own scan, minus the ones this run converted.
-/// So it counts every pending ARW when there is no converter or `convert` is
-/// false, an ARW whose conversion failed (that one is in `failed` too), and
+/// So it counts every pending ARW when no converter is installed or `convert`
+/// is false, an ARW whose conversion failed (that one is in `failed` too), and
 /// the ARW files that a stopped run did not reach. Remove is the exception:
 /// it has no ARW work, so it reports 0. A caller says that it means Remove
 /// with `remove: true`. The job never guesses it from the factor and
@@ -26,18 +38,19 @@ import Foundation
 /// reports the ARW files it left (design 12.1).
 public struct DesqueezeJob: Sendable {
     private let tag: ScaleTagging
-    private let converter: RawConverter?
+    private let converters: RawConverters
     private let backups: BackupHandling
 
-    /// - Parameter converter: nil when Adobe DNG Converter is not installed.
-    ///   The DNG files still run.
+    /// - Parameter converters: dnglab and Adobe DNG Converter, each nil when
+    ///   it is not installed, and the reader of the ARW facts. With neither
+    ///   converter the ARW files wait, and the DNG files still run.
     /// - Parameter backups: where a backup goes after a write that passed its
     ///   check, and where the partial DNG of a failed conversion goes. There
     ///   is no default, so no caller reaches the Trash by
     ///   leaving it out. The window and the tool name the Trash themselves.
-    public init(tag: ScaleTagging, converter: RawConverter?, backups: BackupHandling) {
+    public init(tag: ScaleTagging, converters: RawConverters, backups: BackupHandling) {
         self.tag = tag
-        self.converter = converter
+        self.converters = converters
         self.backups = backups
     }
 
@@ -68,7 +81,9 @@ public struct DesqueezeJob: Sendable {
 
     /// Scans `folder`, and returns what a run would do. Changes no file.
     ///
-    /// The only tool call is the scan's one read of the folder.
+    /// The tool calls are reads: the scan's one read of the folder, and one
+    /// read of the ARW facts when dnglab is installed and an ARW would
+    /// convert. No converter starts.
     ///
     /// `convert` and `remove` mean what they mean for `run`.
     ///
@@ -97,10 +112,51 @@ public struct DesqueezeJob: Sendable {
         return summary
     }
 
-    /// The ARW files that go to the converter. Remove never converts. With
-    /// no converter the ARW files wait.
-    private func arwsToConvert(_ snapshot: FolderSnapshot, convert: Bool) -> [URL] {
-        convert && converter != nil ? snapshot.pendingARWs : []
+    /// One pending ARW that goes to a converter, with what the run knows
+    /// about it before the first program starts.
+    private struct Pending {
+        let arw: URL
+        /// `ARWFacts.none` when exiftool could not read them, and when no
+        /// one asked: with no dnglab, no fact changes anything.
+        let facts: ARWFacts
+        /// The converters to try, in order. Never empty.
+        let order: [ConverterKind]
+    }
+
+    /// The ARW files that go to a converter, each with its facts and its
+    /// list of converters. Remove never converts. With neither converter the
+    /// ARW files wait.
+    ///
+    /// The facts come from one read for all the files. The read changes no
+    /// file, so the dry run makes it too.
+    private func arwsToConvert(_ snapshot: FolderSnapshot, convert: Bool) -> [Pending] {
+        guard convert, converters.canConvert, !snapshot.pendingARWs.isEmpty else { return [] }
+        let facts = converters.dnglab == nil ? [:] : converters.facts?.read(snapshot.pendingARWs) ?? [:]
+        return snapshot.pendingARWs.map { arw in
+            let known = facts[arw.lastPathComponent] ?? .none
+            return Pending(arw: arw, facts: known, order: ConverterChoice.order(
+                for: known, dnglabInstalled: converters.dnglab != nil, adobeInstalled: converters.adobe != nil))
+        }
+    }
+
+    /// Counts one conversion, and adds the DNG to the files to tag.
+    ///
+    /// - Parameter unmatched: the rule that kept a dnglab DNG from a full
+    ///   match. The note is made here, so the run and the dry run say the
+    ///   same words.
+    private static func count(
+        _ pending: Pending, to dng: URL, by converter: ConverterKind, unmatched: AdobeMatch.Rule?,
+        _ summary: inout RunSummary, _ dngs: inout [DNGFile]
+    ) {
+        switch converter {
+        case .dnglab: summary.convertedByDnglab += 1
+        case .adobe: summary.convertedByAdobe += 1
+        }
+        summary.unconvertedARWs -= 1
+        if let unmatched {
+            summary.notes.append(.convertedUnmatched(dng.lastPathComponent, rule: unmatched, facts: pending.facts))
+        }
+        dngs.append(Self.converted(pending.arw, to: dng))
     }
 
     /// Remove writes `.noStretch` and nothing else. The wrong state, Remove
@@ -109,7 +165,7 @@ public struct DesqueezeJob: Sendable {
         remove ? .noStretch : factor
     }
 
-    /// The DNG of a conversion. The converter writes no stretch, so the
+    /// The DNG of a conversion. Neither converter writes a stretch, so the
     /// scale is known, and the job does not read the new file.
     private static func converted(_ arw: URL, to dng: URL) -> DNGFile {
         DNGFile(url: dng, scale: .noStretch, originalRawFileName: arw.lastPathComponent, hasBackup: false)
@@ -126,20 +182,23 @@ public struct DesqueezeJob: Sendable {
     /// The plan itself, on a snapshot. Not public, for the reason at `run`.
     ///
     /// It walks the files in the order of `run`, and asks the same questions.
-    /// It assumes that each conversion and each write passes.
+    /// It assumes that each write passes, and that each conversion passes
+    /// with the first converter of its list.
     func plan(_ snapshot: FolderSnapshot, factor: SqueezeFactor, convert: Bool, remove: Bool = false) -> RunPlan {
         let factor = Self.factor(factor, remove: remove)
         var plan = RunPlan(steps: [], summary: opening(snapshot, remove: remove))
         guard snapshot.isWritable else { return plan }
 
         var dngs = snapshot.dngs
-        for arw in arwsToConvert(snapshot, convert: convert && !remove) {
-            plan.steps.append(RunPlan.Step(name: arw.lastPathComponent, action: .convert))
-            plan.summary.converted += 1
-            plan.summary.unconvertedARWs -= 1
+        for pending in arwsToConvert(snapshot, convert: convert && !remove) {
+            let first = pending.order[0]
+            plan.steps.append(RunPlan.Step(name: pending.arw.lastPathComponent, action: .convert, converter: first))
             // The DNG is not there yet. The run will tag it, so the plan
-            // must decide for it too.
-            dngs.append(Self.converted(arw, to: ConverterOutput.url(for: arw)))
+            // must decide for it too. Only dnglab makes a DNG with no full
+            // match, and it says the rule that `AdobeMatch` says here.
+            Self.count(pending, to: ConverterOutput.url(for: pending.arw), by: first,
+                       unmatched: first == .dnglab ? AdobeMatch.match(pending.facts).failed : nil,
+                       &plan.summary, &dngs)
         }
         for dng in dngs {
             let (decision, hasBackup) = decide(dng, factor)
@@ -175,30 +234,41 @@ public struct DesqueezeJob: Sendable {
         var total = arws.count * 2 + dngs.count
         var completed = 0
 
-        if let converter {
-            for arw in arws {
-                if cancel.isCancelled {
-                    summary.cancelled = true
-                    return summary
-                }
-                do {
-                    let conversion = try converter.convert(arw, facts: .none)
-                    summary.converted += 1
-                    summary.unconvertedARWs -= 1
-                    dngs.append(Self.converted(arw, to: conversion.dng))
-                } catch {
-                    summary.failed += 1
-                    // This ARW made no DNG, so its tag step will not happen.
-                    total -= 1
-                    var detail = Self.describe(error)
-                    if case ConvertError.failed(_, let partial?) = error {
-                        detail += " " + discard(partial: partial, of: arw, keeping: dngs)
-                    }
-                    summary.notes.append(.notConverted(arw.lastPathComponent, detail: detail))
-                }
-                completed += 1
-                progress(RunProgress(completed: completed, total: total, name: arw.lastPathComponent))
+        for pending in arws {
+            if cancel.isCancelled {
+                summary.cancelled = true
+                return summary
             }
+            // Each converter's own words, in the order of the tries.
+            var words: [String] = []
+            var made: (conversion: Conversion, converter: ConverterKind)?
+            for kind in pending.order {
+                guard let converter = converters[kind] else { continue }
+                do {
+                    made = (try converter.convert(pending.arw, facts: pending.facts), kind)
+                    break
+                } catch {
+                    var text = Self.describe(error)
+                    if case ConvertError.failed(_, let partial?) = error {
+                        text += " " + discard(partial: partial, of: pending.arw, keeping: dngs)
+                    }
+                    // Both converters refuse a name that is taken, with
+                    // the same sentence. One line says it.
+                    if !words.contains(text) { words.append(text) }
+                }
+            }
+            if let made {
+                Self.count(pending, to: made.conversion.dng, by: made.converter,
+                           unmatched: made.conversion.unmatched, &summary, &dngs)
+            } else {
+                summary.failed += 1
+                // This ARW made no DNG, so its tag step will not happen.
+                total -= 1
+                summary.notes.append(.notConverted(pending.arw.lastPathComponent,
+                                                   detail: words.joined(separator: "\n")))
+            }
+            completed += 1
+            progress(RunProgress(completed: completed, total: total, name: pending.arw.lastPathComponent))
         }
 
         for dng in dngs {

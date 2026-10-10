@@ -2,13 +2,13 @@ import DesqueezeCore
 import Foundation
 
 extension ToolEnvironment {
-    /// The environment of the real tool: the working folder, the two tools
+    /// The environment of the real tool: the working folder, the three tools
     /// where `ToolLocator` finds them, the Trash, and the two standard
     /// streams.
     ///
-    /// The converter is looked for in `/Applications` only. The window also
-    /// asks Launch Services, which needs AppKit, and this tool is Foundation
-    /// only.
+    /// Adobe DNG Converter is looked for in `/Applications` only. The window
+    /// also asks Launch Services, which needs AppKit, and this tool is
+    /// Foundation only.
     ///
     /// - Throws: `FileBackups.TestFolderError` when the test variable is set
     ///   to something that is not a folder.
@@ -19,6 +19,7 @@ extension ToolEnvironment {
         return ToolEnvironment(
             workingFolder: URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true),
             exiftool: locator.exiftool(),
+            dnglab: locator.dnglab(),
             dngConverter: locator.dngConverter(),
             runner: SystemProcessRunner(),
             backups: backups,

@@ -3,18 +3,30 @@ import DesqueezeCore
 import Foundation
 import XCTest
 
-/// Acts as exiftool and as the converter, on a folder of small files.
+/// Acts as exiftool and as both converters, on a folder of small files.
 ///
-/// It answers the three exiftool calls of `ScaleTag` from `scales`, and
-/// "converts" an ARW by making a file with the DNG's name.
+/// It answers the three exiftool calls of `ScaleTag` from `scales`, the read
+/// of the ARW facts from `facts`, and the two exiftool calls of the dnglab
+/// match from what the match wrote. It "converts" an ARW by making a file
+/// with the DNG's name.
 final class FakeTools: ProcessRunner, @unchecked Sendable {
     static let exiftool = URL(fileURLWithPath: "/fake/bin/exiftool")
+    static let dnglab = URL(fileURLWithPath: "/fake/bin/dnglab")
     static let converter = URL(fileURLWithPath: "/fake/Adobe DNG Converter")
+    /// The facts of a frame from an adapted lens at ISO 800: a full match.
+    static let adapted = "ILCE-7SM3\t800\t2597 1024 1556\t255"
+    /// The facts of a frame from a lens that reports itself: only rule 4 fails.
+    static let lens = "ILCE-7SM3\t80\t2496 1024 1617\t17"
 
     /// File name to tag value, for example `"A.dng": "1 1"`. No entry is "unknown".
     var scales: [String: String] = [:]
+    /// ARW name to the four cells of its facts row. No entry is a row of
+    /// dashes: exiftool could not read the file.
+    var facts: [String: String] = [:]
     var failWrites: Set<String> = []
     var commands: [String] = []
+    /// DNG name to the values that the dnglab match wrote, in order.
+    private var matched: [String: [String]] = [:]
 
     func run(_ executable: URL, _ arguments: [String]) throws -> ProcessResult {
         commands.append(([executable.lastPathComponent] + arguments.map { URL(fileURLWithPath: $0).lastPathComponent })
@@ -23,6 +35,24 @@ final class FakeTools: ProcessRunner, @unchecked Sendable {
         if executable == Self.converter {
             try Data("converted".utf8).write(to: file.deletingPathExtension().appendingPathExtension("dng"))
             return ProcessResult(exitCode: 0, stdout: "", stderr: "")
+        }
+        if executable == Self.dnglab {
+            try Data("converted by dnglab".utf8).write(to: file)
+            return ProcessResult(exitCode: 0, stdout: "", stderr: "")
+        }
+        if arguments.contains("-IFD0:Model") {
+            let rows = arguments.filter { $0.hasPrefix("/") }.map { URL(fileURLWithPath: $0).lastPathComponent }
+                .map { "\($0)\t\(facts[$0] ?? "-\t-\t-\t-")\n" }.joined()
+            return ProcessResult(exitCode: 0, stdout: rows, stderr: "")
+        }
+        if arguments.contains("-overwrite_original") {
+            matched[file.lastPathComponent] = arguments.filter { $0.contains("=") }
+                .map { String($0[$0.index(after: $0.firstIndex(of: "=")!)...]) }
+            return ProcessResult(exitCode: 0, stdout: "    1 image files updated\n", stderr: "")
+        }
+        if arguments.contains("-T"), !arguments.contains("-ext") {
+            let row = (matched[file.lastPathComponent] ?? []).joined(separator: "\t")
+            return ProcessResult(exitCode: 0, stdout: row + "\n", stderr: "")
         }
         if arguments.contains("-T") {
             let names = try FileManager.default.contentsOfDirectory(atPath: file.path)
@@ -61,7 +91,11 @@ final class ToolHarness {
     let discarded = Lines()
     let cancel = CancelFlag()
     var hasExiftool = true
+    /// Adobe DNG Converter is installed.
     var hasConverter = true
+    /// dnglab is installed. Off, so a test that does not name it runs as on
+    /// a Mac with Adobe DNG Converter alone.
+    var hasDnglab = false
     var testBackupFolder: URL?
 
     init() throws {
@@ -84,6 +118,7 @@ final class ToolHarness {
         return ToolEnvironment(
             workingFolder: base,
             exiftool: hasExiftool ? FakeTools.exiftool : nil,
+            dnglab: hasDnglab ? FakeTools.dnglab : nil,
             dngConverter: hasConverter ? FakeTools.converter : nil,
             runner: tools,
             backups: FileBackups(trash: { discarded.writes.append($0.lastPathComponent) }),

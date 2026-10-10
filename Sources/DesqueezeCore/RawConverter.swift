@@ -42,6 +42,52 @@ public protocol RawConverter: Sendable {
     func convert(_ arw: URL, facts: ARWFacts) throws -> Conversion
 }
 
+/// The converters that are installed, each optional, and the reader of the
+/// facts that choose between them (design 13).
+///
+/// `DesqueezeJob` and `DesqueezeOperations` take this in place of one
+/// converter. With neither converter the ARW files wait, and the DNG files
+/// still run.
+public struct RawConverters: Sendable {
+    /// Nil when dnglab is not installed.
+    public var dnglab: RawConverter?
+    /// Nil when Adobe DNG Converter is not installed. It is the optional
+    /// backup.
+    public var adobe: RawConverter?
+    /// Reads the facts of the pending ARW files. It is asked only when
+    /// dnglab is there: with Adobe alone, no fact changes the choice. Nil
+    /// gives every ARW no facts.
+    public var facts: ARWFactsReading?
+
+    public init(dnglab: RawConverter?, adobe: RawConverter?, facts: ARWFactsReading?) {
+        self.dnglab = dnglab
+        self.adobe = adobe
+        self.facts = facts
+    }
+
+    /// The real converters, for the tools that are installed. One runner
+    /// starts every program, so a `LoggingProcessRunner` shows them all.
+    public init(exiftool: URL, dnglab: URL?, adobe: URL?, runner: ProcessRunner = SystemProcessRunner()) {
+        self.init(dnglab: dnglab.map { DnglabConverter(executable: $0, exiftool: exiftool, runner: runner) },
+                  adobe: adobe.map { AdobeConverter(executable: $0, runner: runner) },
+                  facts: ARWFactsReader(exiftool: exiftool, runner: runner))
+    }
+
+    /// No converter is installed.
+    public static let none = RawConverters(dnglab: nil, adobe: nil, facts: nil)
+
+    /// True when one converter or the other is installed, so a pending ARW
+    /// can convert.
+    public var canConvert: Bool { dnglab != nil || adobe != nil }
+
+    subscript(kind: ConverterKind) -> RawConverter? {
+        switch kind {
+        case .dnglab: return dnglab
+        case .adobe: return adobe
+        }
+    }
+}
+
 /// The output of a conversion, `<base>.dng`, and what a converter asks the
 /// disk about it.
 public enum ConverterOutput {

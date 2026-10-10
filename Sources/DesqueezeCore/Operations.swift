@@ -9,42 +9,56 @@ import Foundation
 /// report types.
 public struct DesqueezeOperations: Sendable {
     public let exiftool: URL
-    /// Nil when Adobe DNG Converter is not installed. The DNG files still run.
+    /// Nil when dnglab is not installed. Adobe DNG Converter then converts
+    /// every ARW.
+    public let dnglab: URL?
+    /// Adobe DNG Converter, the optional backup. Nil when it is not
+    /// installed. With neither converter the ARW files wait, and the DNG
+    /// files still run.
     public let dngConverter: URL?
     private let tag: ScaleTagging
-    private let converter: RawConverter?
+    private let converters: RawConverters
     private let backups: BackupHandling
 
     /// - Parameters:
-    ///   - runner: starts exiftool and the converter. Wrap it in a
+    ///   - dnglab: there is no default, so no caller leaves dnglab out by
+    ///     mistake and converts with Adobe alone.
+    ///   - runner: starts exiftool and both converters. Wrap it in a
     ///     `LoggingProcessRunner` to see each command.
     ///   - backups: where a backup goes after a write that passed its check.
     ///     There is no default, so no caller reaches the Trash by leaving it
     ///     out. The window and the tool name the Trash themselves.
-    public init(exiftool: URL, dngConverter: URL?, runner: ProcessRunner = SystemProcessRunner(),
+    public init(exiftool: URL, dnglab: URL?, dngConverter: URL?, runner: ProcessRunner = SystemProcessRunner(),
                 backups: BackupHandling) {
-        self.init(exiftool: exiftool, dngConverter: dngConverter,
+        self.init(exiftool: exiftool, dnglab: dnglab, dngConverter: dngConverter,
                   tag: ScaleTag(exiftool: exiftool, runner: runner),
-                  converter: dngConverter.map { AdobeConverter(executable: $0, runner: runner) },
+                  converters: RawConverters(exiftool: exiftool, dnglab: dnglab, adobe: dngConverter, runner: runner),
                   backups: backups)
     }
 
-    init(exiftool: URL, dngConverter: URL?, tag: ScaleTagging, converter: RawConverter?, backups: BackupHandling) {
+    init(exiftool: URL, dnglab: URL?, dngConverter: URL?, tag: ScaleTagging, converters: RawConverters,
+         backups: BackupHandling) {
         self.exiftool = exiftool
+        self.dnglab = dnglab
         self.dngConverter = dngConverter
         self.tag = tag
-        self.converter = converter
+        self.converters = converters
         self.backups = backups
     }
 
-    private var job: DesqueezeJob { DesqueezeJob(tag: tag, converter: converter, backups: backups) }
+    /// True when one converter or the other is installed, so a pending ARW
+    /// can convert. A front end gives this to the sentences of `FolderText`
+    /// and `RunReport` that ask for `converterAvailable`.
+    public var canConvert: Bool { dnglab != nil || dngConverter != nil }
+
+    private var job: DesqueezeJob { DesqueezeJob(tag: tag, converters: converters, backups: backups) }
 
     /// What the folder holds now. Changes no file.
     ///
     /// - Throws: when the folder cannot be read.
     public func scan(_ folder: URL) throws -> ScanReport {
         let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
-        return ScanReport(snapshot: snapshot, exiftool: exiftool, dngConverter: dngConverter)
+        return ScanReport(snapshot: snapshot, exiftool: exiftool, dnglab: dnglab, dngConverter: dngConverter)
     }
 
     /// Design 4.3 at `factor`. With `dryRun`, the report of
