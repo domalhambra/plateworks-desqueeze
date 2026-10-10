@@ -61,6 +61,16 @@ final class CommandsTests: XCTestCase {
         XCTAssertFalse(text.contains("the two tools"), text)
     }
 
+    // `--verbose` prints more than the commands: one line for each leftover
+    // work file that a converter removed (`ConverterRules.removedLeftover`).
+    // The help says so, where it says what `--verbose` prints.
+    func testHelpSaysThatVerboseAlsoNamesALeftoverWorkFileThatWasRemoved() {
+        h.run("--help")
+        let text = h.out.lines.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: " ")
+        XCTAssertTrue(text.contains("Prints each exiftool and converter command, its exit code, and its output on "
+            + "standard error. Also says when it removed a leftover work file."), text)
+    }
+
     // Control-C, and the Terminal window that closes (the tool takes the
     // hangup signal). The result so far is still printed.
     func testHelpSaysThatAClosedTerminalWindowStopsARunLikeControlC() {

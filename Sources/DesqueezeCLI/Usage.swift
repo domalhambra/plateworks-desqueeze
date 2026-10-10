@@ -36,7 +36,8 @@ public enum Usage {
           --json             Prints one JSON object on standard output, and
                              nothing else there.
           --verbose          Prints each exiftool and converter command, its exit
-                             code, and its output on standard error.
+                             code, and its output on standard error. Also says
+                             when it removed a leftover work file.
 
         \(wrapped("\(ConverterText.whoConverts) \(ConverterText.matchedValues) "
             + "With no converter, run still sets the stretch on the DNG files."))
