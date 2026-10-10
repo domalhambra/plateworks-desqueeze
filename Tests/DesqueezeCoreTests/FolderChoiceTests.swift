@@ -69,4 +69,21 @@ final class FolderChoiceTests: XCTestCase {
         let app = try makeFolder("Thing.app")
         XCTAssertNil(FolderChoice.folder(at: try makeLink("Link", to: app)))
     }
+
+    // Why a path names no folder: one sentence, the same in every front end.
+    func testTheReasonForAPathThatIsNotAFolder() throws {
+        let gone = base.appendingPathComponent("gone")
+        XCTAssertEqual(FolderChoice.whyNotAFolder(gone), "Nothing is at this path.")
+        XCTAssertEqual(FolderChoice.whyNotAFolder(try makeLink("Link to gone", to: gone)), "Nothing is at this path.")
+
+        let file = base.appendingPathComponent("a.dng")
+        try Data().write(to: file)
+        XCTAssertEqual(FolderChoice.whyNotAFolder(file), "It is a file, not a folder.")
+        XCTAssertEqual(FolderChoice.whyNotAFolder(try makeLink("Link to file", to: file)), "It is a file, not a folder.")
+
+        let package = try makeFolder("Thing.app")
+        let sentence = "It is a package, such as an app or a photo library, and not a folder of photos."
+        XCTAssertEqual(FolderChoice.whyNotAFolder(package), sentence)
+        XCTAssertEqual(FolderChoice.whyNotAFolder(try makeLink("Link to package", to: package)), sentence)
+    }
 }

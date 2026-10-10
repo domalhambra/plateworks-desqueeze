@@ -87,6 +87,16 @@ final class BackupTestFolderTests: XCTestCase {
             }
         }
     }
+
+    // What a front end says about a wrong value. The command line tool and
+    // the MCP server both print these words, and nothing else about it.
+    func testTheWordsForAWrongValue() {
+        XCTAssertEqual(FileBackups.TestFolderError(value: "1").message,
+                       "DESQUEEZE_TEST_BACKUP_FOLDER is set, and its value is not a folder: \"1\".")
+        XCTAssertEqual(FileBackups.TestFolderError(value: "").message,
+                       "DESQUEEZE_TEST_BACKUP_FOLDER is set, and its value is not a folder: \"\".")
+        XCTAssertEqual(FileBackups.TestFolderError.detail, "It is for tests only. Unset it, then run again.")
+    }
 }
 
 final class VersionTests: XCTestCase {

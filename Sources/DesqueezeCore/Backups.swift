@@ -86,6 +86,14 @@ extension FileBackups {
         public init(value: String) {
             self.value = value
         }
+
+        /// What a front end says: the variable, and the value it has.
+        public var message: String {
+            "\(FileBackups.testFolderVariable) is set, and its value is not a folder: \"\(value)\"."
+        }
+
+        /// What to do. A front end prints it after `message`.
+        public static let detail = "It is for tests only. Unset it, then run again."
     }
 
     /// The backups for a command line tool.

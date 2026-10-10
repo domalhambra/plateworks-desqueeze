@@ -15,4 +15,16 @@ public enum FolderChoice {
               values.isDirectory == true, values.isPackage != true else { return nil }
         return resolved
     }
+
+    /// Why `folder(at:)` gives nil for `url`: one sentence for a person.
+    /// Every front end says these words after the path, so a file, a
+    /// package and a path with nothing at it read the same everywhere.
+    public static func whyNotAFolder(_ url: URL) -> String {
+        let resolved = url.resolvingSymlinksInPath()
+        guard FileManager.default.fileExists(atPath: resolved.path) else { return "Nothing is at this path." }
+        if (try? resolved.resourceValues(forKeys: [.isPackageKey]))?.isPackage == true {
+            return "It is a package, such as an app or a photo library, and not a folder of photos."
+        }
+        return "It is a file, not a folder."
+    }
 }

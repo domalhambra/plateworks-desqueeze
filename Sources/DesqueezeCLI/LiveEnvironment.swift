@@ -1,47 +1,6 @@
 import DesqueezeCore
 import Foundation
 
-/// Sets a flag at Control-C, so a run stops after its current file.
-///
-/// exiftool and the converter normally do not get the Control-C. Checked on
-/// this Mac (macOS 27): `Process` starts each program as the leader of a
-/// process group of its own, so its group id is its own process id and not the
-/// tool's. A terminal sends Control-C to the foreground group, which holds the
-/// tool and no program that it started. A `SIGINT` sent to the tool's group
-/// during a run did not reach the exiftool in work. That write completed, was
-/// checked, and its backup was discarded, and the run then saw the flag and
-/// stopped.
-///
-/// "Normally" is the word. A program that is only just starting can still get
-/// the signal: `InterruptTests` saw it once in 27 runs under load, when the
-/// signal reached an exiftool that was just starting. That file is then
-/// reported as failed ("ended by signal 2"), and it is left as it was. Run
-/// again to complete it (design 12.1).
-///
-/// Apple does not document this behavior of `Process`, so two tests pin it:
-/// `ProcessRunnerTests` for the group, and `InterruptTests` for the run.
-/// A plain `kill` (SIGTERM) goes to the tool alone, and is taken the same way.
-public final class InterruptWatcher: @unchecked Sendable {
-    public let flag = CancelFlag()
-    private var sources: [DispatchSourceSignal] = []
-
-    /// - Parameter onFirst: called once, at the first signal.
-    public init(onFirst: @escaping @Sendable () -> Void) {
-        let flag = flag
-        for number in [SIGINT, SIGTERM] {
-            // The signal must not end the process. The source still sees it.
-            signal(number, SIG_IGN)
-            let source = DispatchSource.makeSignalSource(signal: number, queue: .global())
-            source.setEventHandler {
-                if !flag.isCancelled { onFirst() }
-                flag.cancel()
-            }
-            source.resume()
-            sources.append(source)
-        }
-    }
-}
-
 extension ToolEnvironment {
     /// The environment of the real tool: the working folder, the two tools
     /// where `ToolLocator` finds them, the Trash, and the two standard
@@ -67,7 +26,9 @@ extension ToolEnvironment {
             interruptFlag: {
                 // The watcher lives as long as the process: the run that asked
                 // for it is the last thing the tool does.
-                let watcher = InterruptWatcher { standardError("Stopping after the current file.") }
+                let watcher = InterruptWatcher(signals: [SIGINT, SIGTERM]) {
+                    standardError("Stopping after the current file.")
+                }
                 return Unmanaged.passRetained(watcher).takeUnretainedValue().flag
             },
             standardOutput: { write($0, to: .standardOutput) },
@@ -119,10 +80,10 @@ extension DesqueezeTool {
             } catch {
                 return 2
             }
-            let message = "\(FileBackups.testFolderVariable) is set, and its value is not a folder: \"\(error.value)\"."
-            let detail = "It is for tests only. Unset it, then run again."
-            standardError("desqueeze: \(message) \(detail)")
-            if invocation.json, let json = try? ReportJSON.text(ErrorReport(error: message, detail: detail)) {
+            // The words are the core's, so the MCP server says the same.
+            let detail = FileBackups.TestFolderError.detail
+            standardError("desqueeze: \(error.message) \(detail)")
+            if invocation.json, let json = try? ReportJSON.text(ErrorReport(error: error.message, detail: detail)) {
                 standardOutput(json)
             }
             return 1

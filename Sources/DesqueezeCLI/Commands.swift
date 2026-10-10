@@ -123,7 +123,8 @@ public enum DesqueezeTool {
         // file, and a package such as an app or a photo library, are not
         // folders.
         guard let url = FolderChoice.folder(at: named) else {
-            return fail(FolderText.unreadable(path: named.path), detail: whyNotAFolder(named), invocation, environment)
+            return fail(FolderText.unreadable(path: named.path), detail: FolderChoice.whyNotAFolder(named), invocation,
+                        environment)
         }
         var runner = environment.runner
         if invocation.verbose {
@@ -139,16 +140,6 @@ public enum DesqueezeTool {
             // Only a scan throws. No file was tried.
             return fail(FolderText.unreadable(path: url.path), detail: describe(error), invocation, environment)
         }
-    }
-
-    /// Why `FolderChoice` takes `path` for no folder. For a person to read.
-    private static func whyNotAFolder(_ path: URL) -> String {
-        let resolved = path.resolvingSymlinksInPath()
-        guard FileManager.default.fileExists(atPath: resolved.path) else { return "Nothing is at this path." }
-        if (try? resolved.resourceValues(forKeys: [.isPackageKey]))?.isPackage == true {
-            return "It is a package, such as an app or a photo library. The window does not take one either."
-        }
-        return "It is not a folder."
     }
 
     /// An absolute path as it is, and a relative path against the working
