@@ -142,8 +142,9 @@ final class AppModel: ObservableObject {
 
     /// True when the folder has a pending ARW and neither converter is
     /// installed. The counts line then says that the ARW files cannot be
-    /// converted, and it and the advice show as the read-only message
-    /// shows. In every other state the two are quiet lines.
+    /// converted, and the view gives it the warning symbol. The install line
+    /// gets the information symbol with primary text (design 13.5). In every
+    /// other state the two are quiet lines.
     var arwsCannotConvert: Bool { snapshot?.pendingARWs.isEmpty == false && !converterAvailable }
 
     /// True for a note that only informs: the DNG that dnglab made with no
@@ -432,8 +433,9 @@ extension AppModel {
         let registered = NSWorkspace.shared.urlForApplication(withBundleIdentifier: ToolLocator.converterBundleID)
         let locator = ToolLocator(registeredConverterApp: registered)
         let exiftool = options.hidesExiftool ? nil : locator.exiftool()
-        // dnglab converts first. Adobe DNG Converter is the optional backup.
-        // Both need exiftool: with none, the window can do nothing.
+        // dnglab converts each photo that it can match, and Adobe DNG
+        // Converter, when it is installed, converts the others. Both need
+        // exiftool: with none, the window can do nothing.
         // The window moves a backup to the Trash, and the leftover work file
         // of a run that ended hard (design 13.3).
         let backups = FileBackups.systemTrash

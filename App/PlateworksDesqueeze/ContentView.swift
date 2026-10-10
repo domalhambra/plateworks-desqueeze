@@ -93,13 +93,21 @@ struct ContentView: View {
             if model.arwsCannotConvert || !model.folderMessages.isEmpty || model.dropMessage != nil {
                 // One block with one left edge, so the symbols make a column.
                 VStack(alignment: .leading, spacing: 6) {
-                    // Neither converter is installed, and ARW files wait.
-                    // The counts and the install command show as the
-                    // read-only message shows: a symbol, primary text. Both
-                    // lines wrap, and are not cut.
+                    // Neither converter is installed, and ARW files wait: one
+                    // condition, so one warning (design 13.5). The counts
+                    // line carries the warning symbol, as the read-only
+                    // message does. The install line below it informs: the
+                    // information symbol, and primary text. Both lines wrap,
+                    // and are not cut. Only this view decides the symbols;
+                    // the model hands over the two lines and
+                    // `arwsCannotConvert`.
                     if model.arwsCannotConvert {
                         if let counts = model.countsLine { zoneMessage(counts) }
-                        if let advice = model.converterAdvice { zoneMessage(advice).textSelection(.enabled) }
+                        if let advice = model.converterAdvice {
+                            SymbolLine(.information, advice)
+                                .font(.callout)
+                                .textSelection(.enabled)
+                        }
                     }
                     ForEach(model.folderMessages, id: \.self) { zoneMessage($0) }
                     // A wrong drop gets its own line. It never hides a line above.

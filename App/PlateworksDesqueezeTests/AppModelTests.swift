@@ -429,7 +429,8 @@ final class AppModelTests: XCTestCase {
     // MARK: The converters (design 13.5)
 
     private static let adobeIsOptional =
-        "Adobe DNG Converter is not installed. Adobe DNG Converter is an optional backup for photos that dnglab cannot match."
+        "Adobe DNG Converter is not installed. "
+            + "Adobe DNG Converter is an optional backup for photos that dnglab cannot match."
     private static let dnglabIsFaster = "dnglab is faster and opens no window. Install it with: brew install dnglab"
 
     /// A model with these converters, and a folder with one DNG and one
@@ -470,7 +471,10 @@ final class AppModelTests: XCTestCase {
     }
 
     // The one state in which the lines are no quiet ones: the ARW files
-    // wait, so both show as the read-only message shows.
+    // wait. The counts line gets the warning symbol and the install line the
+    // information symbol with primary text (design 13.5). The model hands
+    // over the two lines and `arwsCannotConvert`; only the view decides the
+    // symbols, so no model test can pin them.
     func testWithNeitherConverterTheWindowSaysThatTheARWFilesCannotConvertAndHowToInstallDnglab() async throws {
         let h = try await loaded(dnglab: false, adobe: false)
         defer { h.cleanUp() }
