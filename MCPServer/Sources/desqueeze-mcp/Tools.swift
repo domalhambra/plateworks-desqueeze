@@ -106,11 +106,14 @@ enum ToolCatalog {
         + "\(RunSummary.lightroomHint) Do not say it after a dry run, or when \"set\" is 0."
 
     /// What run, remove and the instructions say about the originals
-    /// (design 12.2 and 14.1). The window and the command line tool can
-    /// move an original to the Trash, on the user's request for one run.
-    /// This server cannot.
+    /// (design 12.2 and 14.1). Two other front ends can move an original
+    /// to the Trash, on the user's request for one run. This server cannot.
+    ///
+    /// The sentence does not say where the option is (design 14.7). A model
+    /// that has a shell could start the other front end, so the text gives
+    /// it no name of a flag and no place to look.
     static let neverMovesAnOriginal = "This server never moves an original ARW file to the Trash, and it has "
-        + "no argument for that. Only the user can ask for it, in the window or with the command line tool."
+        + "no argument for that. Only the user can ask for it."
 
     /// What run and remove say about the note of a volume that gives no
     /// lock for a folder (design 13.9). The run went on without the lock,

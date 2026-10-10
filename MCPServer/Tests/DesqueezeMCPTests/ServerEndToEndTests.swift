@@ -5,6 +5,11 @@ import XCTest
 /// 12.4). Each test speaks MCP to it over its pipes. A test that needs a
 /// fixture or a tool skips when it is absent.
 final class ServerEndToEndTests: ServerTestCase {
+    /// Words that would tell a model where the option that moves the
+    /// originals is: the window's box, and the flag of the command line
+    /// tool (design 14.7). No text that the server gives a model has one.
+    static let placesOfTheOption = ["the window", "command line", "trash-originals", "checkbox"]
+
     // MARK: The session
 
     func testInitializeGivesTheNameTheVersionAndTheToolsCapability() throws {
@@ -22,8 +27,15 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertNil(capabilities["prompts"])
         XCTAssertEqual((result["instructions"] as? String)?.contains("desqueeze_scan"), true)
         // Design 14.1: the first thing that a model reads says it too.
-        XCTAssertEqual((result["instructions"] as? String)?.contains(
-            "This server never moves an original ARW file to the Trash, and it has no argument for that."), true)
+        let instructions = try XCTUnwrap(result["instructions"] as? String)
+        XCTAssertTrue(instructions.contains(
+            "This server never moves an original ARW file to the Trash, and it has no argument for that. "
+                + "Only the user can ask for it."))
+        // Design 14.7: the text does not tell a model where the option is.
+        XCTAssertTrue(instructions.hasSuffix("Only the user can ask for it."), instructions)
+        for place in Self.placesOfTheOption {
+            XCTAssertFalse(instructions.contains(place), "the instructions name a place of the option: \(place)")
+        }
         XCTAssertTrue(try server.result(of: "ping").isEmpty, "a ping gets an empty result")
     }
 
@@ -66,7 +78,12 @@ final class ServerEndToEndTests: ServerTestCase {
                 // Design 12.2 and 14.1: the server never moves an original.
                 XCTAssertTrue(description.contains(
                     "This server never moves an original ARW file to the Trash, and it has no argument for that. "
-                        + "Only the user can ask for it, in the window or with the command line tool."), name)
+                        + "Only the user can ask for it."), name)
+            }
+            // Design 14.7: no text of the server tells a model where the
+            // option is.
+            for place in Self.placesOfTheOption {
+                XCTAssertFalse(description.contains(place), "\(name) names a place of the option: \(place)")
             }
         }
         let run = try XCTUnwrap(tools[1]["inputSchema"] as? [String: Any])["properties"] as? [String: [String: Any]]
