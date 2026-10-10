@@ -15,7 +15,7 @@ final class OriginalsTests: XCTestCase {
     }
 
     func decide(fullMatch: Bool = true, atTheFactor: Bool = true, thisRuns: Bool = true, dng: DNGCheck = .passed,
-                original: OriginalState = .same, asked: Asked = Asked()) -> OriginalDecision {
+                stillThisRuns: Bool = true, original: OriginalState = .same, asked: Asked = Asked()) -> OriginalDecision {
         OriginalDecision.decide(
             hasFullMatch: fullMatch, dngIsAtTheFactor: atTheFactor,
             dngIsThisRuns: {
@@ -25,6 +25,10 @@ final class OriginalsTests: XCTestCase {
             dng: {
                 asked.order.append("dng")
                 return dng
+            },
+            dngIsStillThisRuns: {
+                asked.order.append("still this run's")
+                return stillThisRuns
             },
             original: {
                 asked.order.append("original")
@@ -89,6 +93,7 @@ final class OriginalsTests: XCTestCase {
         XCTAssertNotEqual(decide(atTheFactor: false), .move)
         XCTAssertNotEqual(decide(thisRuns: false), .move)
         XCTAssertNotEqual(decide(dng: .failed(detail: "x")), .move)
+        XCTAssertNotEqual(decide(stillThisRuns: false), .move)
         for state in [OriginalState.changed, .notARegularFile, .gone] {
             XCTAssertNotEqual(decide(original: state), .move)
         }
@@ -109,7 +114,15 @@ final class OriginalsTests: XCTestCase {
     func testTheDNGIsCheckedFirstAndTheOriginalIsReadLast() {
         let asked = Asked()
         XCTAssertEqual(decide(asked: asked), .move)
-        XCTAssertEqual(asked.order, ["this run's", "dng", "original"])
+        XCTAssertEqual(asked.order, ["this run's", "dng", "still this run's", "original"])
+    }
+
+    // Line 6 again: the DNG passed its check, and it is no longer the file
+    // that the tag step left. The ARW is not read.
+    func testLine6IsAskedAgainAfterTheCheckOfTheDNGAndBeforeTheOriginal() {
+        let asked = Asked()
+        XCTAssertEqual(decide(stillThisRuns: false, original: .changed, asked: asked), .keep(.dngChanged))
+        XCTAssertEqual(asked.order, ["this run's", "dng", "still this run's"])
     }
 
     // The tags of a DNG that is not this run's file say nothing: exiftool

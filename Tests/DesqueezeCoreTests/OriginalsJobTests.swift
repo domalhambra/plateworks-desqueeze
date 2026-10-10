@@ -91,8 +91,9 @@ final class OriginalsJobTests: XCTestCase {
             // step. Then the tag step, and the second record directly
             // after it.
             "record X.dng", "write 1.5 1 X.dng", "read X.dng", "trash X.dng", "record X.dng",
-            // Line 6, then line 5, then line 4 again, then the move.
-            "record X.dng", "record X.dng", "check X.dng", "record X.ARW", "trashFile X.ARW",
+            // Line 6, then line 5, then line 6 again, then line 4 again,
+            // then the move.
+            "record X.dng", "record X.dng", "check X.dng", "record X.dng", "record X.ARW", "trashFile X.ARW",
         ])
         XCTAssertEqual(h.backups.filesGiven, [h.folder.appendingPathComponent("X.ARW")])
         XCTAssertTrue(summary.trashOriginals)
@@ -112,9 +113,9 @@ final class OriginalsJobTests: XCTestCase {
             $0.hasPrefix("write ") || $0.hasPrefix("read ") || $0.hasPrefix("trash ")
         })
         XCTAssertLessThan(lastTagCall, firstMove)
-        XCTAssertEqual(calls.suffix(10), [
-            "record X.dng", "record X.dng", "check X.dng", "record X.ARW", "trashFile X.ARW",
-            "record Y.dng", "record Y.dng", "check Y.dng", "record Y.ARW", "trashFile Y.ARW",
+        XCTAssertEqual(calls.suffix(12), [
+            "record X.dng", "record X.dng", "check X.dng", "record X.dng", "record X.ARW", "trashFile X.ARW",
+            "record Y.dng", "record Y.dng", "check Y.dng", "record Y.dng", "record Y.ARW", "trashFile Y.ARW",
         ])
         XCTAssertEqual(summary.originalsInTrash, 2)
         XCTAssertEqual(summary.set, 4)
@@ -340,7 +341,9 @@ final class OriginalsJobTests: XCTestCase {
     let tagged = FakeFiles.file(size: 104, modified: 1_002, nanoseconds: 5, number: 8)
 
     // The reads of the DNG, in order: after the conversion, before the tag
-    // step, after the tag step, then line 6 and line 5 at the fifth step.
+    // step, after a tag step that wrote, then at the fifth step line 6,
+    // line 5, and line 6 again. A tag step that skipped has no read after
+    // it.
 
     // The fourth break to try: line 6 is skipped. This is the case of the
     // review of 2026-10-10: another photo's DNG took the name after the
@@ -425,7 +428,7 @@ final class OriginalsJobTests: XCTestCase {
         XCTAssertEqual(originalsGiven, ["X.ARW"])
         XCTAssertEqual(summary.notes, [])
         XCTAssertEqual(summary.originalsInTrash, 1)
-        XCTAssertEqual(calls.filter { $0 == "record X.dng" }.count, 5)
+        XCTAssertEqual(calls.filter { $0 == "record X.dng" }.count, 6)
     }
 
     // At factor 1 the new DNG is at the value already. The tag step writes
@@ -438,9 +441,10 @@ final class OriginalsJobTests: XCTestCase {
         XCTAssertEqual(summary.skipped, 1)
         XCTAssertEqual(calls, [
             "record X.ARW", "convert X.ARW", "record X.dng",
-            // The tag step: no write. The two records around it.
-            "record X.dng", "record X.dng",
-            "record X.dng", "record X.dng", "check X.dng", "record X.ARW", "trashFile X.ARW",
+            // The tag step: no write. The check before it, and no new
+            // record after it: the first record is the second one too.
+            "record X.dng",
+            "record X.dng", "record X.dng", "check X.dng", "record X.dng", "record X.ARW", "trashFile X.ARW",
         ])
         XCTAssertEqual(originalsGiven, ["X.ARW"])
         XCTAssertEqual(summary.notes, [])
@@ -451,6 +455,46 @@ final class OriginalsJobTests: XCTestCase {
         h.files.records["X.dng"] = [made, made, made, tagged]
         let summary = h.job().run(h.snapshot(pending: ["X.ARW"]), factor: .noStretch, convert: true,
                                   trashOriginals: true)
+        XCTAssertEqual(h.backups.filesGiven, [])
+        XCTAssertEqual(summary.notes, [dngChanged])
+    }
+
+    // Line 6 is asked again after the exiftool read of line 5 (order 2, 3,
+    // 6, 5, 6 again, 4). A DNG of another `frame.ARW` that has the factor
+    // can take the name after the first read of line 6, or after the read
+    // of line 5 and before exiftool opens the file. It passes line 5. It is
+    // not the file that the tag step left, so the ARW stays.
+    func testLine6ADNGThatWasReplacedAtTheFifthStepAfterTheFirstReadOfLine6KeepsItsOriginal() {
+        let other = FakeFiles.file(size: 104, modified: 1_002, nanoseconds: 5, number: 9)
+        let cases: [[FileRecord?]] = [
+            // After the fourth read: line 5 and the read after it see the other file.
+            [made, made, tagged, tagged, other],
+            // After the fifth read: only the read after exiftool sees it.
+            [made, made, tagged, tagged, tagged, other],
+            [made, made, tagged, tagged, tagged, nil],
+        ]
+        for records in cases {
+            h = JobHarness()
+            h.files.records["X.dng"] = records
+            let summary = run(h.snapshot(pending: ["X.ARW"]))
+            XCTAssertEqual(h.backups.filesGiven, [], "\(records)")
+            XCTAssertEqual(summary.notes, [dngChanged], "\(records)")
+            XCTAssertTrue(calls.contains("check X.dng"), "line 5 was asked, and it passed")
+            XCTAssertEqual(calls.filter { $0 == "record X.dng" }.count, 6)
+            XCTAssertEqual(calls.filter { $0 == "record X.ARW" }.count, 1, "the ARW is not read again")
+        }
+    }
+
+    // A tag step that skipped wrote nothing, so the DNG must still be the
+    // file of the first record. The run takes no new record after a skip:
+    // a file that takes the name in that gap would become "the run's own".
+    func testLine6ADNGThatWasReplacedDirectlyAfterTheCheckBeforeASkippedTagStepKeepsItsOriginal() {
+        let other = FakeFiles.file(number: 9)
+        // The swap comes after the second read, at factor 1.
+        h.files.records["X.dng"] = [made, made, other]
+        let summary = h.job().run(h.snapshot(pending: ["X.ARW"]), factor: .noStretch, convert: true,
+                                  trashOriginals: true)
+        XCTAssertEqual(summary.skipped, 1)
         XCTAssertEqual(h.backups.filesGiven, [])
         XCTAssertEqual(summary.notes, [dngChanged])
     }

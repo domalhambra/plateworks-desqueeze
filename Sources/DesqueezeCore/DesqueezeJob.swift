@@ -103,9 +103,9 @@ public struct DesqueezeJob: Sendable {
     /// - Parameter fileRecord: what the disk says about the file at a path,
     ///   read without following a link. The run asks it about an ARW before
     ///   the conversion and before the move (design 14.2, line 4). It asks
-    ///   it about the DNG of that ARW five times: after the conversion,
-    ///   before and after the tag step, and twice before the move (lines 6
-    ///   and 5). It asks only when it was asked to move the originals. The
+    ///   it about the DNG of that ARW six times at most: after the
+    ///   conversion, before the tag step, after a tag step that wrote, and
+    ///   three times before the move (line 6, line 5, and line 6 again). It asks only when it was asked to move the originals. The
     ///   default is `FileRecord.read`, which changes no file. Tests inject
     ///   it to drive each outcome.
     /// - Parameter verbose: gets one line when the volume gave no lock for
@@ -316,7 +316,9 @@ public struct DesqueezeJob: Sendable {
         var dngHeldUntilItsTagStep = false
         /// Line 6, the second record: the DNG directly after its tag step
         /// ended. exiftool writes a new file, so it differs from
-        /// `dngAsMade` after a write. Nil until the tag step has ended.
+        /// `dngAsMade` after a write. After a tag step that skipped, it is
+        /// `dngAsMade` itself, with no new read. Nil until the tag step
+        /// has ended.
         var dngAsTagged: FileRecord?
     }
 
@@ -393,7 +395,7 @@ public struct DesqueezeJob: Sendable {
             // 5 and 4: it plans a run in which they hold.
             let decision = OriginalDecision.decide(
                 hasFullMatch: original.hasFullMatch, dngIsAtTheFactor: atTheFactor.contains(original.dng.path),
-                dngIsThisRuns: { true }, dng: { .passed }, original: { .same })
+                dngIsThisRuns: { true }, dng: { .passed }, dngIsStillThisRuns: { true }, original: { .same })
             switch decision {
             case .move:
                 plan.steps.append(RunPlan.Step(name: original.arw.lastPathComponent, action: .trashOriginal))
@@ -546,9 +548,19 @@ public struct DesqueezeJob: Sendable {
                 originals[own].dngHeldUntilItsTagStep = FileRecord.isTheSameFile(
                     recorded: originals[own].dngAsMade, now: fileRecord(dng.url.path))
             }
-            if tagOne(dng, factor, &summary) { atTheFactor.insert(dng.url.path) }
-            // The second record, directly after the tag step ended.
-            if let own { originals[own].dngAsTagged = fileRecord(dng.url.path) }
+            let tagged = tagOne(dng, factor, &summary)
+            if tagged != .notAtTheFactor { atTheFactor.insert(dng.url.path) }
+            if let own {
+                // The second record. After a write, exiftool's new file is
+                // at the name, so the run reads its record, directly after
+                // the tag step ended. A tag step that skipped wrote
+                // nothing: the DNG must still be the file of the first
+                // record, so that record is the second one too. A new read
+                // here would take a file that arrived since the check
+                // above as the run's own.
+                originals[own].dngAsTagged = tagged == .skipped
+                    ? originals[own].dngAsMade : fileRecord(dng.url.path)
+            }
             completed += 1
             progress(RunProgress(completed: completed, total: total, name: dng.name))
         }
@@ -573,13 +585,16 @@ public struct DesqueezeJob: Sendable {
     /// when `OriginalDecision.decide` says so, and it stays with an
     /// `originalKept` note in every other case.
     ///
-    /// The reads of lines 6, 5 and 4 happen here, directly before the move,
-    /// in that order, and each one only when the lines before it hold. The
-    /// second read of the ARW is the last thing before the move.
+    /// The reads of lines 6, 5, 6 again and 4 happen here, directly before
+    /// the move, in that order, and each one only when the lines before it
+    /// hold. The second read of the ARW is the last thing before the move.
     ///
     /// Line 6 has two parts. The first was answered before the tag step of
     /// the DNG (`Original.dngHeldUntilItsTagStep`). The second is asked
-    /// here: the DNG must be the file that the tag step left.
+    /// here, two times: the DNG must be the file that the tag step left,
+    /// before the check of line 5, and again after its exiftool read. So a
+    /// file that takes the name while line 5 works does not pass for the
+    /// run's own.
     ///
     /// The move is `BackupHandling.trashFile`, once. When it throws, the ARW
     /// is where it was: it is not deleted, and no other way is tried.
@@ -595,6 +610,9 @@ public struct DesqueezeJob: Sendable {
             dng: {
                 DNGCheck.check(original.dng.lastPathComponent, record: fileRecord(original.dng.path), arw: name,
                                factor: factor, tags: { try tag.readOriginalCheck(original.dng) })
+            },
+            dngIsStillThisRuns: {
+                FileRecord.isTheSameFile(recorded: original.dngAsTagged, now: fileRecord(original.dng.path))
             },
             original: { OriginalState(recorded: original.recorded, now: fileRecord(original.arw.path)) })
         switch decision {
@@ -643,14 +661,14 @@ public struct DesqueezeJob: Sendable {
 
     /// The tag step for one DNG (design 4.3, steps 2 to 4).
     ///
-    /// - Returns: true when the step ended with the DNG at the factor: the
-    ///   tag was set and read back, or the DNG was at the factor already
-    ///   (design 14.2, line 3). False for a DNG that was blocked, and for
-    ///   one whose write or check failed.
-    private func tagOne(_ dng: DNGFile, _ factor: SqueezeFactor, _ summary: inout RunSummary) -> Bool {
+    /// - Returns: how the step ended. `.wrote` and `.skipped` both end
+    ///   with the DNG at the factor (design 14.2, line 3). The fifth step
+    ///   must tell them apart: only a write puts a new file at the name
+    ///   (line 6).
+    private func tagOne(_ dng: DNGFile, _ factor: SqueezeFactor, _ summary: inout RunSummary) -> Tagged {
         let (decision, hasBackup) = decide(dng, factor)
         summary.count(decision, for: dng.name, hasBackup: hasBackup)
-        guard decision == .write else { return decision == .skip }
+        guard decision == .write else { return decision == .skip ? .skipped : .notAtTheFactor }
 
         do {
             try tag.write(factor, to: dng.url)
@@ -675,7 +693,7 @@ public struct DesqueezeJob: Sendable {
             }
             summary.failed += 1
             summary.notes.append(.failed(dng.name, message: message, detail: detail))
-            return false
+            return .notAtTheFactor
         }
 
         summary.set += 1
@@ -685,7 +703,17 @@ public struct DesqueezeJob: Sendable {
             // The tag is set and read back. Only the backup stayed.
             summary.notes.append(.backupKept(dng.name, detail: error.localizedDescription))
         }
-        return true
+        return .wrote
+    }
+
+    /// How the tag step of one DNG ended.
+    private enum Tagged {
+        /// The tag was set and read back. exiftool wrote a new file.
+        case wrote
+        /// The DNG was at the factor already. Nothing was written.
+        case skipped
+        /// The DNG was blocked, or its write or check failed.
+        case notAtTheFactor
     }
 
     static func describe(_ error: Error) -> String {

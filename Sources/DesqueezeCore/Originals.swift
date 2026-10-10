@@ -222,15 +222,17 @@ public enum OriginalDecision: Equatable, Sendable {
     /// The rule of design 14.2, for one ARW that this run converted (line
     /// 1). It reads no file: its caller gives what the run knows.
     ///
-    /// The lines are asked in this order: 2, 3, 6, 5, 4. The first one that
-    /// does not hold decides, and the ones after it are not asked. So an
-    /// ARW that stays for line 2 or 3 costs no read at the fifth step. Line
-    /// 6 stands before line 5: the tags of a DNG say nothing until the DNG
-    /// is known to be this run's file. Line 4 is last, so nothing stands
-    /// between the second read of the ARW and its move.
+    /// The lines are asked in this order: 2, 3, 6, 5, 6 again, 4. The first
+    /// one that does not hold decides, and the ones after it are not asked.
+    /// So an ARW that stays for line 2 or 3 costs no read at the fifth
+    /// step. Line 6 stands before line 5: the tags of a DNG say nothing
+    /// until the DNG is known to be this run's file. Line 6 is asked again
+    /// after line 5: the check of line 5 takes time, and another file can
+    /// take the name before exiftool opens it. Line 4 is last, so nothing
+    /// stands between the second read of the ARW and its move.
     ///
-    /// The dry run gives `true`, `.passed` and `.same`: it plans a run in
-    /// which every step passes.
+    /// The dry run gives `true`, `.passed`, `true` and `.same`: it plans a
+    /// run in which every step passes.
     ///
     /// - Parameters:
     ///   - hasFullMatch: line 2. False when the conversion has a
@@ -241,14 +243,19 @@ public enum OriginalDecision: Equatable, Sendable {
     ///     this run made: its record from after the conversion held before
     ///     the tag step, and its record from after the tag step holds now.
     ///   - dng: line 5, the check of the DNG.
+    ///   - dngIsStillThisRuns: line 6 again, after the check of line 5 has
+    ///     passed. True when `<base>.dng` is still the file that the tag
+    ///     step left: the file that exiftool read for line 5 is this run's.
     ///   - original: line 4, the ARW now against its record from before the
     ///     conversion.
     public static func decide(hasFullMatch: Bool, dngIsAtTheFactor: Bool, dngIsThisRuns: () -> Bool,
-                              dng: () -> DNGCheck, original: () -> OriginalState) -> OriginalDecision {
+                              dng: () -> DNGCheck, dngIsStillThisRuns: () -> Bool,
+                              original: () -> OriginalState) -> OriginalDecision {
         guard hasFullMatch else { return .keep(.noFullMatch) }
         guard dngIsAtTheFactor else { return .keep(.dngNotComplete) }
         guard dngIsThisRuns() else { return .keep(.dngChanged) }
         if case .failed(let detail) = dng() { return .keep(.dngNotChecked(detail: detail)) }
+        guard dngIsStillThisRuns() else { return .keep(.dngChanged) }
         switch original() {
         case .same: return .move
         case .changed: return .keep(.changed)

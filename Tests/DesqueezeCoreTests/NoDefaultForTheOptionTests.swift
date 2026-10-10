@@ -38,10 +38,12 @@ final class NoDefaultForTheOptionTests: XCTestCase {
     }
 
     /// A parameter with a default: the name, an optional second name, a
-    /// colon, a type, and one `=`. A call such as `trashOriginals: false`
-    /// has no `=` after its value, and `==` is a comparison.
+    /// colon, a type on that line, and one `=`. Spaces and line breaks can
+    /// stand between the type and the `=`: a default on the next line is a
+    /// default. A call such as `trashOriginals: false` has no `=` after its
+    /// value, and `==`, `!=`, `<=` and `>=` are comparisons.
     static let parameterWithADefault = try! NSRegularExpression(
-        pattern: #"\btrashOriginals(?:\s+[A-Za-z_]\w*)?\s*:[^,)=\n{}]*[^,)=\n{}!<>]=(?!=)"#)
+        pattern: #"\btrashOriginals(?:\s+[A-Za-z_]\w*)?\s*:[^,)=\n{}]*?\s*(?<![!<>=])=(?!=)"#)
 
     /// A stored property or a constant with a start value. The first group
     /// is the value, to the end of the line.
@@ -138,6 +140,10 @@ final class NoDefaultForTheOptionTests: XCTestCase {
             "func run(folder: URL, trashOriginals: Bool = false) {}",
             "func run(\n    folder: URL,\n    trashOriginals: Bool = true,\n    remove: Bool\n) {}",
             "func run(trashOriginals:Bool=true) {}",
+            // The default is on the next line.
+            "func run(\n    folder: URL,\n    trashOriginals: Bool\n        = true,\n    remove: Bool\n) {}",
+            "func run(trashOriginals: Bool\n= true) {}",
+            "func run(trashOriginals: Bool   \n\n   = true) {}",
             "func run(trashOriginals: Swift.Bool = true) {}",
             "func run(trashOriginals: Bool? = nil) {}",
             "func run(trashOriginals: Optional<Bool> = nil) {}",
@@ -169,6 +175,9 @@ final class NoDefaultForTheOptionTests: XCTestCase {
             "self.trashOriginals = false",
             "if trashOriginals, !showsTrashOriginals { trashOriginals = false }",
             "public let trashOriginals: Bool",
+            "public let trashOriginals: Bool\n    public let other = 5",
+            "func run(trashOriginals: Bool,\n         remove: Bool = false) {}",
+            "start(trashOriginals: on\n)\nlet x = 1",
             "case .run(let folder, let factor, let convert, let trashOriginals, let dryRun):",
             "public static let trashOriginalsLabel = \"Move the original ARW files to the Trash\"",
             "public static func trashOriginalsLine(count: Int = 1) -> String { \"\" }",

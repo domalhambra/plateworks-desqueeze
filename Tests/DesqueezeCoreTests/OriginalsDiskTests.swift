@@ -82,8 +82,9 @@ final class OriginalsDiskTests: XCTestCase {
     ///
     /// - Parameter afterARead: called after each read of `X.dng`, with the
     ///   number of that read: 1 is the record after the conversion, 2 the
-    ///   check before the tag step, 3 the record after it, 4 line 6 at the
-    ///   fifth step, and 5 line 5.
+    ///   check before the tag step, 3 the record after a tag step that
+    ///   wrote, 4 line 6 at the fifth step, 5 line 5, and 6 line 6 again,
+    ///   after the exiftool read of line 5.
     func job(backups: FileBackups, afterARead: @escaping @Sendable (Int) -> Void = { _ in }) -> DesqueezeJob {
         let log = CallLog()
         let reads = Reads()
@@ -200,6 +201,35 @@ final class OriginalsDiskTests: XCTestCase {
             name: "X.ARW", kind: .originalKept,
             message: "The original stays, because its DNG changed during the run.", detail: nil))
         XCTAssertEqual(summary.originalsInTrash, 0)
+    }
+
+    // Another file takes the name at the fifth step: after the read of
+    // line 6 (read 4), or after the read of line 5 and before exiftool
+    // opens the file (read 5). The check of line 5 passes for it. The read
+    // after that check sees that it is not the file that the tag step left.
+    func testARealDNGThatIsReplacedAfterTheReadOfLine6KeepsTheARW() throws {
+        try assertTheARWStaysWhenTheDNGIsReplaced(afterRead: 4)
+    }
+
+    func testARealDNGThatIsReplacedAfterTheReadOfLine5KeepsTheARW() throws {
+        try assertTheARWStaysWhenTheDNGIsReplaced(afterRead: 5)
+    }
+
+    func assertTheARWStaysWhenTheDNGIsReplaced(afterRead read: Int, line: UInt = #line) throws {
+        let arw = folder.appendingPathComponent("X.ARW")
+        try arwBytes.write(to: arw)
+        let (trash, backups) = try makeTrash()
+        let job = job(backups: backups, afterARead: { [self] in if $0 == read { replaceTheDNG() } })
+
+        let summary = try job.run(folder: folder, factor: factor, convert: true, trashOriginals: true)
+
+        XCTAssertEqual(try names(), ["X.ARW", "X.dng"], "the ARW stays", line: line)
+        XCTAssertEqual(try Data(contentsOf: arw), arwBytes, line: line)
+        XCTAssertEqual(try names(in: trash), [], line: line)
+        XCTAssertEqual(summary.notes.last, FileNote(
+            name: "X.ARW", kind: .originalKept,
+            message: "The original stays, because its DNG changed during the run.", detail: nil), line: line)
+        XCTAssertEqual(summary.originalsInTrash, 0, line: line)
     }
 
     // The ARW is gone at the fifth step: another program moved it away.
