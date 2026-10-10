@@ -998,11 +998,13 @@ An ARW goes to the Trash only when every line holds:
    conversion passed, and directly after the tag step ended (exiftool
    writes a new file, so the record changes there). The first record must
    hold directly before the tag step reads or writes that DNG. The second
-   must hold at step 5. A DNG that fails either check is still tagged as
-   any DNG in the folder is, but its ARW stays.
+   must hold at step 5, before the read of line 5 and again after it. When
+   the tag step wrote nothing (the DNG was at the value already), the second
+   record is the first one. A DNG that fails a check is still tagged as any
+   DNG in the folder is, but its ARW stays.
 
-The run asks the lines in the order 1, 2, 3, 6, 5, 4, so the second read of
-the ARW is the last thing before the move. An ARW that has no record from before its conversion counts as changed. The name in line 5
+The run asks the lines in the order 1, 2, 3, 6, 5, 6 again, 4, so the second
+read of the ARW is the last thing before the move. An ARW that has no record from before its conversion counts as changed. The name in line 5
 is compared exactly, also in letter case. An ARW that is gone gets its own
 sentence (14.3), because "it stays" would be false. A DNG whose own backup the Trash
 refused (`backupKept`) is still complete.
@@ -1140,10 +1142,11 @@ One unit records and compares the ARW's three facts of line 4.
   file number (measured on a disk image; APFS, HFS+ and ExFAT gave another
   number).
 - A moment lies between the end of a conversion and the first record of its
-  DNG. A second, longer one lies between the check before a tag step and
-  the record after it: exiftool works on the DNG in that time, about a
-  tenth of a second, and its write gives the file a new record, so the run
-  cannot tell exiftool's new file from another one. A file that another
+  DNG. A second, longer one lies between the check before a tag step that
+  writes and the record after it: exiftool works on the DNG in that time,
+  about a tenth of a second, and its write gives the file a new record, so
+  the run cannot tell exiftool's new file from another one. A swap after
+  the last check of step 5 is the same as a swap after the run. A file that another
   program puts at `<base>.dng` in one of those moments is taken as the
   run's own. Line 5 still holds for it: it must name the ARW and carry the
   factor.
