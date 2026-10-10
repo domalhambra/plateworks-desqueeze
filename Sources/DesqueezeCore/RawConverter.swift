@@ -16,8 +16,12 @@ public enum ConvertError: Error, Equatable {
     /// so the caller does not give the ARW to the next one:
     ///
     /// - Something took the name `<base>.dng` while the converter worked.
-    /// - A leftover file of exiftool is beside the ARW.
-    /// - The Trash refused the leftover work file of an earlier run.
+    /// - A leftover file of exiftool, `<base>.dng_exiftool_tmp`, is beside
+    ///   the ARW.
+    /// - The Trash refused the leftover work file of an earlier run, or
+    ///   exiftool's leftover beside it.
+    /// - A folder or a link has the name of that work file or of that
+    ///   leftover. The app does not remove it.
     ///
     /// `partial` is as for `failed`.
     case failedForAll(String, partial: URL? = nil)
@@ -177,6 +181,14 @@ public enum ConverterOutput {
         return lstat(path, &info) == 0
     }
 
+    /// True only for a regular file. False for a folder, for a symbolic
+    /// link, also one that points at a regular file, and when nothing has
+    /// the name. `lstat` does not follow a link.
+    public static func isRegularFile(atPath path: String) -> Bool {
+        var info = stat()
+        return lstat(path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG
+    }
+
     /// The size of the file in bytes. Nil when it cannot be read: nothing is
     /// there, or the disk gave an error. Nil is not 0.
     public static func size(atPath path: String) -> Int? {
@@ -213,6 +225,12 @@ public enum ConverterOutput {
 ///    `discardLeftover` takes each one that is there, the work file first.
 ///    When that fails, no program starts, the failure holds for every
 ///    converter, and the sentence names the file.
+///
+///    **Only a regular file is discarded.** A folder or a symbolic link at
+///    either name, also a link that points at nothing, is no leftover of a
+///    run. It stops the ARW in the same way, with the same sentence, and
+///    nothing moves: both names are looked at before the first file is
+///    taken.
 /// 4. **A partial output is reported only when the program ran:** after a
 ///    signal ended it, after a non-zero exit, after exit 0 with an empty
 ///    file, after `match` failed, or after the rename failed. It is always
@@ -247,6 +265,8 @@ struct ConverterRules: Sendable {
     let name: String
     let exists: @Sendable (String) -> Bool
     let size: @Sendable (String) -> Int?
+    /// True only for a regular file: not for a folder, and not for a link.
+    let isRegularFile: @Sendable (String) -> Bool
     /// Rule 3. It gets only the two leftovers of the ARW in work:
     /// `ConverterOutput.workURL`, and `<work file>_exiftool_tmp`.
     let discardLeftover: @Sendable (URL) throws -> Void
@@ -326,11 +346,19 @@ struct ConverterRules: Sendable {
     }
 
     /// Rule 3. The names of the work file and of exiftool's leftover beside
-    /// it say that they are this app's own, so each one that is there is
-    /// discarded with no question. When one cannot be, the conversion fails
-    /// for every converter, and the sentence names the file to delete.
+    /// it say that they are this app's own, so each regular file that is
+    /// there is discarded with no question. When one cannot be, or when a
+    /// folder or a link has one of the names, the conversion fails for every
+    /// converter, and the sentence names the thing to delete.
     private func discardTheLeftovers(of work: URL) throws {
-        for leftover in [work, ConverterOutput.exiftoolLeftoverURL(for: work)] where exists(leftover.path) {
+        let leftovers = [work, ConverterOutput.exiftoolLeftoverURL(for: work)].filter { exists($0.path) }
+        // Before the first file moves: a run leaves a regular file, and
+        // nothing else. A folder can hold the person's files, and a link
+        // is not this app's to judge.
+        for leftover in leftovers where !isRegularFile(leftover.path) {
+            throw ConvertError.failedForAll(Self.leftover(named: leftover.lastPathComponent))
+        }
+        for leftover in leftovers {
             do {
                 try discardLeftover(leftover)
             } catch {
@@ -365,7 +393,8 @@ struct ConverterRules: Sendable {
 ///
 /// 1. A work file that is there already is the leftover of a run that ended
 ///    hard, and so is `<work file>_exiftool_tmp`. `discardLeftover` takes
-///    them. When that fails, the converter does not start.
+///    them. When that fails, the converter does not start. A folder or a
+///    link at either name is not taken, and stops the conversion too.
 /// 2. `"<Adobe DNG Converter>" -c -d <folder> -o <work file name> <in.ARW>`.
 /// 3. A rename of the work file to `<base>.dng` that fails when anything has
 ///    that name (`ExclusiveRename`).
@@ -400,6 +429,8 @@ public struct AdobeConverter: RawConverter {
     ///     symbolic link. Tests inject it.
     ///   - fileSize: the size of a file in bytes, nil when it cannot be read.
     ///     Asked only for a file that `fileExists` has found.
+    ///   - fileIsRegular: true only for a regular file. It must not follow
+    ///     a symbolic link. Step 1 asks it about a leftover.
     ///   - rename: step 3. Tests inject it to drive each outcome.
     public init(
         executable: URL,
@@ -407,12 +438,13 @@ public struct AdobeConverter: RawConverter {
         discardLeftover: @escaping @Sendable (URL) throws -> Void,
         fileExists: @escaping @Sendable (String) -> Bool = { ConverterOutput.exists(atPath: $0) },
         fileSize: @escaping @Sendable (String) -> Int? = { ConverterOutput.size(atPath: $0) },
+        fileIsRegular: @escaping @Sendable (String) -> Bool = { ConverterOutput.isRegularFile(atPath: $0) },
         rename: @escaping @Sendable (URL, URL) -> ExclusiveRename.Outcome = { ExclusiveRename.system.move($0, to: $1) }
     ) {
         self.executable = executable
         self.runner = runner
         rules = ConverterRules(name: ConverterKind.adobe.name, exists: fileExists, size: fileSize,
-                               discardLeftover: discardLeftover, rename: rename)
+                               isRegularFile: fileIsRegular, discardLeftover: discardLeftover, rename: rename)
     }
 
     /// `-c` is lossless compression. `-d` is the output folder, and `-o` the

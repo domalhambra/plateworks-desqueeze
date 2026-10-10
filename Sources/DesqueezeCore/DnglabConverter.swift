@@ -13,7 +13,8 @@ import Foundation
 /// 1. A work file that is there already is the leftover of a run that ended
 ///    hard, and so is `<work file>_exiftool_tmp`, which exiftool leaves when
 ///    it ends hard in step 3. `discardLeftover` takes them. When that fails,
-///    no program starts.
+///    no program starts. A folder or a link at either name is not taken,
+///    and stops the conversion too.
 /// 2. `dnglab convert --embed-raw false <in.ARW> <work file>`. Without the
 ///    flag dnglab puts the whole ARW inside the DNG.
 /// 3. One exiftool call that writes every tag into the work file, with `-m`
@@ -71,6 +72,8 @@ public struct DnglabConverter: RawConverter {
     ///   - fileExists: whether anything has this name. It must not follow a
     ///     symbolic link. Tests inject it.
     ///   - fileSize: the size of a file in bytes, nil when it cannot be read.
+    ///   - fileIsRegular: true only for a regular file. It must not follow
+    ///     a symbolic link. Step 1 asks it about a leftover.
     ///   - rename: step 5. Tests inject it to drive each outcome.
     public init(
         executable: URL, exiftool: URL,
@@ -78,13 +81,14 @@ public struct DnglabConverter: RawConverter {
         discardLeftover: @escaping @Sendable (URL) throws -> Void,
         fileExists: @escaping @Sendable (String) -> Bool = { ConverterOutput.exists(atPath: $0) },
         fileSize: @escaping @Sendable (String) -> Int? = { ConverterOutput.size(atPath: $0) },
+        fileIsRegular: @escaping @Sendable (String) -> Bool = { ConverterOutput.isRegularFile(atPath: $0) },
         rename: @escaping @Sendable (URL, URL) -> ExclusiveRename.Outcome = { ExclusiveRename.system.move($0, to: $1) }
     ) {
         self.executable = executable
         self.exiftool = exiftool
         self.runner = runner
         rules = ConverterRules(name: ConverterKind.dnglab.name, exists: fileExists, size: fileSize,
-                               discardLeftover: discardLeftover, rename: rename,
+                               isRegularFile: fileIsRegular, discardLeftover: discardLeftover, rename: rename,
                                reason: { Self.reason(inStandardError: $0.stderr) },
                                exitCodesThatLeaveTheOutputAlone: [Self.outputExists])
     }

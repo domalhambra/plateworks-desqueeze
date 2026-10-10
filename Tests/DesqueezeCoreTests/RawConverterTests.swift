@@ -40,7 +40,7 @@ final class RawConverterTests: XCTestCase {
                 if let error = steps.discardError { throw error }
                 disk.paths.remove($0.path)
             },
-            fileExists: { disk.exists($0) }, fileSize: { disk.size($0) },
+            fileExists: { disk.exists($0) }, fileSize: { disk.size($0) }, fileIsRegular: { disk.isRegularFile($0) },
             rename: { from, to in
                 steps.renames.append([from.path, to.path])
                 if steps.renameOutcome == .moved { disk.move(from.path, to: to.path) }
@@ -419,6 +419,103 @@ final class RawConverterTests: XCTestCase {
         XCTAssertEqual(disk.paths, [workTmpPath], "the leftover is where it was")
     }
 
+    // MARK: Step 1 removes only a regular file (design 13.3)
+
+    // A folder or a link has the name of the work file, or of exiftool's
+    // leftover beside it. That is no leftover of a run: the app does not
+    // send it to the Trash. The ARW stops with the leftover note, the
+    // converter does not start, and nothing moves: also not the regular file
+    // at the other name.
+    func testAThingThatIsNoRegularFileAtALeftoverNameStopsTheConversionAndNothingMoves() {
+        let names = [workPath: ".DSC05680.desqueeze-work.dng", workTmpPath: ".DSC05680.desqueeze-work.dng_exiftool_tmp"]
+        for (notAFile, both) in [(workPath, false), (workTmpPath, false), (workPath, true), (workTmpPath, true)] {
+            setUp()
+            converterWritesItsFile()
+            disk.paths = both ? [workPath, workTmpPath] : [notAFile]
+            disk.notRegularFiles = [notAFile]
+            assertFails(.failedForAll(
+                "A leftover file, \(names[notAFile]!), is beside this photo. \(hiddenFileSentence) "
+                    + "Delete it, then run again.",
+                partial: nil), notAFile)
+            XCTAssertEqual(steps.discarded, [], "\(notAFile), both \(both): nothing moves")
+            XCTAssertEqual(runner.calls, [], "\(notAFile): the converter did not start")
+            XCTAssertEqual(disk.paths, both ? [workPath, workTmpPath] : [notAFile])
+        }
+    }
+
+    /// The things that are no regular file, each planted at one name.
+    static func thingsThatAreNoRegularFile(in folder: URL) throws -> [(String, (URL) throws -> Void)] {
+        let files = FileManager.default
+        let target = folder.appendingPathComponent("a file of the person.bin")
+        try Data("a file of the person".utf8).write(to: target)
+        return [
+            ("a folder with a file in it", {
+                try files.createDirectory(at: $0, withIntermediateDirectories: false)
+                try Data("inside".utf8).write(to: $0.appendingPathComponent("inside.txt"))
+            }),
+            ("a link to a file", { try files.createSymbolicLink(at: $0, withDestinationURL: target) }),
+            ("a link to a folder", { try files.createSymbolicLink(at: $0, withDestinationURL: folder) }),
+            ("a dangling link", {
+                try files.createSymbolicLink(atPath: $0.path, withDestinationPath: folder.path + "/no such file")
+            }),
+        ]
+    }
+
+    func testOnlyARegularFileIsARegularFileOnTheRealDisk() throws {
+        let folder = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(folder) }
+        let file = folder.appendingPathComponent("a.dng")
+        try Data().write(to: file)
+        XCTAssertTrue(ConverterOutput.isRegularFile(atPath: file.path), "an empty file is a regular file")
+        XCTAssertFalse(ConverterOutput.isRegularFile(atPath: folder.appendingPathComponent("no such file").path))
+        for (number, (what, make)) in try Self.thingsThatAreNoRegularFile(in: folder).enumerated() {
+            let thing = folder.appendingPathComponent("thing \(number)")
+            try make(thing)
+            XCTAssertFalse(ConverterOutput.isRegularFile(atPath: thing.path), what)
+            XCTAssertTrue(ConverterOutput.exists(atPath: thing.path), what)
+        }
+    }
+
+    // The same on the real disk, with the questions that the app asks: a
+    // folder with a file in it, a link to a file, a link to a folder, and a
+    // link that points at nothing, each at the name of the work file and at
+    // the name of exiftool's leftover beside it.
+    func testOnTheRealDiskAFolderOrALinkAtALeftoverNameStopsTheConversionAndStaysAsItWas() throws {
+        let folder = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(folder) }
+        let files = FileManager.default
+        let asked = CallLog()
+        let converter = AdobeConverter(executable: executable, runner: runner,
+                                       discardLeftover: { asked.entries.append($0.lastPathComponent) })
+        var number = 0
+        for (what, make) in try Self.thingsThatAreNoRegularFile(in: folder) {
+            for suffix in ["", "_exiftool_tmp"] {
+                number += 1
+                let arw = folder.appendingPathComponent("frame \(number).ARW")
+                let name = ".frame \(number).desqueeze-work.dng\(suffix)"
+                let thing = folder.appendingPathComponent(name)
+                try make(thing)
+                let before = try files.attributesOfItem(atPath: thing.path)
+
+                XCTAssertThrowsError(try converter.convert(arw), "\(what) at \(name)") {
+                    XCTAssertEqual($0 as? ConvertError, .failedForAll(
+                        "A leftover file, \(name), is beside this photo. \(hiddenFileSentence) Delete it, then run again.",
+                        partial: nil), "\(what) at \(name)")
+                }
+
+                let after = try files.attributesOfItem(atPath: thing.path)
+                XCTAssertEqual(after[.type] as? FileAttributeType, before[.type] as? FileAttributeType, what)
+                XCTAssertEqual(after[.systemFileNumber] as? Int, before[.systemFileNumber] as? Int, what)
+            }
+        }
+        XCTAssertEqual(asked.entries, [], "nothing was given to the discard")
+        XCTAssertEqual(runner.calls, [], "the converter never started")
+        XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent("a file of the person.bin")),
+                       Data("a file of the person".utf8))
+        XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent(".frame 1.desqueeze-work.dng/inside.txt")),
+                       Data("inside".utf8), "the file in the folder is where it was")
+    }
+
     // MARK: The rename (design 13.3, step 5)
 
     // Another program made `<base>.dng` after the check before the start,
@@ -467,6 +564,14 @@ final class FakeDisk: @unchecked Sendable {
     func exists(_ path: String) -> Bool {
         checked.append(path)
         return paths.contains(path)
+    }
+
+    /// Things that are there, and that are no regular file: a folder, or a
+    /// symbolic link.
+    var notRegularFiles: Set<String> = []
+
+    func isRegularFile(_ path: String) -> Bool {
+        paths.contains(path) && !notRegularFiles.contains(path)
     }
 
     /// A rename: the file has the new name, with its size.

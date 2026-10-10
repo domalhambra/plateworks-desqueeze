@@ -964,6 +964,56 @@ final class DesqueezeJobTests: XCTestCase {
         }
     }
 
+    // A folder with files in it has the name of the work file, and a link
+    // has the name of exiftool's leftover beside it. Neither is a leftover
+    // of a run. With the real converters, as the app wires them, on real
+    // files: the ARW stops with the note, no converter starts, nothing goes
+    // to the Trash, and both things are as they were.
+    func testAFolderOrALinkAtALeftoverNameStopsTheARWAndNothingGoesToTheTrash() throws {
+        for (withDnglab, withAdobe) in [(true, true), (true, false), (false, true)] {
+            for atTheWorkName in [true, false] {
+                let real = try RealShoot()
+                defer { removeTemporaryFolder(real.shoot) }
+                let leftoverOfExiftool = ConverterOutput.exiftoolLeftoverURL(for: real.work)
+                let persons = real.shoot.appendingPathComponent("notes.txt")
+                try Data("a file of the person".utf8).write(to: persons)
+                let thing = atTheWorkName ? real.work : leftoverOfExiftool
+                if atTheWorkName {
+                    try FileManager.default.createDirectory(at: thing, withIntermediateDirectories: false)
+                    try Data("inside".utf8).write(to: thing.appendingPathComponent("inside.txt"))
+                    // A regular leftover at the other name. It does not move.
+                    try Data("half a write".utf8).write(to: leftoverOfExiftool)
+                } else {
+                    try FileManager.default.createSymbolicLink(at: thing, withDestinationURL: persons)
+                    try Data("cut off".utf8).write(to: real.work)
+                }
+                let before = try real.names(in: real.shoot)
+                let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
+
+                let summary = DesqueezeJob(
+                    tag: tag,
+                    converters: real.tools.converters(backups: files, withDnglab: withDnglab, withAdobe: withAdobe),
+                    backups: files).run(real.snapshot, factor: factor, convert: true)
+
+                XCTAssertEqual(summary.notes, [FileNote(
+                    name: "frame 1.ARW", kind: .notConverted, message: "Not converted.",
+                    detail: "A leftover file, \(thing.lastPathComponent), is beside this photo. \(hiddenFileSentence) "
+                        + "Delete it, then run again.")])
+                XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs], [0, 1, 1])
+                XCTAssertEqual(real.tools.runner.calls.filter { !$0.arguments.contains("-IFD0:Model") }, [],
+                               "no converter started")
+                XCTAssertEqual(try real.names(in: real.trash), [], "nothing goes to the Trash")
+                XCTAssertEqual(try real.names(in: real.shoot), before, "every name is where it was")
+                XCTAssertEqual(try Data(contentsOf: persons), Data("a file of the person".utf8))
+                if atTheWorkName {
+                    XCTAssertEqual(try Data(contentsOf: thing.appendingPathComponent("inside.txt")), Data("inside".utf8))
+                } else {
+                    XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: thing.path), persons.path)
+                }
+            }
+        }
+    }
+
     // MARK: A leftover file of exiftool (design 13.3)
 
     // `<base>.dng_exiftool_tmp` stops the ARW before either converter

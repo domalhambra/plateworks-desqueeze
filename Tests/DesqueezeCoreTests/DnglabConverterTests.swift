@@ -87,7 +87,7 @@ final class DnglabConverterTests: XCTestCase {
                 if let error = tools.discardError { throw error }
                 disk.paths.remove($0.path)
             },
-            fileExists: { disk.exists($0) }, fileSize: { disk.size($0) },
+            fileExists: { disk.exists($0) }, fileSize: { disk.size($0) }, fileIsRegular: { disk.isRegularFile($0) },
             rename: { from, to in
                 tools.renames.append([from.path, to.path])
                 if tools.renameOutcome == .moved { disk.move(from.path, to: to.path) }
@@ -647,6 +647,65 @@ final class DnglabConverterTests: XCTestCase {
         XCTAssertEqual(tools.discarded, [workTmpPath])
         XCTAssertEqual(runner.calls, [], "no program started")
         XCTAssertEqual(disk.paths, [workTmpPath], "the leftover is where it was")
+    }
+
+    // MARK: Step 1 removes only a regular file (design 13.3)
+
+    // A folder or a link has the name of the work file, or of exiftool's
+    // leftover beside it. The app does not send it to the Trash. The ARW
+    // stops with the leftover note, no program starts, and nothing moves:
+    // also not the regular file at the other name.
+    func testAThingThatIsNoRegularFileAtALeftoverNameStopsTheConversionAndNothingMoves() {
+        let names = [workPath: ".DSC05680.desqueeze-work.dng", workTmpPath: ".DSC05680.desqueeze-work.dng_exiftool_tmp"]
+        for (notAFile, both) in [(workPath, false), (workTmpPath, false), (workPath, true), (workTmpPath, true)] {
+            setUp()
+            disk.paths = both ? [workPath, workTmpPath] : [notAFile]
+            disk.notRegularFiles = [notAFile]
+            assertFails(.failedForAll(
+                "A leftover file, \(names[notAFile]!), is beside this photo. \(hiddenFileSentence) "
+                    + "Delete it, then run again.",
+                partial: nil), nil, notAFile)
+            XCTAssertEqual(tools.discarded, [], "\(notAFile), both \(both): nothing moves")
+            XCTAssertEqual(runner.calls, [], "\(notAFile): no program started")
+            XCTAssertEqual(disk.paths, both ? [workPath, workTmpPath] : [notAFile])
+        }
+    }
+
+    // The same on the real disk, with the questions that the app asks.
+    func testOnTheRealDiskAFolderOrALinkAtALeftoverNameStopsTheConversionAndStaysAsItWas() throws {
+        let folder = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(folder) }
+        let files = FileManager.default
+        let asked = CallLog()
+        let real = DnglabConverter(executable: dnglab, exiftool: exiftool, runner: runner,
+                                   discardLeftover: { asked.entries.append($0.lastPathComponent) })
+        var number = 0
+        for (what, make) in try RawConverterTests.thingsThatAreNoRegularFile(in: folder) {
+            for suffix in ["", "_exiftool_tmp"] {
+                number += 1
+                let name = ".frame \(number).desqueeze-work.dng\(suffix)"
+                let thing = folder.appendingPathComponent(name)
+                try make(thing)
+                let before = try files.attributesOfItem(atPath: thing.path)
+
+                XCTAssertThrowsError(
+                    try real.convert(folder.appendingPathComponent("frame \(number).ARW"), facts: adapted),
+                    "\(what) at \(name)"
+                ) {
+                    XCTAssertEqual($0 as? ConvertError, .failedForAll(
+                        "A leftover file, \(name), is beside this photo. \(hiddenFileSentence) Delete it, then run again.",
+                        partial: nil), "\(what) at \(name)")
+                }
+
+                let after = try files.attributesOfItem(atPath: thing.path)
+                XCTAssertEqual(after[.type] as? FileAttributeType, before[.type] as? FileAttributeType, what)
+                XCTAssertEqual(after[.systemFileNumber] as? Int, before[.systemFileNumber] as? Int, what)
+            }
+        }
+        XCTAssertEqual(asked.entries, [], "nothing was given to the discard")
+        XCTAssertEqual(runner.calls, [], "no program started")
+        XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent(".frame 1.desqueeze-work.dng/inside.txt")),
+                       Data("inside".utf8), "the file in the folder is where it was")
     }
 
     // MARK: Before the start
