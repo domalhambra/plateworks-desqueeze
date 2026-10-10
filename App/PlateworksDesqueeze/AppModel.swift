@@ -47,8 +47,9 @@ final class AppModel: ObservableObject {
 
     /// Reads and writes the tag. Nil when exiftool is not installed.
     private let tag: ScaleTagging?
-    /// Nil when Adobe DNG Converter is not installed. The DNG files still run.
-    private let converter: RawConverter?
+    /// dnglab and Adobe DNG Converter, each nil when it is not installed.
+    /// With neither, the DNG files still run.
+    private let converters: RawConverters
     private let backups: BackupHandling
     /// Keeps the factor of a run for the next launch.
     private let saveFactor: @MainActor (String) -> Void
@@ -76,7 +77,8 @@ final class AppModel: ObservableObject {
     /// - Parameters:
     ///   - tag: nil when exiftool is not installed. The window then only
     ///     says so.
-    ///   - converter: nil when Adobe DNG Converter is not installed.
+    ///   - converters: dnglab and Adobe DNG Converter, each nil when it is
+    ///     not installed, and the reader of the ARW facts.
     ///   - backups: where a backup goes after a write that passed its check.
     ///   - savedFactor: the factor of the last run, as `saveFactor` got it.
     ///     Nil, or text that is no factor, gives 1.5.
@@ -84,12 +86,12 @@ final class AppModel: ObservableObject {
     ///   - now: the time in seconds, from any fixed start.
     ///   - announce: says one line to VoiceOver.
     init(
-        tag: ScaleTagging?, converter: RawConverter?, backups: BackupHandling,
+        tag: ScaleTagging?, converters: RawConverters, backups: BackupHandling,
         savedFactor: String?, saveFactor: @escaping @MainActor (String) -> Void,
         now: @escaping @MainActor () -> TimeInterval, announce: @escaping @MainActor (String) -> Void
     ) {
         self.tag = tag
-        self.converter = converter
+        self.converters = converters
         self.backups = backups
         self.saveFactor = saveFactor
         self.now = now
@@ -123,7 +125,9 @@ final class AppModel: ObservableObject {
     // (`FolderText`), so the window and the command line tool cannot say
     // different things. This type only hands them to the view.
 
-    private var converterAvailable: Bool { converter != nil }
+    /// True when one converter or the other is installed, so a pending ARW
+    /// can convert.
+    private var converterAvailable: Bool { converters.canConvert }
 
     /// For example `216 DNG · 12 ARW to convert`.
     var countsLine: String? { snapshot?.countsLine(converterAvailable: converterAvailable) }
@@ -139,8 +143,8 @@ final class AppModel: ObservableObject {
 
     var runLabel: String { FolderText.runLabel(count: runCount) }
 
-    /// The sentence about the ARW files a run left, with the reason when the
-    /// converter is missing. Nil when the run left none.
+    /// The sentence about the ARW files a run left, with the reason when
+    /// neither converter is installed. Nil when the run left none.
     func unconvertedLine(_ summary: RunSummary) -> String? {
         summary.unconvertedARWsLine(converterAvailable: converterAvailable)
     }
@@ -345,7 +349,7 @@ final class AppModel: ObservableObject {
     ///   guess it from the factor and `convert`.
     private func start(factor: SqueezeFactor, convert: Bool, remove: Bool) {
         guard let folder, let tag else { return }
-        let runner = DesqueezeJob(tag: tag, converter: converter, backups: backups)
+        let runner = DesqueezeJob(tag: tag, converters: converters, backups: backups)
         let flag = CancelFlag()
         // The job reports progress from its own thread. A stream keeps the
         // updates in order, and ends when the job returns.
@@ -408,10 +412,15 @@ extension AppModel {
         let registered = NSWorkspace.shared.urlForApplication(withBundleIdentifier: ToolLocator.converterBundleID)
         let locator = ToolLocator(registeredConverterApp: registered)
         let exiftool = options.hidesExiftool ? nil : locator.exiftool()
-        let converter = options.hidesConverter ? nil : locator.dngConverter()
+        // dnglab converts first. Adobe DNG Converter is the optional backup.
+        // Both need exiftool: with none, the window can do nothing.
+        let converters = exiftool.map {
+            RawConverters(exiftool: $0, dnglab: options.hidesDnglab ? nil : locator.dnglab(),
+                          adobe: options.hidesAdobe ? nil : locator.dngConverter())
+        }
         let model = AppModel(
             tag: exiftool.map { ScaleTag(exiftool: $0) },
-            converter: converter.map { AdobeConverter(executable: $0) },
+            converters: converters ?? .none,
             // The window moves a backup to the Trash.
             backups: FileBackups.systemTrash,
             savedFactor: UserDefaults.standard.string(forKey: factorKey),
@@ -436,13 +445,21 @@ extension AppModel {
 /// The launch hooks, for checks by hand only (design, section 9).
 struct LaunchOptions: Equatable {
     /// `-simulateMissingTools YES` shows the window as it is on a Mac with
-    /// neither tool. A Mac can have exiftool in two places, so a rename of
-    /// one proves nothing.
+    /// no tool: no exiftool and no converter. A Mac can have exiftool in two
+    /// places, so a rename of one proves nothing.
     var hidesExiftool: Bool
-    /// `-simulateMissingConverter YES` shows the window as it is on a Mac
-    /// with exiftool and with no Adobe DNG Converter. `-simulateMissingTools`
-    /// hides the converter too.
-    var hidesConverter: Bool
+    /// `-simulateMissingAdobe YES` shows the window as it is on a Mac with
+    /// no Adobe DNG Converter. `-simulateMissingConverter` and
+    /// `-simulateMissingTools` hide it too.
+    var hidesAdobe: Bool
+    /// `-simulateMissingDnglab YES` shows the window as it is on a Mac with
+    /// no dnglab. `-simulateMissingConverter` and `-simulateMissingTools`
+    /// hide it too.
+    var hidesDnglab: Bool
+    /// True when both converters are hidden. `-simulateMissingConverter YES`
+    /// does that: the window as it is on a Mac with exiftool and with no
+    /// converter.
+    var hidesConverter: Bool { hidesAdobe && hidesDnglab }
     /// `-openFolder <path>` loads a folder at launch. The standard Open panel
     /// runs in another process that a test script cannot drive, so checks by
     /// hand and by script start here.
@@ -453,7 +470,9 @@ struct LaunchOptions: Equatable {
     init(arguments: [String: Any]) {
         func isOn(_ key: String) -> Bool { (arguments[key] as? NSString)?.boolValue ?? false }
         hidesExiftool = isOn("simulateMissingTools")
-        hidesConverter = hidesExiftool || isOn("simulateMissingConverter")
+        let hidesBoth = hidesExiftool || isOn("simulateMissingConverter")
+        hidesAdobe = hidesBoth || isOn("simulateMissingAdobe")
+        hidesDnglab = hidesBoth || isOn("simulateMissingDnglab")
         openFolder = arguments["openFolder"] as? String
     }
 }

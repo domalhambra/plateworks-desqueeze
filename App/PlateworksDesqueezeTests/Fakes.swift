@@ -188,7 +188,7 @@ final class ModelHarness {
     /// its run is in flight, and that run must find nothing, not crash.
     func makeModel(hasExiftool: Bool = true) -> AppModel {
         AppModel(
-            tag: hasExiftool ? tag : nil, converter: nil, backups: backups,
+            tag: hasExiftool ? tag : nil, converters: .none, backups: backups,
             savedFactor: savedFactor, saveFactor: { [weak self] in self?.savedFactor = $0 },
             now: { [weak self] in self?.time ?? 0 }, announce: { [weak self] in self?.announcements.append($0) })
     }
