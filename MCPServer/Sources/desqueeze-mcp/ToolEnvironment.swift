@@ -67,11 +67,16 @@ struct ToolEnvironment: Sendable {
         return folder
     }
 
-    /// An operation throws only when its scan of the folder fails. No file
-    /// was tried then.
+    /// An operation throws when its scan of the folder fails, and when
+    /// another run works in the folder (design 13.9). No file was tried
+    /// then.
     private func scanned<Report>(_ folder: URL, _ work: () throws -> Report) throws -> Report {
         do {
             return try work()
+        } catch is FolderLock.Busy {
+            // The sentence is the core's, so the window and the command line
+            // tool say the same.
+            throw ToolFailure(FolderLock.busyMessage)
         } catch {
             var detail = error.localizedDescription
             if case TagError.toolFailed(let text) = error { detail = text }

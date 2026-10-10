@@ -170,6 +170,42 @@ final class ToolErrorTests: ServerTestCase {
         XCTAssertEqual(try state(of: folder), before, "no file changed")
     }
 
+    // MARK: One run in a folder at a time (design 13.9)
+
+    // The test process holds the lock that a run takes, as the command line
+    // tool or the window does while it works in the folder. The server is
+    // another process, so this is the real case.
+    func testARunWhileAnotherRunWorksInTheFolderIsAToolErrorAndAScanAndADryRunAreNot() throws {
+        let sentence = "Another Desqueeze run is working in this folder. Wait for it to end, then run again."
+        guard case .held(let other) = FolderLock.system.take(folder) else { return XCTFail("the lock of the test") }
+        defer { other.release() }
+
+        XCTAssertEqual(try refused("desqueeze_run", ["folder": folder.path, "factor": 1.5]), sentence)
+        XCTAssertEqual(try refused("desqueeze_run", ["folder": folder.path, "factor": 1.5, "convert": false]), sentence)
+        XCTAssertEqual(try refused("desqueeze_remove", ["folder": folder.path]), sentence)
+
+        // A scan and a dry run change no file, so they take no lock.
+        let allowed: [(String, [String: Any])] = [
+            ("desqueeze_scan", ["folder": folder.path]),
+            ("desqueeze_run", ["folder": folder.path, "factor": 1.5, "dry_run": true]),
+            ("desqueeze_remove", ["folder": folder.path, "dry_run": true]),
+        ]
+        for (name, arguments) in allowed {
+            let result = try call(server, name, arguments, timeout: ServerProcess.shortWait)
+            XCTAssertFalse(result.isError, "\(name): \(result.text)")
+        }
+        XCTAssertEqual(try state(of: folder), before, "no file changed")
+
+        // The other run ended. The call is a report now, not a refusal: the
+        // file is no DNG, so the report holds one file that failed.
+        other.release()
+        let result = try call(server, "desqueeze_run", ["folder": folder.path, "factor": 1.5, "convert": false],
+                              timeout: ServerProcess.shortWait)
+        XCTAssertFalse(result.isError, result.text)
+        XCTAssertEqual(try result.json()["failed"] as? Int, 1)
+        XCTAssertEqual(try state(of: folder), before, "a write that failed leaves the file as it was")
+    }
+
     // After every refusal, the server still works.
     func testTheServerGoesOnAfterAToolError() throws {
         _ = try refused("desqueeze_run", ["folder": folder.path])
