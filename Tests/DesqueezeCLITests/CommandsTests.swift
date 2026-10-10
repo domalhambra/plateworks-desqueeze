@@ -414,8 +414,7 @@ final class CommandsTests: XCTestCase {
             "exiftool: /fake/bin/exiftool",
             "dnglab: /fake/bin/dnglab",
             "Adobe DNG Converter: not installed",
-            "Adobe DNG Converter is not installed. "
-                + "Adobe DNG Converter is an optional backup for photos that dnglab cannot match.",
+            "Adobe DNG Converter is not installed. It is an optional backup for photos that dnglab cannot match.",
         ])
         XCTAssertFalse(h.out.text.contains("cannot be converted"), h.out.text)
     }

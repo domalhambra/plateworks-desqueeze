@@ -45,7 +45,9 @@ public enum FolderText {
         case (true, true):
             return nil
         case (true, false):
-            return "\(ConverterKind.adobe.name) is not installed. \(ConverterText.adobeIsAnOptionalBackup)"
+            // The words of design 13.5. The name is said once.
+            return "\(ConverterKind.adobe.name) is not installed. "
+                + "It is an optional backup for photos that \(ConverterKind.dnglab.name) cannot match."
         case (false, true):
             return "dnglab is faster and opens no window. Install it with: \(ToolLocator.dnglabInstallCommand)"
         case (false, false):

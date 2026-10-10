@@ -58,11 +58,10 @@ final class FolderTextTests: XCTestCase {
     }
 
     func testWithDnglabAloneTheAdviceSaysThatAdobeIsAnOptionalBackup() {
+        // The words of design 13.5. The name is said once.
         XCTAssertEqual(advice(pending: 12, dnglab: true, adobe: false),
                        "Adobe DNG Converter is not installed. "
-                           + "Adobe DNG Converter is an optional backup for photos that dnglab cannot match.")
-        XCTAssertEqual(advice(pending: 12, dnglab: true, adobe: false),
-                       "Adobe DNG Converter is not installed. \(ConverterText.adobeIsAnOptionalBackup)")
+                           + "It is an optional backup for photos that dnglab cannot match.")
     }
 
     func testWithAdobeAloneTheAdviceSaysThatDnglabIsFasterAndHowToInstallIt() {

@@ -429,8 +429,7 @@ final class AppModelTests: XCTestCase {
     // MARK: The converters (design 13.5)
 
     private static let adobeIsOptional =
-        "Adobe DNG Converter is not installed. "
-            + "Adobe DNG Converter is an optional backup for photos that dnglab cannot match."
+        "Adobe DNG Converter is not installed. It is an optional backup for photos that dnglab cannot match."
     private static let dnglabIsFaster = "dnglab is faster and opens no window. Install it with: brew install dnglab"
 
     /// A model with these converters, and a folder with one DNG and one

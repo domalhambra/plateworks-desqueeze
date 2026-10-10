@@ -14,9 +14,10 @@ public enum ConverterKind: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// The sentences about who converts, made once. The help of the tool, the
-/// descriptions of the MCP server and the advice line say them, so no front
-/// end words them again (design 13.5).
+/// The sentences about who converts, made once. The help of the tool and
+/// the descriptions of the MCP server say them, so no front end words them
+/// again (design 13.5). The advice line about a missing converter is made
+/// at `FolderText.converterAdvice`.
 ///
 /// "dnglab converts first" is short for the table of `ConverterChoice`, and
 /// it is not the rule: with both installed, an ARW with no full match goes
@@ -28,9 +29,6 @@ public enum ConverterText {
     /// Why a photo from dnglab shows in Lightroom as one from Adobe does.
     public static let matchedValues = "Each DNG that \(ConverterKind.dnglab.name) makes gets the values that "
         + "\(ConverterKind.adobe.name) writes, so Lightroom shows the same photo."
-    /// In the advice line it follows "Adobe DNG Converter is not installed."
-    public static let adobeIsAnOptionalBackup = "\(ConverterKind.adobe.name) is an optional backup for photos that "
-        + "\(ConverterKind.dnglab.name) cannot match."
 }
 
 /// Which converters get one ARW, and in which order (design 13.4). Pure: the
