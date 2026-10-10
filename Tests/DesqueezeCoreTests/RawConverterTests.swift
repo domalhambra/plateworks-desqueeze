@@ -35,7 +35,7 @@ final class RawConverterTests: XCTestCase {
 
     func testPassesTheExactArgumentsAndReturnsTheDNG() throws {
         converterWritesTheDNG()
-        let output = try converter().convert(arw)
+        let output = try converter().convert(arw).dng
         XCTAssertEqual(runner.calls, [FakeRunner.Call(executable: executable.path, arguments: [
             "-c", "-d", "/tmp/Shoot 1", "/tmp/Shoot 1/DSC05680.ARW",
         ])])
@@ -142,7 +142,8 @@ final class RawConverterTests: XCTestCase {
             FileManager.default.createFile(atPath: dng.path, contents: Data("a DNG".utf8))
             return ProcessResult(exitCode: 0, stdout: "", stderr: "")
         }
-        XCTAssertEqual(try converterOnTheRealDisk().convert(folder.appendingPathComponent("a.ARW")).path, dng.path)
+        XCTAssertEqual(try converterOnTheRealDisk().convert(folder.appendingPathComponent("a.ARW")),
+                       Conversion(dng: dng, unmatched: nil), "Adobe's own DNG is never unmatched")
     }
 
     // Anything at the name stops the converter: a file, a folder, a link, and

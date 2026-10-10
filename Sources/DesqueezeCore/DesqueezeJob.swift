@@ -182,10 +182,10 @@ public struct DesqueezeJob: Sendable {
                     return summary
                 }
                 do {
-                    let dng = try converter.convert(arw)
+                    let conversion = try converter.convert(arw, facts: .none)
                     summary.converted += 1
                     summary.unconvertedARWs -= 1
-                    dngs.append(Self.converted(arw, to: dng))
+                    dngs.append(Self.converted(arw, to: conversion.dng))
                 } catch {
                     summary.failed += 1
                     // This ARW made no DNG, so its tag step will not happen.

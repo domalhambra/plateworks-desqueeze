@@ -140,7 +140,7 @@ final class FakeConverter: RawConverter, @unchecked Sendable {
 
     init(log: CallLog) { self.log = log }
 
-    func convert(_ arw: URL) throws -> URL {
+    func convert(_ arw: URL, facts: ARWFacts) throws -> Conversion {
         log.entries.append("convert \(arw.lastPathComponent)")
         onConvert?()
         if fail.contains(arw.lastPathComponent) { throw ConvertError.failed("made no DNG") }
@@ -148,6 +148,6 @@ final class FakeConverter: RawConverter, @unchecked Sendable {
             throw ConvertError.failed("Adobe DNG Converter returned 1.",
                                       partial: reportedPartial ?? AdobeConverter.outputURL(for: arw))
         }
-        return AdobeConverter.outputURL(for: arw)
+        return Conversion(dng: AdobeConverter.outputURL(for: arw), unmatched: nil)
     }
 }

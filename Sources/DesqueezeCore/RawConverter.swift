@@ -12,13 +12,34 @@ public enum ConvertError: Error, Equatable {
     case failed(String, partial: URL? = nil)
 }
 
-/// Converts one raw file to a DNG beside it and returns the DNG.
+/// What a conversion made.
+public struct Conversion: Equatable, Sendable {
+    /// The DNG, beside the ARW.
+    public let dng: URL
+    /// The rule of design 13.4 that kept this DNG from a full match. Nil
+    /// when the DNG renders as Adobe's does: it is Adobe's own, or dnglab's
+    /// with every rule met. The caller makes the note from it.
+    public let unmatched: AdobeMatch.Rule?
+
+    public init(dng: URL, unmatched: AdobeMatch.Rule?) {
+        self.dng = dng
+        self.unmatched = unmatched
+    }
+}
+
+/// Converts one raw file to a DNG beside it.
 ///
-/// Version 1 has one implementation. A dnglab implementation is the planned
-/// replacement for a public release, because Adobe's converter cannot be
-/// bundled (design, section 3).
+/// There are two implementations (design 13). `DnglabConverter` converts
+/// first, and writes the tags that make its DNG render as Adobe's does.
+/// `AdobeConverter` is the optional backup. `ConverterChoice` says which one
+/// gets an ARW. Both follow `ConverterRules`.
 public protocol RawConverter: Sendable {
-    func convert(_ arw: URL) throws -> URL
+    /// - Parameter facts: what the ARW says about itself, from the one read
+    ///   that the run makes for all pending files. `ARWFacts.none` when
+    ///   nothing is known. A converter reads no facts itself.
+    /// - Throws: `ConvertError.failed` when the conversion failed, and the
+    ///   runner's own error when the program never ran.
+    func convert(_ arw: URL, facts: ARWFacts) throws -> Conversion
 }
 
 /// The output of a conversion, `<base>.dng`, and what a converter asks the
@@ -154,9 +175,13 @@ public struct AdobeConverter: RawConverter {
     /// are the rules of `ConverterRules`, which every converter follows.
     ///
     /// Never pass `-h`: it opens a window and the process never returns.
-    public func convert(_ arw: URL) throws -> URL {
-        try rules.convert(arw, start: { _ in
+    ///
+    /// The facts are not used: Adobe's converter reads the ARW itself, and
+    /// its DNG is the one that the match copies.
+    public func convert(_ arw: URL, facts: ARWFacts = .none) throws -> Conversion {
+        let dng = try rules.convert(arw, start: { _ in
             try runner.run(executable, ["-c", "-d", arw.deletingLastPathComponent().path, arw.path])
         })
+        return Conversion(dng: dng, unmatched: nil)
     }
 }
