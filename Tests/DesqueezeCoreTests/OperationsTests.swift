@@ -227,7 +227,7 @@ final class OperationsTests: XCTestCase {
         let fake = try script("kill -TERM $$")
         let operations = DesqueezeOperations(
             exiftool: exiftool, dnglab: nil, dngConverter: fake, tag: h.tag,
-            converters: RawConverters(dnglab: nil, adobe: AdobeConverter(executable: fake), facts: nil),
+            converters: RawConverters(dnglab: nil, adobe: AdobeConverter(executable: fake, discardLeftover: { _ in }), facts: nil),
             backups: h.backups)
         let report = try operations.run(shoot, factor: factor)
         let note = try XCTUnwrap(report.notes.first { $0.kind == .notConverted })
@@ -318,7 +318,7 @@ final class OperationsTests: XCTestCase {
         XCTAssertEqual(runner.calls.map(\.executable), [exiftool.path, converterTool.path])
         // The scan gives each file's path with its links resolved, so the names are compared.
         XCTAssertEqual(runner.calls.last?.arguments.map { URL(fileURLWithPath: $0).lastPathComponent },
-                       ["-c", "-d", "Shoot 1", "X.ARW"])
+                       ["-c", "-d", "Shoot 1", "-o", ".X.desqueeze-work.dng", "X.ARW"])
         XCTAssertEqual(report.skipped, 2)
         XCTAssertEqual(report.failed, 1, "the fake converter made no DNG")
         XCTAssertEqual(report.notes.map(\.kind), [.orphanBackup, .notConverted])

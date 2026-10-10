@@ -6,17 +6,16 @@ public enum ConvertError: Error, Equatable {
     ///
     /// - Parameters:
     ///   - partial: the file that this conversion left behind, or nil when
-    ///     it left none. The caller discards it (design 4.3 and 13.3).
-    ///     For Adobe DNG Converter it is `<base>.dng`, and never a DNG that
-    ///     was there before: a converter proves that nothing had the name
-    ///     when it starts, and reports a partial only when its program ran
-    ///     (`ConverterRules`). For dnglab it is the work file
-    ///     (`ConverterOutput.workURL`), and never `<base>.dng`.
+    ///     it left none. The caller discards it (design 4.3 and 13.3). For
+    ///     either converter it is the work file of the ARW
+    ///     (`ConverterOutput.workURL`), and never `<base>.dng`: no converter
+    ///     writes to that name. A converter reports it only when its program
+    ///     ran (`ConverterRules`).
     case failed(String, partial: URL? = nil)
     /// The conversion failed for a reason that holds for every converter,
     /// so the caller does not give the ARW to the next one:
     ///
-    /// - Something took the name `<base>.dng` while dnglab worked.
+    /// - Something took the name `<base>.dng` while the converter worked.
     /// - A leftover file of exiftool is beside the ARW.
     /// - The Trash refused the leftover work file of an earlier run.
     ///
@@ -58,7 +57,8 @@ public struct Conversion: Equatable, Sendable {
 /// There are two implementations (design 13). `DnglabConverter` converts
 /// first, and writes the tags that make its DNG render as Adobe's does.
 /// `AdobeConverter` is the optional backup. `ConverterChoice` says which one
-/// gets an ARW. Both follow `ConverterRules`.
+/// gets an ARW. Both follow `ConverterRules`: each writes the hidden work
+/// file of the ARW, and the DNG gets its name only when it is complete.
 public protocol RawConverter: Sendable {
     /// - Parameter facts: what the ARW says about itself, from the one read
     ///   that the run makes for all pending files. `ARWFacts.none` when
@@ -94,17 +94,17 @@ public struct RawConverters: Sendable {
     /// The real converters, for the tools that are installed. One runner
     /// starts every program, so a `LoggingProcessRunner` shows them all.
     ///
-    /// - Parameter backups: where dnglab's converter sends the work file
-    ///   that an earlier run left (design 13.3, step 1). Give the backups
-    ///   of the job, so every discarded file goes to one place. There is no
+    /// - Parameter backups: where each converter sends the work file that
+    ///   an earlier run left (design 13.3, step 1). Give the backups of the
+    ///   job, so every discarded file goes to one place. There is no
     ///   default, so no caller reaches the Trash by leaving it out.
     public init(exiftool: URL, dnglab: URL?, adobe: URL?, runner: ProcessRunner = SystemProcessRunner(),
                 backups: BackupHandling) {
+        let discard: @Sendable (URL) throws -> Void = { try backups.trashFile($0) }
         self.init(dnglab: dnglab.map {
-                      DnglabConverter(executable: $0, exiftool: exiftool, runner: runner,
-                                      discardLeftover: { try backups.trashFile($0) })
+                      DnglabConverter(executable: $0, exiftool: exiftool, runner: runner, discardLeftover: discard)
                   },
-                  adobe: adobe.map { AdobeConverter(executable: $0, runner: runner) },
+                  adobe: adobe.map { AdobeConverter(executable: $0, runner: runner, discardLeftover: discard) },
                   facts: ARWFactsReader(exiftool: exiftool, runner: runner))
     }
 
@@ -133,10 +133,10 @@ public enum ConverterOutput {
         arw.deletingPathExtension().appendingPathExtension("dng")
     }
 
-    /// The work file of dnglab's conversion of `arw` (design 13.3):
-    /// `.<base>.desqueeze-work.dng`, in the folder of the ARW. dnglab writes
-    /// it, the match goes into it, and only then it gets the name
-    /// `<base>.dng`.
+    /// The work file of a conversion of `arw` (design 13.3):
+    /// `.<base>.desqueeze-work.dng`, in the folder of the ARW. The converter
+    /// writes it, dnglab's match goes into it, and only then it gets the
+    /// name `<base>.dng`. Both converters write it.
     ///
     /// This is the only place that makes the name. It starts with a period,
     /// so the scan, Finder and Lightroom do not see the file. It says that
@@ -148,8 +148,7 @@ public enum ConverterOutput {
     }
 
     /// What a note says after it names a file to delete, when that file is
-    /// hidden: the work file of dnglab is. The only place that makes the
-    /// sentence.
+    /// hidden: the work file is. The only place that makes the sentence.
     public static let hiddenFileHint = "It is a hidden file: in Finder, press Command-Shift-Period to see it."
 
     /// `hiddenFileHint` with a space before it when `name` starts with a
@@ -187,8 +186,14 @@ public enum ConverterOutput {
 
 /// The rules of design 4.3, step 1, and 13.3, that hold for every converter.
 /// They are here and nowhere else. A converter gives its name, its program,
-/// and the file that its program writes: `<base>.dng` for Adobe DNG
-/// Converter, the work file for dnglab.
+/// and what it does to the file before the file gets its name: dnglab writes
+/// its match, and Adobe DNG Converter does nothing.
+///
+/// **No program writes `<base>.dng`.** Each one writes the work file of the
+/// ARW (`ConverterOutput.workURL`), and the work file gets the name
+/// `<base>.dng` only when it is complete. So `<base>.dng` is never reported
+/// as a partial output, and a DNG that this conversion did not make is never
+/// touched.
 ///
 /// 1. **Before the start.** When anything has the name `<base>.dng`, the
 ///    program is not started. That refusal reports no partial output: the
@@ -199,23 +204,30 @@ public enum ConverterOutput {
 ///    leftover, so the tag step, or dnglab's match, could never pass. The
 ///    sentence names the file. The file stays where it is: it is not moved
 ///    to the Trash, and it is not a partial output.
-/// 3. **A partial output is reported only when the program ran:** after a
+/// 3. **A leftover work file is discarded** (design 13.3, step 1). A run
+///    that ended hard left it, and its name says that it is this app's own.
+///    `discardLeftover` takes it. When that fails, no program starts, the
+///    failure holds for every converter, and the sentence names the file.
+/// 4. **A partial output is reported only when the program ran:** after a
 ///    signal ended it, after a non-zero exit, after exit 0 with an empty
-///    file, or after `complete` failed. It is the file that the program
-///    writes. For Adobe DNG Converter, rule 1 proved that the name was free,
-///    so a `<base>.dng` is then this run's. For dnglab it is the work file,
-///    whose name is this app's own.
-/// 4. **Any other error from the runner passes on as it came,** with no
+///    file, after `match` failed, or after the rename failed. It is always
+///    the work file.
+/// 5. **Any other error from the runner passes on as it came,** with no
 ///    partial: for example, the program could not start. The program never
-///    ran, so a file at the name is not ours.
-/// 5. **An unknown size is not an empty file.** When the size cannot be read
+///    ran, so a file at the name is not this conversion's.
+/// 6. **An unknown size is not an empty file.** When the size cannot be read
 ///    after exit 0, the result is "made no DNG", with no partial.
-/// 6. **An exit code that says "I did not touch the output" reports no
+/// 7. **An exit code that says "I did not touch the output" reports no
 ///    partial.** dnglab returns 6 for an output that exists already. The
 ///    file at the name is then not this conversion's.
+/// 8. **The rename never replaces** (design 13.3, step 5, `ExclusiveRename`).
+///    When it finds the name `<base>.dng` taken, another program made that
+///    file while the converter worked. The file is not touched. The failure
+///    holds for every converter, with the sentence of rule 1, and the work
+///    file is the partial output.
 struct ConverterRules: Sendable {
     /// What every converter says when something has the name `<base>.dng`:
-    /// before the start, and at the rename of dnglab's work file.
+    /// before the start, and at the rename of the work file.
     static let nameTaken = "A DNG with this name exists already. Not converted."
 
     /// What a converter says about a file that an earlier run or an earlier
@@ -230,29 +242,31 @@ struct ConverterRules: Sendable {
     let name: String
     let exists: @Sendable (String) -> Bool
     let size: @Sendable (String) -> Int?
+    /// Rule 3. It gets only `ConverterOutput.workURL` of the ARW in work.
+    let discardLeftover: @Sendable (URL) throws -> Void
+    /// Rule 8.
+    let rename: @Sendable (URL, URL) -> ExclusiveRename.Outcome
     /// The program's own reason for a non-zero exit, from what it printed.
     /// It follows the sentence with the exit code, on the same line. Nil
     /// when the program gave none: the sentence then stands alone.
     var reason: @Sendable (ProcessResult) -> String? = { _ in nil }
-    /// The exit codes of rule 6.
+    /// The exit codes of rule 7.
     var exitCodesThatLeaveTheOutputAlone: Set<Int32> = []
 
     /// - Parameters:
-    ///   - product: the file that the program writes. Nil is `<base>.dng`.
-    ///   - prepare: runs after rules 1 and 2 passed, and before the program
-    ///     starts. What it throws passes on as it came.
-    ///   - start: runs the program for this ARW. It gets `product`.
-    ///   - complete: what the converter does to the product after its
-    ///     program made one with bytes. When it throws, the conversion
-    ///     failed, and the product is the partial output. The words are the
-    ///     error's own. A `ConvertError` passes on as it came.
-    /// - Returns: `<base>.dng`.
+    ///   - start: runs the program for this ARW. It gets the work file, and
+    ///     the program must write there.
+    ///   - match: what the converter does to the work file after its
+    ///     program made one with bytes, and before the rename. When it
+    ///     throws, the conversion failed, and the work file is the partial
+    ///     output. The words are the error's own. A `ConvertError` passes on
+    ///     as it came.
+    /// - Returns: `<base>.dng`. No work file is left.
     func convert(
-        _ arw: URL, writing product: URL? = nil, prepare: () throws -> Void = {},
-        start: (URL) throws -> ProcessResult, complete: (URL) throws -> Void = { _ in }
+        _ arw: URL, start: (URL) throws -> ProcessResult, match: (URL) throws -> Void = { _ in }
     ) throws -> URL {
         let output = ConverterOutput.url(for: arw)
-        let product = product ?? output
+        let work = ConverterOutput.workURL(for: arw)
         // The scan sends only pending files. This guard holds the rule at the
         // last moment, for a DNG that appeared after the scan.
         guard !exists(output.path) else {
@@ -260,90 +274,157 @@ struct ConverterRules: Sendable {
         }
         // exiftool writes the DNG in the tag step, and the work file in
         // dnglab's match. Both names are checked for every converter.
-        for file in [output, ConverterOutput.workURL(for: arw)] {
+        for file in [output, work] {
             let leftover = ConverterOutput.exiftoolLeftoverURL(for: file)
             guard !exists(leftover.path) else {
                 throw ConvertError.failedForAll(Self.leftover(named: leftover.lastPathComponent))
             }
         }
-        try prepare()
+        try discardTheLeftover(at: work)
         let result: ProcessResult
         do {
-            result = try start(product)
+            result = try start(work)
         } catch let signal as ProcessSignalError {
             // The program ran, and a signal ended it. It may have begun its
             // file. With no file, the signal is thrown as it came.
-            guard exists(product.path) else { throw signal }
-            throw ConvertError.failed(signal.localizedDescription, partial: product)
+            guard exists(work.path) else { throw signal }
+            throw ConvertError.failed(signal.localizedDescription, partial: work)
         }
-        // From here on, a file at the product's name is this run's: for
-        // `<base>.dng`, the guard above proved that nothing had the name
-        // before the program ran, and the work file has this app's own name.
+        // From here on, a file at the name of the work file is this
+        // conversion's: the name is this app's own, and rule 3 left nothing
+        // there before the program ran.
         guard result.exitCode == 0 else {
             var text = "\(name) returned \(result.exitCode)."
             // The reason is the program's, and the next sentence can be the
             // job's, about the partial DNG. A period keeps the two apart.
             if let reason = reason(result) { text += " " + reason + (reason.hasSuffix(".") ? "" : ".") }
             let wrote = !exitCodesThatLeaveTheOutputAlone.contains(result.exitCode)
-            throw ConvertError.failed(text, partial: wrote && exists(product.path) ? product : nil)
+            throw ConvertError.failed(text, partial: wrote && exists(work.path) ? work : nil)
         }
         // Adobe's converter returns 0 for a file it cannot read, and makes no
         // DNG. A size that cannot be read says the same: no DNG is known.
-        guard exists(product.path), let bytes = size(product.path) else {
+        guard exists(work.path), let bytes = size(work.path) else {
             throw ConvertError.failed("\(name) made no DNG. It may not support this file.")
         }
         // A DNG with no bytes is not a DNG.
         guard bytes > 0 else {
-            throw ConvertError.failed("\(name) made an empty DNG.", partial: product)
+            throw ConvertError.failed("\(name) made an empty DNG.", partial: work)
         }
         do {
-            try complete(product)
+            try match(work)
         } catch let error as ConvertError {
             throw error
         } catch {
-            throw ConvertError.failed(DesqueezeJob.describe(error), partial: product)
+            throw ConvertError.failed(DesqueezeJob.describe(error), partial: work)
         }
+        try move(work, to: output)
         return output
+    }
+
+    /// Rule 3. The name of the work file says that it is this app's own, so
+    /// a leftover is discarded with no question. When it cannot be, the
+    /// conversion fails for every converter, and the sentence names the file
+    /// to delete.
+    private func discardTheLeftover(at work: URL) throws {
+        guard exists(work.path) else { return }
+        do {
+            try discardLeftover(work)
+        } catch {
+            throw ConvertError.failedForAll(Self.leftover(named: work.lastPathComponent))
+        }
+    }
+
+    /// Rule 8. The work file is complete, and gets its name.
+    private func move(_ work: URL, to dng: URL) throws {
+        switch rename(work, dng) {
+        case .moved:
+            return
+        case .nameTaken:
+            // Another program made `<base>.dng` while the converter worked.
+            // Every converter would find the name taken, so no one tries.
+            throw ConvertError.failedForAll(Self.nameTaken, partial: work)
+        case .failed(let code):
+            throw ConvertError.failed(
+                "The DNG could not get the name \(dng.lastPathComponent): \(ExclusiveRename.Outcome.words(for: code)).",
+                partial: work)
+        }
     }
 }
 
+/// Converts with Adobe DNG Converter, the optional backup (design 13.3).
+///
+/// As dnglab's converter, it does not write `<base>.dng`. It gives Adobe DNG
+/// Converter the name of the hidden work file (`ConverterOutput.workURL`),
+/// and the DNG gets its name only when it is complete. The steps, after the
+/// checks of `ConverterRules`:
+///
+/// 1. A work file that is there already is the leftover of a run that ended
+///    hard. `discardLeftover` takes it. When that fails, the converter does
+///    not start.
+/// 2. `"<Adobe DNG Converter>" -c -d <folder> -o <work file name> <in.ARW>`.
+/// 3. A rename of the work file to `<base>.dng` that fails when anything has
+///    that name (`ExclusiveRename`).
+///
+/// There is no match and no read-back: Adobe's DNG is the reference that
+/// dnglab's match copies.
+///
+/// The conversion passes only when the exit code is 0, the work file has
+/// bytes, and the rename passed. All three are needed: Adobe DNG Converter
+/// returns 0 for a file that it cannot read, and makes no DNG. Ended by a
+/// signal, it can leave a file of 0 bytes.
+///
+/// **Why step 1 comes first.** With the name of the work file taken, Adobe
+/// DNG Converter 18.7 does not write over it: it writes a second file,
+/// `.<base>.desqueeze-work_1.dng`, and returns 0 (tested 2026-10-09). Step 1
+/// leaves the name free, so that file is never made.
+///
+/// Never pass `-h`: it opens a window and the process never returns.
 public struct AdobeConverter: RawConverter {
     private let executable: URL
     private let runner: ProcessRunner
     private let rules: ConverterRules
 
     /// - Parameters:
+    ///   - discardLeftover: takes away the work file that an earlier run
+    ///     left. It gets only `ConverterOutput.workURL` of the ARW in work.
+    ///     The app gives `BackupHandling.trashFile` of the job's backups,
+    ///     so the file goes to the Trash. There is no default, so no caller
+    ///     reaches the Trash by leaving it out.
     ///   - fileExists: whether anything has this name. It must not follow a
     ///     symbolic link. Tests inject it.
     ///   - fileSize: the size of a file in bytes, nil when it cannot be read.
-    ///     Asked only for a DNG that `fileExists` has found.
+    ///     Asked only for a file that `fileExists` has found.
+    ///   - rename: step 3. Tests inject it to drive each outcome.
     public init(
         executable: URL,
         runner: ProcessRunner = SystemProcessRunner(),
+        discardLeftover: @escaping @Sendable (URL) throws -> Void,
         fileExists: @escaping @Sendable (String) -> Bool = { ConverterOutput.exists(atPath: $0) },
-        fileSize: @escaping @Sendable (String) -> Int? = { ConverterOutput.size(atPath: $0) }
+        fileSize: @escaping @Sendable (String) -> Int? = { ConverterOutput.size(atPath: $0) },
+        rename: @escaping @Sendable (URL, URL) -> ExclusiveRename.Outcome = { ExclusiveRename.system.move($0, to: $1) }
     ) {
         self.executable = executable
         self.runner = runner
-        rules = ConverterRules(name: ConverterKind.adobe.name, exists: fileExists, size: fileSize)
+        rules = ConverterRules(name: ConverterKind.adobe.name, exists: fileExists, size: fileSize,
+                               discardLeftover: discardLeftover, rename: rename)
     }
 
-    /// `-c` is lossless compression. `-d` is the output folder. The command
+    /// `-c` is lossless compression. `-d` is the output folder, and `-o` the
+    /// name of the output in it: the name only, never a path. The command
     /// line ignores the converter's window preferences.
     ///
-    /// Only a pending ARW converts. When `<base>.dng` exists already, the real
-    /// converter writes `<base>_1.dng`, so this method refuses to start it.
-    ///
-    /// The refusal, and what a failed conversion reports as its partial DNG,
-    /// are the rules of `ConverterRules`, which every converter follows.
-    ///
-    /// Never pass `-h`: it opens a window and the process never returns.
+    /// Only a pending ARW converts. The refusal for a name that is taken,
+    /// and what a failed conversion reports as its partial output, are the
+    /// rules of `ConverterRules`, which every converter follows.
     ///
     /// The facts are not used: Adobe's converter reads the ARW itself, and
     /// its DNG is the one that the match copies.
+    ///
+    /// - Returns: the DNG at `<base>.dng`. No work file is left.
     public func convert(_ arw: URL, facts: ARWFacts = .none) throws -> Conversion {
-        let dng = try rules.convert(arw, start: { _ in
-            try runner.run(executable, ["-c", "-d", arw.deletingLastPathComponent().path, arw.path])
+        let dng = try rules.convert(arw, start: { work in
+            try runner.run(executable, ["-c", "-d", arw.deletingLastPathComponent().path,
+                                        "-o", work.lastPathComponent, arw.path])
         })
         return Conversion(dng: dng, unmatched: nil)
     }

@@ -194,7 +194,7 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
             })
         let adobeRunner = FakeRunner()
         let adobes = AdobeConverter(executable: URL(fileURLWithPath: "/nonexistent/Adobe DNG Converter"),
-                                    runner: adobeRunner)
+                                    runner: adobeRunner, discardLeftover: { try backups.trashFile($0) })
         let job = DesqueezeJob(
             tag: ScaleTag(exiftool: exiftool),
             converters: RawConverters(dnglab: dnglabs, adobe: adobes, facts: ARWFactsReader(exiftool: exiftool)),
@@ -333,11 +333,12 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
 /// value. Skips unless dnglab, Adobe DNG Converter and the fixtures are all
 /// there. It starts Adobe DNG Converter once.
 ///
-/// The app's dnglab path is the one of design 13.3: dnglab writes the work
-/// file, the match goes into it, and the rename gives it the name
-/// `<base>.dng`. So the check also fails when a new dnglab or a new exiftool
-/// does not take the work file's name, or when the rename does not leave
-/// the DNG at its name with no work file beside it.
+/// Both paths are the ones of design 13.3: the converter writes the hidden
+/// work file, dnglab's match goes into it, and the rename gives it the name
+/// `<base>.dng`. So the check also fails when a new dnglab, a new exiftool
+/// or a new Adobe DNG Converter does not take the work file's name (for
+/// Adobe: its `-o` option), or when the rename does not leave the DNG at
+/// its name with no work file beside it.
 final class AdobeDriftTests: RealDnglabTestCase {
     func testEveryMatchedTagOfADnglabDNGEqualsAdobeDNGConverters() throws {
         guard let adobe = ToolLocator().dngConverter() else {
@@ -351,7 +352,9 @@ final class AdobeDriftTests: RealDnglabTestCase {
         let forAdobe = try copyFixture(as: "frame.ARW", into: adobeFolder)
         let forDnglab = try copyFixture(as: "frame.ARW", into: dnglabFolder)
 
-        let adobes = try AdobeConverter(executable: adobe).convert(forAdobe).dng
+        let adobes = try AdobeConverter(
+            executable: adobe, discardLeftover: { XCTFail("no leftover was expected: \($0.lastPathComponent)") }
+        ).convert(forAdobe).dng
         let facts = try facts(of: forDnglab)
         let ours = try converter.convert(forDnglab, facts: facts)
         XCTAssertNil(ours.unmatched, "the fixture is a full match: \(facts)")
@@ -361,7 +364,12 @@ final class AdobeDriftTests: RealDnglabTestCase {
         XCTAssertEqual(ours.dng, dnglabFolder.appendingPathComponent("frame.dng"))
         XCTAssertEqual(try files.contentsOfDirectory(atPath: dnglabFolder.path).sorted(), ["frame.ARW", "frame.dng"],
                        "the dnglab DNG is at <base>.dng, with no work file left")
-        XCTAssertEqual(try files.contentsOfDirectory(atPath: adobeFolder.path).sorted(), ["frame.ARW", "frame.dng"])
+        // The same for Adobe DNG Converter: its DNG is at `<base>.dng`, and
+        // no hidden file is left. Without `-o` honoured, the work file would
+        // not be there, and the conversion would have failed above.
+        XCTAssertEqual(adobes, adobeFolder.appendingPathComponent("frame.dng"))
+        XCTAssertEqual(try files.contentsOfDirectory(atPath: adobeFolder.path).sorted(), ["frame.ARW", "frame.dng"],
+                       "Adobe's DNG is at <base>.dng, with no work file and no second DNG left")
         XCTAssertEqual(Self.matchedTags.count, 9, "all nine tags of the match are compared")
 
         let wanted = try read(Self.matchedTags, in: adobes)

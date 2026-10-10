@@ -54,6 +54,18 @@ final class IntegrationTests: XCTestCase {
         try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { $0.hasSuffix(suffix) }.sorted()
     }
 
+    /// Adobe DNG Converter wrote the hidden work file, and the rename gave
+    /// it its name (design 13.3): the DNG is a file with bytes at
+    /// `<base>.dng`, and the folder has no hidden file left.
+    func assertTheDNGHasItsNameAndNoHiddenFileIsLeft(_ name: String, file: StaticString = #filePath,
+                                                     line: UInt = #line) throws {
+        let size = ConverterOutput.size(atPath: folder.appendingPathComponent(name).path)
+        XCTAssertGreaterThan(size ?? 0, 0, "\(name) is not a file with bytes", file: file, line: line)
+        // `contentsOfDirectory(atPath:)` lists hidden files too.
+        let hidden = try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { $0.hasPrefix(".") }
+        XCTAssertEqual(hidden, [], "a hidden file is left in the folder", file: file, line: line)
+    }
+
     /// The tag as the file holds it now. One file, read directly: not a scan.
     func scaleOnDisk(_ name: String) throws -> Scale? {
         try tag.read(folder.appendingPathComponent(name))
@@ -96,6 +108,11 @@ final class IntegrationTests: XCTestCase {
         XCTAssertEqual(second.pendingARWs, [])
         XCTAssertEqual(try names(withSuffix: "_original"), [])
         XCTAssertEqual(try names(withSuffix: ".dng"), ["already here.dng", "frame.dng"], "no _1.dng duplicate")
+        try assertTheDNGHasItsNameAndNoHiddenFileIsLeft("frame.dng")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted(),
+                       ["already here.dng", "frame.ARW", "frame.dng"], "every file of the folder, hidden files too")
+        XCTAssertEqual(second.dngs.map(\.originalRawFileName), ["sample.ARW", "frame.ARW"],
+                       "Adobe DNG Converter names the ARW, and not the work file")
         XCTAssertEqual(try Data(contentsOf: arw), arwBefore, "the ARW must not change")
 
         let rerun = job.run(second, factor: factor, convert: true)
@@ -164,6 +181,7 @@ final class IntegrationTests: XCTestCase {
         XCTAssertEqual(removed.notes, [])
 
         XCTAssertEqual(try names(withSuffix: ".dng"), ["already here.dng", "frame.dng"])
+        try assertTheDNGHasItsNameAndNoHiddenFileIsLeft("frame.dng")
         XCTAssertEqual(try scaleOnDisk("already here.dng"), .noStretch)
         XCTAssertEqual(try scaleOnDisk("frame.dng"), .noStretch)
         XCTAssertEqual(try names(withSuffix: "_original"), [])
@@ -320,5 +338,6 @@ final class IntegrationTests: XCTestCase {
         let summary = try job.run(folder: folder, factor: factor, convert: true)
         XCTAssertEqual(summary, plan.summary, "the run that follows gives the counts and notes of the plan")
         XCTAssertNotEqual(try folderState(), before, "the premise: a real run does change the folder")
+        try assertTheDNGHasItsNameAndNoHiddenFileIsLeft("frame.dng")
     }
 }

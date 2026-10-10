@@ -7,8 +7,8 @@ import XCTest
 ///
 /// It answers the three exiftool calls of `ScaleTag` from `scales`, the read
 /// of the ARW facts from `facts`, and the two exiftool calls of the dnglab
-/// match from what the match wrote. It "converts" an ARW by making a file
-/// with the DNG's name.
+/// match from what the match wrote. It "converts" an ARW by making the file
+/// that the program was told to write: the work file, for both converters.
 final class FakeTools: ProcessRunner, @unchecked Sendable {
     static let exiftool = URL(fileURLWithPath: "/fake/bin/exiftool")
     static let dnglab = URL(fileURLWithPath: "/fake/bin/dnglab")
@@ -33,7 +33,14 @@ final class FakeTools: ProcessRunner, @unchecked Sendable {
             .joined(separator: " "))
         let file = URL(fileURLWithPath: arguments.last ?? "")
         if executable == Self.converter {
-            try Data("converted".utf8).write(to: file.deletingPathExtension().appendingPathExtension("dng"))
+            // Adobe DNG Converter writes in the folder that follows `-d`,
+            // under the name that follows `-o`. With no `-o` the name is
+            // `<base>.dng`, as the real converter does it.
+            let folder = arguments.firstIndex(of: "-d").map { URL(fileURLWithPath: arguments[$0 + 1]) }
+                ?? file.deletingLastPathComponent()
+            let name = arguments.firstIndex(of: "-o").map { arguments[$0 + 1] }
+                ?? file.deletingPathExtension().lastPathComponent + ".dng"
+            try Data("converted".utf8).write(to: folder.appendingPathComponent(name))
             return ProcessResult(exitCode: 0, stdout: "", stderr: "")
         }
         if executable == Self.dnglab {

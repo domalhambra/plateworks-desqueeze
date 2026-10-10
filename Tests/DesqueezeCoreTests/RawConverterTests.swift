@@ -5,50 +5,107 @@ final class RawConverterTests: XCTestCase {
     let executable = URL(fileURLWithPath: "/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter")
     let arw = URL(fileURLWithPath: "/tmp/Shoot 1/DSC05680.ARW")
     let dngPath = "/tmp/Shoot 1/DSC05680.dng"
+    /// The hidden work file that the converter writes (design 13.3).
+    let workPath = "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng"
     var runner: FakeRunner!
     var disk: FakeDisk!
+    var steps: Steps!
+
+    /// What the discard and the rename do, and what they were asked.
+    final class Steps: @unchecked Sendable {
+        /// Each leftover that the converter asked to discard.
+        var discarded: [String] = []
+        /// Set when the discard must fail, as when the Trash refuses.
+        var discardError: Error?
+        /// Each rename that the converter asked for: from, then to.
+        var renames: [[String]] = []
+        var renameOutcome = ExclusiveRename.Outcome.moved
+    }
 
     override func setUp() {
         runner = FakeRunner()
         disk = FakeDisk()
+        steps = Steps()
     }
 
     func converter() -> AdobeConverter {
-        let disk = self.disk!
-        return AdobeConverter(executable: executable, runner: runner, fileExists: { disk.exists($0) },
-                              fileSize: { disk.size($0) })
+        let (disk, steps) = (disk!, steps!)
+        return AdobeConverter(
+            executable: executable, runner: runner,
+            discardLeftover: {
+                steps.discarded.append($0.path)
+                if let error = steps.discardError { throw error }
+                disk.paths.remove($0.path)
+            },
+            fileExists: { disk.exists($0) }, fileSize: { disk.size($0) },
+            rename: { from, to in
+                steps.renames.append([from.path, to.path])
+                if steps.renameOutcome == .moved { disk.move(from.path, to: to.path) }
+                return steps.renameOutcome
+            })
     }
 
-    /// The converter writes the DNG while it runs. With `bytes` 0 the file
-    /// is empty, as one that a signal cut short.
-    func converterWritesTheDNG(exitCode: Int32 = 0, bytes: Int = 1_000) {
+    /// The converter writes its file while it runs, where its arguments
+    /// say. With `bytes` 0 the file is empty, as one that a signal cut short.
+    func converterWritesItsFile(exitCode: Int32 = 0, bytes: Int = 1_000) {
         let disk = self.disk!
-        let dngPath = self.dngPath
-        runner.handler = { _ in
-            disk.paths.insert(dngPath)
-            disk.sizes[dngPath] = bytes
+        runner.handler = { call in
+            let output = FakeAdobe.output(of: call.arguments)
+            disk.paths.insert(output)
+            disk.sizes[output] = bytes
             return ProcessResult(exitCode: exitCode, stdout: "", stderr: "")
         }
     }
 
     var dng: URL { URL(fileURLWithPath: dngPath) }
+    var work: URL { URL(fileURLWithPath: workPath) }
 
-    func testPassesTheExactArgumentsAndReturnsTheDNG() throws {
-        converterWritesTheDNG()
-        let output = try converter().convert(arw).dng
+    /// The conversion fails with exactly `expected`. Whatever fails, the
+    /// converter never reports `<base>.dng` as its partial output, and never
+    /// leaves a file there: it writes the work file, and nothing else.
+    func assertFails(_ expected: ConvertError, _ message: String = "", file: StaticString = #filePath,
+                     line: UInt = #line) {
+        XCTAssertThrowsError(try converter().convert(arw), message, file: file, line: line) {
+            XCTAssertEqual($0 as? ConvertError, expected, message, file: file, line: line)
+            XCTAssertNotEqual(($0 as? ConvertError)?.partial, dng, "the DNG's own name was reported as partial",
+                              file: file, line: line)
+        }
+        XCTAssertFalse(disk.paths.contains(dngPath), "a failed conversion left a file at the DNG's name",
+                       file: file, line: line)
+    }
+
+    // `-o` gives the name of the work file, and `-d` its folder. One call:
+    // Adobe's file needs no match, so no exiftool starts. Then the rename
+    // that never replaces gives the work file the name `<base>.dng`.
+    func testPassesTheExactArgumentsWritesTheWorkFileAndReturnsTheDNG() throws {
+        converterWritesItsFile()
+        let conversion = try converter().convert(arw)
         XCTAssertEqual(runner.calls, [FakeRunner.Call(executable: executable.path, arguments: [
-            "-c", "-d", "/tmp/Shoot 1", "/tmp/Shoot 1/DSC05680.ARW",
+            "-c", "-d", "/tmp/Shoot 1", "-o", ".DSC05680.desqueeze-work.dng", "/tmp/Shoot 1/DSC05680.ARW",
         ])])
-        XCTAssertEqual(output.path, dngPath)
+        XCTAssertEqual(conversion, Conversion(dng: dng, unmatched: nil), "Adobe's own DNG is never unmatched")
+        XCTAssertEqual(steps.renames, [[workPath, dngPath]])
+        XCTAssertEqual(disk.paths, [dngPath], "the DNG is at its name, and no work file is left")
+        XCTAssertEqual(steps.discarded, [], "there was no leftover to discard")
+    }
+
+    // `-o` takes a name, not a path: the folder comes from `-d`.
+    func testTheOutputNameIsTheNameOfTheWorkFileAndNeverAPath() throws {
+        converterWritesItsFile()
+        _ = try converter().convert(arw)
+        let arguments = try XCTUnwrap(runner.calls.first?.arguments)
+        let name = arguments[try XCTUnwrap(arguments.firstIndex(of: "-o")) + 1]
+        XCTAssertEqual(name, ConverterOutput.workURL(for: arw).lastPathComponent)
+        XCTAssertFalse(name.contains("/"))
+        XCTAssertFalse(arguments.contains("-h"), "-h opens a window, and the process never returns")
     }
 
     // The converter that returns non-zero may have written part of the file.
-    // That file is this run's, because the guard proved that none was there.
-    func testANonZeroExitWithAFileReportsThePartialDNG() {
-        converterWritesTheDNG(exitCode: 1)
-        XCTAssertThrowsError(try converter().convert(arw)) {
-            XCTAssertEqual($0 as? ConvertError, .failed("Adobe DNG Converter returned 1.", partial: dng))
-        }
+    // That file is the work file, whose name is this app's own.
+    func testANonZeroExitWithAFileReportsTheWorkFile() {
+        converterWritesItsFile(exitCode: 1)
+        assertFails(.failed("Adobe DNG Converter returned 1.", partial: work))
+        XCTAssertEqual(steps.renames, [], "a failed conversion never gets the DNG's name")
     }
 
     func testANonZeroExitWithNoFileReportsNoPartialDNG() {
@@ -60,12 +117,11 @@ final class RawConverterTests: XCTestCase {
 
     // A signal ends the converter before it finishes. The file it began is
     // in the folder, and may have no bytes (design 4.3, tested 2026-10-09).
-    func testASignalWithAFileReportsThePartialDNGAndTheSignal() {
-        converterWritesTheDNG(bytes: 0)
+    func testASignalWithAFileReportsTheWorkFileAndTheSignal() {
+        converterWritesItsFile(bytes: 0)
         runner.failure = ProcessSignalError(signal: 15, stdout: "", stderr: "")
-        XCTAssertThrowsError(try converter().convert(arw)) {
-            XCTAssertEqual($0 as? ConvertError, .failed("The program was ended by signal 15.", partial: dng))
-        }
+        assertFails(.failed("The program was ended by signal 15.", partial: work))
+        XCTAssertEqual(steps.renames, [])
     }
 
     func testASignalWithNoFileThrowsTheSignalErrorAsItIs() {
@@ -80,7 +136,7 @@ final class RawConverterTests: XCTestCase {
     // program could not start. A file at the name is then not this run's,
     // so the error passes on as it came, and no partial is reported.
     func testARunnerErrorThatIsNoSignalPassesOnAsItCameAndReportsNoPartialDNG() {
-        converterWritesTheDNG(bytes: 10)
+        converterWritesItsFile(bytes: 10)
         runner.failure = NamedError(text: "The program could not start.")
         XCTAssertThrowsError(try converter().convert(arw)) {
             XCTAssertNil($0 as? ConvertError, "not a conversion that failed: \($0)")
@@ -94,27 +150,27 @@ final class RawConverterTests: XCTestCase {
                            .failed("Adobe DNG Converter made no DNG. It may not support this file."))
         }
         XCTAssertEqual(runner.calls.count, 1)
-        // Before the start: the name, and the two leftovers of exiftool.
-        // After the converter: the name again.
+        XCTAssertEqual(steps.renames, [], "with no work file there is nothing to rename")
+        // Before the start: the name, the two leftovers of exiftool, and the
+        // leftover work file. After the converter: the work file again.
         XCTAssertEqual(disk.checked, [
             dngPath, "/tmp/Shoot 1/DSC05680.dng_exiftool_tmp",
-            "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng_exiftool_tmp", dngPath,
+            "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng_exiftool_tmp", workPath, workPath,
         ])
     }
 
     // A DNG with no bytes is not a DNG. The converter made it, so it is partial.
-    func testExitZeroWithAnEmptyDNGFailsAndReportsThePartialDNG() {
-        converterWritesTheDNG(bytes: 0)
-        XCTAssertThrowsError(try converter().convert(arw)) {
-            XCTAssertEqual($0 as? ConvertError, .failed("Adobe DNG Converter made an empty DNG.", partial: dng))
-        }
+    func testExitZeroWithAnEmptyWorkFileFailsAndReportsTheWorkFile() {
+        converterWritesItsFile(bytes: 0)
+        assertFails(.failed("Adobe DNG Converter made an empty DNG.", partial: work))
+        XCTAssertEqual(steps.renames, [])
     }
 
     // The size could not be read: the file may be gone again. That is not
     // "0 bytes", so nothing here says that the file is this run's.
-    func testExitZeroWithADNGOfUnknownSizeMadeNoDNGAndReportsNoPartialDNG() {
-        converterWritesTheDNG()
-        disk.unreadableSizes = [dngPath]
+    func testExitZeroWithAWorkFileOfUnknownSizeMadeNoDNGAndReportsNoPartialDNG() {
+        converterWritesItsFile()
+        disk.unreadableSizes = [workPath]
         XCTAssertThrowsError(try converter().convert(arw)) {
             XCTAssertEqual($0 as? ConvertError,
                            .failed("Adobe DNG Converter made no DNG. It may not support this file.", partial: nil))
@@ -123,8 +179,22 @@ final class RawConverterTests: XCTestCase {
 
     // MARK: The real disk
 
-    /// A converter on the real disk, with a runner that starts nothing.
-    func converterOnTheRealDisk() -> AdobeConverter { AdobeConverter(executable: executable, runner: runner) }
+    /// A converter on the real disk, with a runner that starts nothing, the
+    /// rename of the system, and no leftover to discard.
+    func converterOnTheRealDisk() -> AdobeConverter {
+        AdobeConverter(executable: executable, runner: runner,
+                       discardLeftover: { XCTFail("no leftover was expected: \($0.lastPathComponent)") })
+    }
+
+    /// The runner writes `bytes` where the arguments of Adobe DNG Converter
+    /// say, on the real disk.
+    func converterWritesARealFile(_ bytes: Data, also other: (() -> Void)? = nil) {
+        runner.handler = { call in
+            FileManager.default.createFile(atPath: FakeAdobe.output(of: call.arguments), contents: bytes)
+            other?()
+            return ProcessResult(exitCode: 0, stdout: "", stderr: "")
+        }
+    }
 
     func testTheDefaultSizeReaderReadsARealFile() throws {
         let folder = try makeTemporaryFolder()
@@ -138,17 +208,41 @@ final class RawConverterTests: XCTestCase {
         XCTAssertNil(ConverterOutput.size(atPath: folder.appendingPathComponent("no such.dng").path))
     }
 
-    // A converter on the real disk takes a real DNG of some bytes as a DNG.
-    func testAConverterOnTheRealDiskAcceptsADNGWithBytes() throws {
+    // A converter on the real disk takes a real work file of some bytes as
+    // a DNG, and the real rename gives it its name. No hidden file is left.
+    func testAConverterOnTheRealDiskGivesTheWorkFileTheNameOfTheDNG() throws {
         let folder = try makeTemporaryFolder()
         defer { removeTemporaryFolder(folder) }
         let dng = folder.appendingPathComponent("a.dng")
-        runner.handler = { _ in
-            FileManager.default.createFile(atPath: dng.path, contents: Data("a DNG".utf8))
-            return ProcessResult(exitCode: 0, stdout: "", stderr: "")
-        }
+        converterWritesARealFile(Data("a DNG".utf8))
         XCTAssertEqual(try converterOnTheRealDisk().convert(folder.appendingPathComponent("a.ARW")),
                        Conversion(dng: dng, unmatched: nil), "Adobe's own DNG is never unmatched")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path), ["a.dng"],
+                       "the listing has hidden files too: no work file is left")
+        XCTAssertEqual(try Data(contentsOf: dng), Data("a DNG".utf8))
+    }
+
+    // The rename that a converter gets when no one gives it one must be the
+    // exclusive one. Here no `rename:` is given, the files are real, and the
+    // "Adobe DNG Converter" of the runner also makes `<base>.dng`, as another
+    // program would at the wrong moment. A plain `rename` would put the work
+    // file over that DNG.
+    func testTheDefaultRenameNeverReplacesADNGThatAppearedWhileTheConverterWorked() throws {
+        let folder = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(folder) }
+        let dng = folder.appendingPathComponent("frame 1.dng")
+        let work = folder.appendingPathComponent(".frame 1.desqueeze-work.dng")
+        let others = Data("another program's DNG".utf8)
+        converterWritesARealFile(Data("Adobe's DNG".utf8),
+                                 also: { FileManager.default.createFile(atPath: dng.path, contents: others) })
+
+        XCTAssertThrowsError(try converterOnTheRealDisk().convert(folder.appendingPathComponent("frame 1.ARW"))) {
+            XCTAssertEqual($0 as? ConvertError,
+                           .failedForAll("A DNG with this name exists already. Not converted.", partial: work))
+        }
+
+        XCTAssertEqual(try Data(contentsOf: dng), others, "the DNG of the other program has the same bytes")
+        XCTAssertEqual(try Data(contentsOf: work), Data("Adobe's DNG".utf8), "the work file stays, for the job")
     }
 
     // Anything at the name stops the converter: a file, a folder, a link, and
@@ -183,7 +277,6 @@ final class RawConverterTests: XCTestCase {
         XCTAssertEqual(runner.calls, [], "the converter never started")
     }
 
-    // The real converter never overwrites: it would write DSC05680_1.dng.
     // The DNG that stopped it is not ours, so it is never reported as partial.
     func testRefusesToStartWhenTheDNGExistsAlready() {
         disk.paths = [dngPath]
@@ -215,7 +308,7 @@ final class RawConverterTests: XCTestCase {
 
     // A file with another name is no leftover of this ARW.
     func testALeftoverOfAnotherPhotoDoesNotStopTheConverter() throws {
-        converterWritesTheDNG()
+        converterWritesItsFile()
         disk.paths = ["/tmp/Shoot 1/DSC05681.dng_exiftool_tmp", "/tmp/Shoot 1/DSC05680.ARW_exiftool_tmp",
                       "/tmp/Shoot 2/DSC05680.dng_exiftool_tmp"]
         XCTAssertEqual(try converter().convert(arw).dng.path, dngPath)
@@ -242,6 +335,80 @@ final class RawConverterTests: XCTestCase {
                            .failed("A DNG with this name exists already. Not converted.", partial: nil))
         }
         XCTAssertEqual(runner.calls, [])
+    }
+
+    // The check of the DNG's name comes before step 1: with a DNG at the
+    // name, nothing is discarded, and nothing starts.
+    func testTheCheckOfTheNameComesBeforeTheLeftoverIsDiscarded() {
+        disk.paths = [dngPath, workPath]
+        XCTAssertThrowsError(try converter().convert(arw)) {
+            XCTAssertEqual($0 as? ConvertError,
+                           .failed("A DNG with this name exists already. Not converted.", partial: nil))
+        }
+        XCTAssertEqual(steps.discarded, [])
+        XCTAssertEqual(runner.calls, [])
+        XCTAssertEqual(disk.paths, [dngPath, workPath])
+    }
+
+    // MARK: A leftover work file (design 13.3, step 1)
+
+    // A run that ended hard left the work file: its own, or dnglab's. Its
+    // name says that it is this app's own, so it is discarded, and the
+    // conversion goes on. The real converter would write beside it, as
+    // `.DSC05680.desqueeze-work_1.dng`.
+    func testALeftoverWorkFileIsDiscardedBeforeTheConverterStarts() throws {
+        converterWritesItsFile()
+        disk.paths = [workPath]
+        disk.sizes[workPath] = 4
+        let conversion = try converter().convert(arw)
+        XCTAssertEqual(conversion, Conversion(dng: dng, unmatched: nil))
+        XCTAssertEqual(steps.discarded, [workPath], "the discard gets the work file, and only it")
+        XCTAssertEqual(runner.calls.count, 1)
+        XCTAssertEqual(disk.paths, [dngPath])
+    }
+
+    // The Trash refused the leftover. The converter does not start, and the
+    // sentence names the file to delete. No partial: this conversion made
+    // no file.
+    func testALeftoverThatCannotBeDiscardedStopsTheConversionBeforeTheConverterStarts() {
+        disk.paths = [workPath]
+        steps.discardError = NamedError(text: "The Trash refused it.")
+        assertFails(.failedForAll(
+            "A leftover file, .DSC05680.desqueeze-work.dng, is beside this photo. \(hiddenFileSentence) "
+                + "Delete it, then run again.",
+            partial: nil))
+        XCTAssertEqual(steps.discarded, [workPath])
+        XCTAssertEqual(runner.calls, [], "the converter did not start")
+        XCTAssertEqual(disk.paths, [workPath], "the leftover is where it was")
+    }
+
+    // MARK: The rename (design 13.3, step 5)
+
+    // Another program made `<base>.dng` after the check before the start,
+    // while the converter worked. That file is not this run's: it is not
+    // reported, and nothing replaces it. The work file is the partial
+    // output, and the error holds for every converter.
+    func testARenameThatFindsTheNameTakenReportsTheWorkFileAndNeverTheDNGOfTheOtherProgram() {
+        let (disk, dngPath) = (disk!, dngPath)
+        steps.renameOutcome = .nameTaken
+        runner.handler = { call in
+            let output = FakeAdobe.output(of: call.arguments)
+            disk.paths.formUnion([output, dngPath])
+            return ProcessResult(exitCode: 0, stdout: "", stderr: "")
+        }
+        XCTAssertThrowsError(try converter().convert(arw)) {
+            XCTAssertEqual($0 as? ConvertError,
+                           .failedForAll("A DNG with this name exists already. Not converted.", partial: work))
+        }
+        XCTAssertEqual(steps.renames, [[workPath, dngPath]])
+        XCTAssertEqual(disk.paths, [dngPath, workPath], "both files are where they were")
+    }
+
+    func testARenameThatFailsForAnotherReasonReportsTheWorkFileWithTheSystemsWords() {
+        converterWritesItsFile()
+        steps.renameOutcome = .failed(EACCES)
+        assertFails(.failed("The DNG could not get the name DSC05680.dng: Permission denied.", partial: work))
+        XCTAssertEqual(disk.paths, [workPath])
     }
 }
 

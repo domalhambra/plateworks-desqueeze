@@ -7,7 +7,8 @@ import Foundation
 /// beside the ARW, `ConverterOutput.workURL`, and the DNG gets its name only
 /// when it is complete and matched (design 13.3). The steps, after the
 /// checks that nothing has the name `<base>.dng` and that no leftover file
-/// of exiftool is there (`ConverterRules`):
+/// of exiftool is there. Steps 1 and 5 are the same for Adobe DNG Converter,
+/// and `ConverterRules` does them. Steps 2 to 4 are this converter's own:
 ///
 /// 1. A work file that is there already is the leftover of a run that ended
 ///    hard. `discardLeftover` takes it. When that fails, no program starts.
@@ -26,7 +27,7 @@ import Foundation
 /// bytes, the read-back equals what was written, and the rename passed.
 /// When one of these fails after dnglab ran, the work file is this run's
 /// partial output, by the rules of `ConverterRules`. `<base>.dng` is never
-/// reported as partial: this converter never writes to that name.
+/// reported as partial: no converter writes to that name.
 ///
 /// **When the rename finds the name taken,** another program made
 /// `<base>.dng` while dnglab worked. That file is not touched. The error is
@@ -55,8 +56,6 @@ public struct DnglabConverter: RawConverter {
     private let exiftool: URL
     private let runner: ProcessRunner
     private let rules: ConverterRules
-    private let discardLeftover: @Sendable (URL) throws -> Void
-    private let rename: @Sendable (URL, URL) -> ExclusiveRename.Outcome
 
     /// - Parameters:
     ///   - executable: dnglab.
@@ -81,9 +80,8 @@ public struct DnglabConverter: RawConverter {
         self.executable = executable
         self.exiftool = exiftool
         self.runner = runner
-        self.discardLeftover = discardLeftover
-        self.rename = rename
         rules = ConverterRules(name: ConverterKind.dnglab.name, exists: fileExists, size: fileSize,
+                               discardLeftover: discardLeftover, rename: rename,
                                reason: { Self.reason(inStandardError: $0.stderr) },
                                exitCodesThatLeaveTheOutputAlone: [Self.outputExists])
     }
@@ -98,45 +96,13 @@ public struct DnglabConverter: RawConverter {
         let match = AdobeMatch.match(facts)
         let tags = match.tags + [AdobeMatch.Tag(name: Self.originalRawFileName, value: arw.lastPathComponent)]
         let dng = try rules.convert(
-            arw, writing: ConverterOutput.workURL(for: arw),
-            prepare: { try discardTheLeftover(of: arw) },
+            arw,
             start: { work in try runner.run(executable, ["convert", "--embed-raw", "false", arw.path, work.path]) },
-            complete: { work in
+            match: { work in
                 try write(tags, to: work)
                 try check(tags, in: work)
-                try move(work, to: ConverterOutput.url(for: arw))
             })
         return Conversion(dng: dng, unmatched: match.failed)
-    }
-
-    /// Step 1. The name of the work file says that it is this app's own, so
-    /// a leftover is discarded with no question. When it cannot be, the
-    /// conversion fails for every converter, and the sentence names the file
-    /// to delete.
-    private func discardTheLeftover(of arw: URL) throws {
-        let work = ConverterOutput.workURL(for: arw)
-        guard rules.exists(work.path) else { return }
-        do {
-            try discardLeftover(work)
-        } catch {
-            throw ConvertError.failedForAll(ConverterRules.leftover(named: work.lastPathComponent))
-        }
-    }
-
-    /// Step 5. The work file is complete and matched, and gets its name.
-    private func move(_ work: URL, to dng: URL) throws {
-        switch rename(work, dng) {
-        case .moved:
-            return
-        case .nameTaken:
-            // Another program made `<base>.dng` while dnglab worked. Adobe
-            // DNG Converter would refuse the name too, so no one tries it.
-            throw ConvertError.failedForAll(ConverterRules.nameTaken, partial: work)
-        case .failed(let code):
-            throw ConvertError.failed(
-                "The DNG could not get the name \(dng.lastPathComponent): \(ExclusiveRename.Outcome.words(for: code)).",
-                partial: work)
-        }
     }
 
     /// dnglab's own reason for a failure: the last line of its standard

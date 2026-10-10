@@ -290,6 +290,15 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual([json["converted"], json["convertedByDnglab"], json["convertedByAdobe"]] as? [Int], [2, 0, 2])
         XCTAssertFalse(h.tools.commands.contains { $0.hasPrefix("dnglab") }, "\(h.tools.commands)")
         XCTAssertEqual(json["notes"] as? [NSDictionary], [])
+        // Adobe DNG Converter writes the same hidden work file that dnglab
+        // writes, and the DNG gets its name last (design 13.3).
+        XCTAssertEqual(h.tools.commands.filter { $0.hasPrefix("Adobe") }, [
+            "Adobe DNG Converter -c -d Shoot 1 -o .X.desqueeze-work.dng X.ARW",
+            "Adobe DNG Converter -c -d Shoot 1 -o .Y.desqueeze-work.dng Y.ARW",
+        ])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: h.shoot.path).sorted(),
+                       ["X.ARW", "X.dng", "Y.ARW", "Y.dng"], "no work file stays")
+        XCTAssertEqual(try Data(contentsOf: h.shoot.appendingPathComponent("X.dng")), Data("converted".utf8))
     }
 
     // `--verbose` shows dnglab's command, and the exiftool commands of its

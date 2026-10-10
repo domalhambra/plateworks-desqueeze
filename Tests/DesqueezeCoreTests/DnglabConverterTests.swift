@@ -405,7 +405,7 @@ final class DnglabConverterTests: XCTestCase {
         let runner = FakeRunner()
         runner.handler = { _ in ProcessResult(exitCode: 3, stdout: "", stderr: "Error: something\n") }
         let adobe = AdobeConverter(executable: URL(fileURLWithPath: "/fake/Adobe DNG Converter"), runner: runner,
-                                   fileExists: { _ in false }, fileSize: { _ in nil })
+                                   discardLeftover: { _ in }, fileExists: { _ in false }, fileSize: { _ in nil })
         XCTAssertThrowsError(try adobe.convert(arw)) {
             XCTAssertEqual($0 as? ConvertError, .failed("Adobe DNG Converter returned 3.", partial: nil))
         }

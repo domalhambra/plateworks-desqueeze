@@ -4,8 +4,9 @@ import Foundation
 /// (design 13.3, step 5).
 ///
 /// A plain `rename` replaces what is at the new name. This one never does:
-/// dnglab's work file gets the name `<base>.dng` only when the name is free,
-/// so a DNG that another program made at the wrong moment is never replaced.
+/// the work file of a converter gets the name `<base>.dng` only when the
+/// name is free, so a DNG that another program made at the wrong moment is
+/// never replaced.
 ///
 /// **Two paths.**
 ///

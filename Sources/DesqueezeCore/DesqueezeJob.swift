@@ -21,18 +21,19 @@ import Foundation
 /// When a converter left a partial output, the job moves it to the Trash
 /// through `BackupHandling.trashFile` and says so on that converter's line,
 /// or names the file to delete when the Trash refuses (design 4.3). For
-/// dnglab that file is its hidden work file, and for Adobe DNG Converter it
-/// is `<base>.dng` (design 13.3). The job moves only that file of that ARW,
-/// and never a DNG that the scan found (`discard`). The ARW is never touched.
+/// either converter that file is the hidden work file of the ARW (design
+/// 13.3). The job moves only that file, and never a `<base>.dng`
+/// (`discard`). The ARW is never touched.
 ///
 /// **When the next converter is not tried.** A converter can say that its
 /// failure holds for every converter (`ConvertError.failedForAll`): another
-/// program took the name `<base>.dng` while dnglab worked, or a leftover
-/// file is in the way: `<base>.dng_exiftool_tmp`, or a work file that the
-/// Trash refused. The ARW is then failed with that converter's words,
-/// and the next converter does not start. The same holds when the Trash
-/// refuses dnglab's work file: a work file that cannot be removed stops the
-/// ARW, in this run as in the next one, and the note names it.
+/// program took the name `<base>.dng` while the converter worked, or a
+/// leftover file is in the way: `<base>.dng_exiftool_tmp`, or a work file
+/// that the Trash refused. The ARW is then failed with that converter's
+/// words, and the next converter does not start. The same holds when the
+/// Trash refuses the work file of a failed conversion: a work file that
+/// cannot be removed stops the ARW, in this run as in the next one, and the
+/// note names it.
 ///
 /// **A DNG with no full match.** With dnglab alone, an ARW that the table
 /// does not cover still converts. It counts as converted, and it gets a
@@ -54,7 +55,6 @@ public struct DesqueezeJob: Sendable {
     private let tag: ScaleTagging
     private let converters: RawConverters
     private let backups: BackupHandling
-    private let namesAreCaseSensitive: @Sendable (URL) -> Bool?
 
     /// - Parameter converters: dnglab and Adobe DNG Converter, each nil when
     ///   it is not installed, and the reader of the ARW facts. With neither
@@ -63,26 +63,10 @@ public struct DesqueezeJob: Sendable {
     ///   check, and where the partial output of a failed conversion goes. There
     ///   is no default, so no caller reaches the Trash by
     ///   leaving it out. The window and the tool name the Trash themselves.
-    /// - Parameter namesAreCaseSensitive: whether the volume of a folder
-    ///   takes `A.dng` and `a.dng` as two files. Nil when the volume does
-    ///   not say. The default asks the volume. Tests inject it.
-    public init(
-        tag: ScaleTagging, converters: RawConverters, backups: BackupHandling,
-        namesAreCaseSensitive: @escaping @Sendable (URL) -> Bool? = { DesqueezeJob.volumeHasCaseSensitiveNames($0) }
-    ) {
+    public init(tag: ScaleTagging, converters: RawConverters, backups: BackupHandling) {
         self.tag = tag
         self.converters = converters
         self.backups = backups
-        self.namesAreCaseSensitive = namesAreCaseSensitive
-    }
-
-    /// What the volume of `folder` says about letter case in file names
-    /// (`URLResourceKey.volumeSupportsCaseSensitiveNamesKey`): true when
-    /// `A.dng` and `a.dng` are two files there. Nil when the volume does not
-    /// say, or the folder cannot be read.
-    public static func volumeHasCaseSensitiveNames(_ folder: URL) -> Bool? {
-        (try? folder.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey]))?
-            .volumeSupportsCaseSensitiveNames
     }
 
     /// Scans `folder`, then runs on what that scan found.
@@ -293,7 +277,7 @@ public struct DesqueezeJob: Sendable {
                     var stop = false
                     if case ConvertError.failedForAll = error { stop = true }
                     if let partial = (error as? ConvertError)?.partial {
-                        switch discard(partial: partial, of: pending.arw, from: kind, keeping: dngs) {
+                        switch discard(partial: partial, of: pending.arw) {
                         case .moved:
                             // After "A DNG with this name exists already",
                             // these words would read as if that DNG moved.
@@ -302,9 +286,10 @@ public struct DesqueezeJob: Sendable {
                             text += " A partial DNG, \(partial.lastPathComponent), is beside the ARW."
                                 + ConverterOutput.hint(forFileNamed: partial.lastPathComponent)
                                 + " Delete it, then run again."
-                            // The file is still there. When it is dnglab's
-                            // work file, the next run would stop at it too
-                            // (design 13.3, step 1), so this one stops here.
+                            // The work file is still there. The next
+                            // converter, and the next run, would stop at it
+                            // too (design 13.3, step 1), so this one stops
+                            // here.
                             stop = true
                         case .notThisRuns:
                             text += " A file, \(partial.lastPathComponent), was reported as the partial DNG. "
@@ -362,37 +347,16 @@ public struct DesqueezeJob: Sendable {
     /// Moves the partial output of a failed conversion to the Trash. The ARW
     /// is never touched.
     ///
-    /// The converter proves that the partial output is its own
-    /// (`ConverterRules`). This is a second lock, and it does not take the
-    /// converter's word. A file moves only when its path is exactly one of
-    /// these:
+    /// A converter reports only its work file (`ConverterRules`). This is a
+    /// second lock, and it does not take the converter's word. One rule
+    /// holds for both converters: a file moves only when its path is exactly
+    /// the work file of this ARW (`ConverterOutput.workURL`). The name is
+    /// this app's own, and the scan never lists it.
     ///
-    /// - From dnglab: the work file of this ARW (`ConverterOutput.workURL`).
-    ///   The name is this app's own, and the scan never lists it. A
-    ///   `<base>.dng` from dnglab never moves: dnglab's converter does not
-    ///   write to that name, so a file there is someone else's.
-    /// - From Adobe DNG Converter: the output of this ARW, `<base>.dng`
-    ///   beside it, when it is not one of `dngs`: the DNG files that the
-    ///   run's scan found, and the ones that the run made before this ARW.
-    ///   Two names are compared by the rule of the volume: on a volume with
-    ///   case-sensitive names, `A.dng` and `a.dng` are two files, and on any
-    ///   other they are one. When the volume does not say, letter case is
-    ///   ignored: that is the direction in which no file moves.
-    ///
-    /// Any other file stays where it is.
-    private func discard(partial: URL, of arw: URL, from converter: ConverterKind, keeping dngs: [DNGFile]) -> Discarded {
-        let isThisRuns: Bool
-        switch converter {
-        case .dnglab:
-            isThisRuns = partial.path == ConverterOutput.workURL(for: arw).path
-        case .adobe:
-            let caseMatters = namesAreCaseSensitive(arw.deletingLastPathComponent()) == true
-            let isAKnownDNG = dngs.contains {
-                caseMatters ? $0.url.path == partial.path : $0.url.path.lowercased() == partial.path.lowercased()
-            }
-            isThisRuns = partial.path == ConverterOutput.url(for: arw).path && !isAKnownDNG
-        }
-        guard isThisRuns else { return .notThisRuns }
+    /// Any other file stays where it is. So a `<base>.dng` never moves: no
+    /// converter writes to that name, and a file there is someone else's.
+    private func discard(partial: URL, of arw: URL) -> Discarded {
+        guard partial.path == ConverterOutput.workURL(for: arw).path else { return .notThisRuns }
         do {
             try backups.trashFile(partial)
             return .moved

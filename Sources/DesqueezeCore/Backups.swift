@@ -8,7 +8,7 @@ public protocol BackupHandling: Sendable {
     /// Replaces the DNG with its backup. The backup file is consumed.
     func restoreBackup(for dng: URL) throws
     /// Moves a file that is not a backup to the Trash. The job uses it for
-    /// the partial output of a failed conversion (design 4.3), and dnglab's
+    /// the partial output of a failed conversion (design 4.3), and each
     /// converter for the work file that an earlier run left (design 13.3).
     /// It goes where a backup goes, so a test that injects the Trash for
     /// backups injects it for these files too.
