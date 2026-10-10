@@ -1,5 +1,8 @@
 import AppKit
-import DesqueezeCore
+// With `@testable`, for one thing: the test of a lock call that fails makes
+// a `FolderLock` on its own three calls. The core gives no public way to
+// make one, so the app cannot run with a lock that does not lock.
+@testable import DesqueezeCore
 import XCTest
 
 /// The window's state (design, section 5). Each test has its own model, on
@@ -289,6 +292,119 @@ final class AppModelTests: XCTestCase {
         h.model.appBecameActive()
         await h.wait("the scan lands") { !h.model.isScanning }
         XCTAssertEqual(h.model.folderMessages, [], "the refusal does not come back")
+    }
+
+    // MARK: A lock call that fails (design 13.9, the last row of the table)
+
+    /// A lock whose call fails with `code`: the system gave an error that
+    /// says nothing about the lock. It opens and closes nothing.
+    private func lockThatFails(with code: Int32) -> FolderLock {
+        FolderLock(open: { _ in (descriptor: 7, code: 0) }, lock: { _ in code }, close: { _ in })
+    }
+
+    // The run does not start. The window shows the folder as one that could
+    // not be read, and the system's words on the detail line, as the
+    // command line tool and the MCP server do. Until 2026-10-10 the window
+    // showed the sentence alone.
+    func testALockCallThatFailsShowsTheSystemsWordsOnTheDetailLine() async throws {
+        let h = try ModelHarness(lock: lockThatFails(with: EIO))
+        defer { h.cleanUp() }
+        await h.load(try h.folder("Shoot", files: ["a.dng", "b.dng"]))
+        XCTAssertEqual(h.model.folderMessages, [])
+        XCTAssertNil(h.model.folderMessageDetail)
+
+        for click in [h.model.run, h.model.remove] {
+            click()
+            await h.runEnds()
+            XCTAssertEqual(h.model.folderMessages, ["This folder could not be read."])
+            XCTAssertEqual(h.model.folderMessageDetail, "Input/output error")
+            XCTAssertEqual(h.model.folderMessageDetail, FolderLock.Failed(code: EIO).localizedDescription,
+                           "the words are the core's")
+            XCTAssertNil(h.model.summary, "no run, so no result")
+            XCTAssertNil(h.model.runRefusal, "no other run works in the folder")
+            XCTAssertEqual(h.tag.writes, [], "no file was tried")
+            XCTAssertEqual(h.saves, [], "a run that did not start saves no factor")
+            XCTAssertEqual(h.announcements.last, "This folder could not be read.")
+
+            // The next scan reads the folder. It is newer than the click
+            // that failed, so the detail goes with the sentence.
+            h.model.appBecameActive()
+            await h.wait("the scan lands") { !h.model.isScanning }
+            XCTAssertEqual(h.model.folderMessages, [])
+            XCTAssertNil(h.model.folderMessageDetail)
+            XCTAssertEqual(h.model.countsLine, "2 DNG")
+        }
+    }
+
+    // The detail is the system's words for the number that the call gave.
+    func testTheDetailLineOfALockCallThatFailsHasTheWordsOfItsError() async throws {
+        let h = try ModelHarness(lock: lockThatFails(with: EBADF))
+        defer { h.cleanUp() }
+        await h.load(try h.folder("Shoot", files: ["a.dng"]))
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.folderMessageDetail, "Bad file descriptor")
+    }
+
+    func testANewFolderAndAScanThatFailsTakeTheDetailLineAway() async throws {
+        let h = try ModelHarness(lock: lockThatFails(with: EIO))
+        defer { h.cleanUp() }
+        let shoot = try h.folder("Shoot", files: ["a.dng"])
+        await h.load(shoot)
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.folderMessageDetail, "Input/output error")
+
+        // A scan that fails is the newer event. It has no words of the
+        // system, so the sentence stands alone.
+        h.tag.failReads(true)
+        h.model.appBecameActive()
+        await h.wait("the scan lands") { !h.model.isScanning }
+        XCTAssertEqual(h.model.folderMessages, ["This folder could not be read."])
+        XCTAssertNil(h.model.folderMessageDetail)
+
+        h.tag.failReads(false)
+        h.model.appBecameActive()
+        await h.wait("the scan lands") { !h.model.isScanning }
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.folderMessageDetail, "Input/output error")
+        // Another folder takes the detail away at once, before its scan
+        // lands: nothing about the folder before it stays.
+        let other = try h.folder("Other", files: ["c.dng"])
+        h.tag.readGate("Other").close()
+        XCTAssertTrue(h.model.handleDrop([other]))
+        XCTAssertTrue(h.model.isScanning)
+        XCTAssertNil(h.model.folderMessageDetail, "another folder takes the detail away")
+        h.tag.readGate("Other").open()
+        await h.wait("the scan lands") { !h.model.isScanning }
+        XCTAssertEqual(h.model.folderMessages, [])
+        XCTAssertNil(h.model.folderMessageDetail)
+    }
+
+    // Only a lock call that failed has the detail line. A run whose own
+    // scan failed, and a run that another run kept out, have none.
+    func testARunWhoseScanFailedAndARefusedRunHaveNoDetailLine() async throws {
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        let folder = try h.folder("Shoot", files: ["a.dng"])
+        await h.load(folder)
+
+        h.tag.failReads(true)
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.folderMessages, ["This folder could not be read."])
+        XCTAssertNil(h.model.folderMessageDetail)
+
+        h.tag.failReads(false)
+        h.model.appBecameActive()
+        await h.wait("the scan lands") { !h.model.isScanning }
+        guard case .held(let other) = FolderLock.system.take(folder) else { return XCTFail("the lock of the test") }
+        defer { other.release() }
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.folderMessages, [FolderLock.busyMessage])
+        XCTAssertNil(h.model.folderMessageDetail)
     }
 
     // MARK: Remove

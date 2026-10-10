@@ -114,6 +114,17 @@ struct ContentView: View {
                         }
                     }
                     ForEach(model.folderMessages, id: \.self) { zoneMessage($0) }
+                    // The system's words for a lock call that failed
+                    // (design 13.9), below the plain sentence, as a note of
+                    // the result shows its detail: small, quiet, and a
+                    // person can copy them.
+                    if let detail = model.folderMessageDetail {
+                        Text(detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
                     // A wrong drop gets its own line. It never hides a line above.
                     if let message = model.dropMessage { zoneMessage(message) }
                 }

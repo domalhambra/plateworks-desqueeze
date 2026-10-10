@@ -75,6 +75,53 @@ final class OriginalsModelTests: XCTestCase {
         XCTAssertFalse(h.model.trashOriginals)
     }
 
+    /// A name that no converter takes: its base has 223 letters, one more
+    /// than a conversion can name its files for (design 13.9).
+    private let tooLong = String(repeating: "n", count: 223) + ".ARW"
+
+    // The only pending ARW cannot convert, so the run can move no original.
+    // The run button still takes the file: its note says what to do.
+    func testTheBoxDoesNotShowWhenTheOnlyPendingARWHasANameThatIsTooLong() async throws {
+        let h = try await loaded(files: ["a.dng", tooLong])
+        defer { h.cleanUp() }
+        XCTAssertEqual(h.model.snapshot?.pendingARWs.map(\.lastPathComponent), [tooLong])
+        XCTAssertFalse(h.model.showsTrashOriginals)
+        XCTAssertFalse(h.model.canChangeTrashOriginals)
+        h.model.setTrashOriginals(true)
+        XCTAssertFalse(h.model.trashOriginals)
+        XCTAssertNil(h.model.trashOriginalsLine)
+        XCTAssertEqual(h.model.runLabel, "Desqueeze 2 photos")
+        XCTAssertTrue(h.model.canRun)
+
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.summary?.notes.map(\.detail), ["The file name is too long. Shorten it, then run again."])
+        XCTAssertEqual(h.backups.filesGiven, [])
+    }
+
+    // One ARW can convert and one cannot: the line and the button count
+    // the one that the run can move, and the run moves that one.
+    func testTheLineAndTheButtonCountOnlyTheARWFilesThatCanConvert() async throws {
+        let h = try await loaded(files: ["a.dng", "b.ARW", tooLong])
+        defer { h.cleanUp() }
+        XCTAssertTrue(h.model.showsTrashOriginals)
+        h.model.setTrashOriginals(true)
+        XCTAssertEqual(h.model.trashOriginalsLine,
+                       "1 original ARW file goes to the Trash after its DNG file passes the check.")
+        XCTAssertEqual(h.model.runLabel, "Desqueeze 3 photos, move 1 ARW to Trash")
+
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.backups.filesGiven, ["b.ARW"])
+        XCTAssertEqual(h.model.summary?.originalsLine, "Originals moved to the Trash: 1 of 1.")
+        XCTAssertEqual(h.model.summary?.failed, 1)
+        // The ARW that cannot convert is still pending, and it is no
+        // original that a run can move: the box does not show.
+        XCTAssertEqual(h.model.snapshot?.pendingARWs.map(\.lastPathComponent), [tooLong])
+        XCTAssertFalse(h.model.showsTrashOriginals)
+        XCTAssertFalse(h.model.trashOriginals)
+    }
+
     // MARK: The line under the box, and the label of the Run button
 
     func testWhileTheBoxIsOnTheLineAndTheButtonSayWhatTheRunWillDoForOne() async throws {

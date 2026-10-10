@@ -199,6 +199,9 @@ final class FakeBackups: BackupHandling, @unchecked Sendable {
 /// Either converter. It makes a small DNG beside the ARW, and starts no
 /// program. The DNG has bytes, as the check before an original moves asks
 /// (design 14.2, line 5).
+///
+/// It follows the first rule of each real converter (design 13.9): an ARW
+/// whose name is too long gets no DNG, and the next converter is not tried.
 struct FakeConverter: RawConverter {
     /// The rule that kept the DNG from a full match, as dnglab reports it
     /// for a frame that the table does not cover. Nil is a full match.
@@ -211,6 +214,9 @@ struct FakeConverter: RawConverter {
 
     func convert(_ arw: URL, facts: ARWFacts) throws -> Conversion {
         gate?.pass()
+        if ConverterOutput.nameIsTooLong(for: arw) {
+            throw ConvertError.failedForAll("The file name is too long. Shorten it, then run again.")
+        }
         if failing.contains(arw.lastPathComponent) { throw ConvertError.failed("The fake cannot read this file.") }
         let dng = ConverterOutput.url(for: arw)
         try Data("a DNG".utf8).write(to: dng)
@@ -253,6 +259,7 @@ final class ModelHarness {
 
     private let base: URL
     private let converters: RawConverters
+    private let lock: FolderLock
     private var watch: AnyCancellable?
 
     /// - Parameters:
@@ -263,8 +270,11 @@ final class ModelHarness {
     ///     not installed.
     ///   - facts: the facts of each ARW, by name. Empty: no ARW has facts,
     ///     so none has a full match.
+    ///   - lock: the lock that a run takes on the folder. The system's own,
+    ///     on a temporary folder, unless a test gives one whose call fails.
     init(hasExiftool: Bool = true, dnglab: FakeConverter? = nil, adobe: FakeConverter? = nil,
-         facts: [String: ARWFacts] = [:]) throws {
+         facts: [String: ARWFacts] = [:], lock: FolderLock = .system) throws {
+        self.lock = lock
         base = FileManager.default.temporaryDirectory
             .appendingPathComponent("desqueeze-app-tests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
@@ -281,7 +291,7 @@ final class ModelHarness {
     /// its run is in flight, and that run must find nothing, not crash.
     func makeModel(hasExiftool: Bool = true) -> AppModel {
         AppModel(
-            tag: hasExiftool ? tag : nil, converters: converters, backups: backups,
+            tag: hasExiftool ? tag : nil, converters: converters, backups: backups, lock: lock,
             savedFactor: savedFactor,
             saveFactor: { [weak self] in
                 self?.savedFactor = $0

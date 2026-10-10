@@ -55,6 +55,16 @@ final class AppModel: ObservableObject {
     /// "one state, one message": a folder that could not be read is the
     /// newer event, so the window shows that, and VoiceOver hears that.
     @Published private(set) var runRefusal: String?
+    /// The detail line under "This folder could not be read.": the system's
+    /// words for a lock call that failed, so the click on Run or Remove
+    /// started no run (design 13.9, the last row of the table). The command
+    /// line tool and the MCP server show the same words. The words are the
+    /// core's (`FolderLock.Failed`).
+    ///
+    /// Nil in every other state. It goes when a scan of the folder lands,
+    /// when another folder loads, and at the next click that starts a run:
+    /// each of those is newer than the click that failed.
+    @Published private(set) var folderMessageDetail: String?
     @Published private(set) var phase = RunPhase.idle
     /// The box "Move the original ARW files to the Trash" (design 14.4).
     ///
@@ -72,6 +82,8 @@ final class AppModel: ObservableObject {
     /// With neither, the DNG files still run.
     private let converters: RawConverters
     private let backups: BackupHandling
+    /// The lock that keeps a second run out of the folder (design 13.9).
+    private let lock: FolderLock
     /// Keeps the factor of a run for the next launch.
     private let saveFactor: @MainActor (String) -> Void
     /// The factor of the run in flight, until the job says whether the run
@@ -104,19 +116,22 @@ final class AppModel: ObservableObject {
     ///   - converters: dnglab and Adobe DNG Converter, each nil when it is
     ///     not installed, and the reader of the ARW facts.
     ///   - backups: where a backup goes after a write that passed its check.
+    ///   - lock: the lock that a run takes on the folder. The app gives the
+    ///     system's. A test gives one whose call fails.
     ///   - savedFactor: the factor of the last run, as `saveFactor` got it.
     ///     Nil, or text that is no factor, gives 1.5.
     ///   - saveFactor: keeps the factor of a run for the next launch.
     ///   - now: the time in seconds, from any fixed start.
     ///   - announce: says one line to VoiceOver.
     init(
-        tag: ScaleTagging?, converters: RawConverters, backups: BackupHandling,
+        tag: ScaleTagging?, converters: RawConverters, backups: BackupHandling, lock: FolderLock,
         savedFactor: String?, saveFactor: @escaping @MainActor (String) -> Void,
         now: @escaping @MainActor () -> TimeInterval, announce: @escaping @MainActor (String) -> Void
     ) {
         self.tag = tag
         self.converters = converters
         self.backups = backups
+        self.lock = lock
         self.saveFactor = saveFactor
         self.now = now
         self.announce = announce
@@ -187,6 +202,8 @@ final class AppModel: ObservableObject {
     /// The messages about the loaded folder. They come from the newest
     /// scan, and from a click on Run or Remove that started no run. A scan
     /// that failed is the only message: it has taken `runRefusal` away.
+    /// `folderMessageDetail` is the detail line under them, when there is
+    /// one.
     var folderMessages: [String] {
         if scanFailed { return [FolderText.unreadable] }
         return (runRefusal.map { [$0] } ?? []) + (snapshot?.messages ?? [])
@@ -326,6 +343,7 @@ final class AppModel: ObservableObject {
         dropMessage = nil
         summary = nil
         runRefusal = nil
+        folderMessageDetail = nil
         progress = nil
         // Also for the folder that was loaded already: a box that stays on
         // from an earlier folder is the way this option can move files that
@@ -352,6 +370,9 @@ final class AppModel: ObservableObject {
             // One state, one message. The folder could not be read, and
             // that is newer than the refusal of an earlier click.
             if scanFailed { runRefusal = nil }
+            // This scan is newer than a lock call that failed. Its own
+            // failure has no words of the system to show.
+            folderMessageDetail = nil
             isScanning = false
         }
     }
@@ -479,7 +500,7 @@ final class AppModel: ObservableObject {
     private func start(factor: SqueezeFactor, convert: Bool, trashOriginals: Bool, remove: Bool, saves: String?) {
         guard let folder, let tag else { return }
         factorToSave = saves
-        let runner = DesqueezeJob(tag: tag, converters: converters, backups: backups)
+        let runner = DesqueezeJob(tag: tag, converters: converters, backups: backups, lock: lock)
         let flag = CancelFlag()
         // The job reports progress from its own thread. A stream keeps the
         // updates in order, and ends when the job returns.
@@ -496,6 +517,7 @@ final class AppModel: ObservableObject {
         phase = .running
         summary = nil
         runRefusal = nil
+        folderMessageDetail = nil
         progress = nil
 
         Task {
@@ -519,9 +541,16 @@ final class AppModel: ObservableObject {
             // The job has returned. Cancel has nothing to stop now.
             phase = .rescanning
             if result == nil, !refused {
-                // The job's own scan failed, so no file was tried.
+                // The job's own scan failed, or its lock call did (design
+                // 13.9). No file was tried.
                 snapshot = nil
                 scanFailed = true
+                // For the lock call, the system's words go on the detail
+                // line, as the command line tool shows them. The scan after
+                // this run does not start, so nothing takes them away here.
+                if case .failure(let error) = outcome, let failed = error as? FolderLock.Failed {
+                    folderMessageDetail = failed.localizedDescription
+                }
             } else {
                 // Also after a refusal: the other run changes the folder,
                 // and a scan is allowed while it works.
@@ -578,6 +607,7 @@ extension AppModel {
             tag: exiftool.map { ScaleTag(exiftool: $0) },
             converters: converters ?? .none,
             backups: backups,
+            lock: .system,
             savedFactor: UserDefaults.standard.string(forKey: factorKey),
             saveFactor: { UserDefaults.standard.set($0, forKey: factorKey) },
             now: { ProcessInfo.processInfo.systemUptime },
