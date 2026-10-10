@@ -303,6 +303,40 @@ there.
 standard defines. Its header comment differs, and it has no skip rule for
 paths outside the repo. Do not edit its checks here.
 
+## Change the documentation site
+
+The site is a DocC catalog, `Sources/DesqueezeCore/DesqueezeCore.docc`. It
+has a first page, `DesqueezeCore.md`, and one Markdown file for each
+article. The API reference comes from the documentation comments in
+`Sources/DesqueezeCore/`. The package has no dependency for the site: the
+build uses the `docc` of Xcode.
+
+1. Change the article, or the documentation comment. For a new article, add
+   its file to the catalog, and add its `<doc:Name>` line under "Topics" on
+   the first page. For a new public type, add it to a group under "Topics"
+   too.
+2. Hold to the rules of the site. It is for a public reader: no path on one
+   Mac, and no private repo. Every command in an article was run. A fact
+   that a repo document also states must agree with it. Numbers that change,
+   such as test counts and timings, stay out.
+3. Run the site test: `swift test --filter DocsSiteTests`. It fails when the
+   first page names an article that does not exist, when an article is not
+   on the first page, when a `<doc:…>` link points to no article, and when
+   an article quotes a test or a repo path that does not exist.
+4. Build the site: `scripts/build_docs.sh`. It writes the site to the folder
+   docs inside build, which git ignores. A warning of docc is an error
+   there: an unresolved link or symbol stops the build. Fix it.
+5. Look at the site. The script prints the command for a web server on this
+   Mac, and the command for a preview that follows each change to an
+   article.
+
+When you change a sentence, an option, a note kind, a JSON key or the match
+table, change the article that describes it in the same change.
+
+`.github/workflows/docs.yml` publishes the site to GitHub Pages on a push to
+the main branch. It has not run yet: the repo is not on GitHub. Its header
+lists what to check on the first run.
+
 ## Record a decision
 
 Add a row to `docs/decisions.md` under the date of the decision: what was

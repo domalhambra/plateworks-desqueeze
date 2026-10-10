@@ -29,6 +29,8 @@ public struct FolderSnapshot: Equatable, Sendable {
     }
 }
 
+/// Makes the `FolderSnapshot` of a folder: the lists of `FolderScan`, the tag
+/// of each DNG, and the backup state. It changes no file.
 public struct FolderScanner: Sendable {
     private let tag: ScaleTagging
     private let backups: BackupHandling

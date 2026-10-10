@@ -60,6 +60,7 @@ where they differ from an earlier section. Dom is the maintainer.
 | The repo is documented to the Medium tier of the Plateworks documentation standard, with the files that an open-source repo carries. | Dom's decision. It supersedes design 10, which says Floor tier. A reader with no access to the maintainer's Mac must be able to build, test and change the code. | `docs/README.md` |
 | **Superseded in part the same day: the copy also has no skip rule for paths outside the repo.** The header of the repo's copy of the docs check names no path outside the repo. Only that header differs from the standard's check. | Dom's decision, for a public repo. | `scripts/docs_check.py` |
 | A documentation site is built with DocC and published later, on Dom's yes. | The public types of `DesqueezeCore` carry their documentation in the source. | `docs/superpowers/plans/2026-10-09-desqueeze-v1.md`, Task 16. Not built yet. |
+| The site is built with the `docc` of Xcode, from the symbol graph that the compiler writes. The package gets no dependency for it. A workflow publishes the site to GitHub Pages when the repo is public. | The root package must stay free of third-party code, also at build time, and `swift-docc-plugin` is a package dependency. Nothing is published before the repo is. | `scripts/build_docs.sh`, `Sources/DesqueezeCore/DesqueezeCore.docc`, `.github/workflows/docs.yml`. Built. The workflow has not run yet. |
 
 ## Rejected and deferred
 

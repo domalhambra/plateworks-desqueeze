@@ -19,7 +19,7 @@ public struct SqueezeFactor: Equatable, Hashable, Sendable {
     ///
     /// It is a whole sentence: the MCP server gives it to a model as it is.
     ///
-    /// - Parameter got: the text as it was given.
+    /// - Parameter text: the text as it was given.
     public static func errorMessage(got text: String) -> String {
         "The factor must be \(ruleText). It was \(text)."
     }

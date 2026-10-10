@@ -12,7 +12,9 @@ public struct LoggingProcessRunner: ProcessRunner {
     private let runner: ProcessRunner
     private let sink: @Sendable (String) -> Void
 
-    /// - Parameter sink: gets one line at a time, with no line end.
+    /// - Parameters:
+    ///   - runner: the runner that starts each program.
+    ///   - sink: gets one line at a time, with no line end.
     public init(wrapping runner: ProcessRunner, sink: @escaping @Sendable (String) -> Void) {
         self.runner = runner
         self.sink = sink

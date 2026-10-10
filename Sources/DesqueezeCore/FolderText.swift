@@ -75,6 +75,7 @@ public enum FolderText {
     /// for each orphan backup, with the name to rename it to.
     ///
     /// - Parameters:
+    ///   - isWritable: false adds the read-only sentence.
     ///   - orphanBackups: the file names, each `<name>.dng_original`.
     ///   - namedOrphanLimit: how many orphan backups to name. `and N more`
     ///     follows when there are more. Nil names every one.

@@ -31,8 +31,13 @@ public struct ToolLocator: Sendable {
     public let converterApps: [String]
     private let isExecutable: @Sendable (String) -> Bool
 
-    /// - Parameter registeredConverterApp: the app that Launch Services
-    ///   returns for `converterBundleID`. The app layer supplies it.
+    /// - Parameters:
+    ///   - pathVariable: the value of `PATH`. Its folders are searched
+    ///     after the two Homebrew folders.
+    ///   - registeredConverterApp: the app that Launch Services returns for
+    ///     `converterBundleID`. The app layer supplies it.
+    ///   - isExecutable: true when the file at a path can be run. Tests
+    ///     inject it.
     public init(
         pathVariable: String? = ProcessInfo.processInfo.environment["PATH"],
         registeredConverterApp: URL? = nil,

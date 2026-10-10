@@ -37,6 +37,7 @@ public struct TagRow: Equatable, Sendable {
     public let originalRawFileName: String?
 }
 
+/// A read or a write of a tag that failed, with the reason as text.
 public enum TagError: Error, Equatable {
     case toolFailed(String)
 }

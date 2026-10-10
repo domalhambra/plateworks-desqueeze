@@ -21,6 +21,7 @@ public struct DNGFile: Equatable, Sendable {
     }
 }
 
+/// The files at the top level of one folder that a scan looks at.
 public struct FolderContents: Equatable, Sendable {
     public var dngs: [URL]
     public var arws: [URL]
@@ -28,6 +29,8 @@ public struct FolderContents: Equatable, Sendable {
     public var orphanBackups: [URL]
 }
 
+/// Lists the top level of a folder, and decides which ARW files are pending.
+/// It reads no tag.
 public enum FolderScan {
     /// The DNG and ARW files at the top level of `folder`, and each DNG
     /// backup that has lost its DNG, sorted by name. Subfolders, hidden

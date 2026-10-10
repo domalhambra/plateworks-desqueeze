@@ -42,8 +42,11 @@ public enum ConverterText {
 /// The run gives the ARW to the first converter. When that one fails, the
 /// next one gets it. The ARW is failed when the last one failed.
 public enum ConverterChoice {
-    /// - Parameter fullMatch: the five rules of design 13.4 hold for the ARW,
-    ///   so a dnglab DNG with the match tags renders as Adobe's does.
+    /// - Parameters:
+    ///   - fullMatch: the five rules of design 13.4 hold for the ARW, so a
+    ///     dnglab DNG with the match tags renders as Adobe's does.
+    ///   - dnglabInstalled: true when dnglab is installed.
+    ///   - adobeInstalled: true when Adobe DNG Converter is installed.
     /// - Returns: the converters to try, in order. Empty when none is
     ///   installed: the ARW is not converted.
     public static func order(fullMatch: Bool, dnglabInstalled: Bool, adobeInstalled: Bool) -> [ConverterKind] {

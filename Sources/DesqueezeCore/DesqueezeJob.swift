@@ -56,6 +56,7 @@ public struct DesqueezeJob: Sendable {
     private let converters: RawConverters
     private let backups: BackupHandling
 
+    /// - Parameter tag: reads and writes the `DefaultScale` tag.
     /// - Parameter converters: dnglab and Adobe DNG Converter, each nil when
     ///   it is not installed, and the reader of the ARW facts. With neither
     ///   converter the ARW files wait, and the DNG files still run.
@@ -75,11 +76,16 @@ public struct DesqueezeJob: Sendable {
     /// folder holds at the call, never on what a front end read earlier.
     ///
     /// - Parameters:
+    ///   - folder: the folder to scan and to run on. Its top level only.
+    ///   - factor: the stretch to set.
     ///   - convert: false leaves the ARW files alone.
     ///   - remove: true for Remove. Remove writes `.noStretch` whatever
     ///     `factor` says, so a factor given beside it never reaches a file.
     ///     It never converts, whatever `convert` says, and it reports no ARW
     ///     files left.
+    ///   - cancel: stops the run after its current file, when it is set.
+    ///   - progress: called after each step: one for each conversion, and
+    ///     one for each DNG.
     /// - Throws: only when the scan fails. No file is changed then. A file
     ///   that fails during the run is a note in the summary, not an error.
     public func run(

@@ -146,6 +146,7 @@ extension FileNote {
     }
 }
 
+/// The counts and the notes of one run.
 public struct RunSummary: Equatable, Sendable {
     /// ARW files that dnglab converted. A DNG with no full match is in it
     /// too, and has a `convertedUnmatched` note.
@@ -221,6 +222,8 @@ extension RunSummary {
     }
 }
 
+/// One completed step of a run: how many steps are complete, how many the
+/// run has, and the file of this step.
 public struct RunProgress: Equatable, Sendable {
     public let completed: Int
     public let total: Int

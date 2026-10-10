@@ -55,6 +55,15 @@ governs behavior, give it a row in `CLAUDE.md` too.
 | `THIRD_PARTY_NOTICES.md` | You want the license of each program that the app starts and of each library that the server links. |
 | `LICENSE` | The MIT license of this repo. |
 
+## The documentation site
+
+The source of the site is not in this folder. It is a DocC catalog beside
+the code, `Sources/DesqueezeCore/DesqueezeCore.docc`: one Markdown file for
+each article, and the API reference from the documentation comments of the
+core. `scripts/build_docs.sh` builds it, and `changing-things.md` has the
+steps. The docs check does not read the catalog.
+`Tests/DesqueezeCoreTests/DocsSiteTests.swift` does.
+
 ## Standards that this repo follows
 
 Both are kept outside the repo. No file here depends on them at build time.
