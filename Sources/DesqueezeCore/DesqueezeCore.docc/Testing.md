@@ -193,7 +193,9 @@ skip.
 One run works in a folder at a time, and ``FolderLock`` holds that rule.
 Its tests are in `Tests/DesqueezeCoreTests/FolderLockTests.swift`. The unit
 tests give the lock three fake system calls, so they need no second
-process. Other tests take the system's own lock on a temporary folder: the
+process, and they drive each answer of the lock call: the lock, a lock that
+another run holds, a volume with no lock, a call that a signal broke, and
+any other error. Other tests take the system's own lock on a temporary folder: the
 lock makes no file. `Tests/DesqueezeCLITests/TwoRunsTests.swift` starts the
 built tool twice on one folder, and the second run must not start.
 

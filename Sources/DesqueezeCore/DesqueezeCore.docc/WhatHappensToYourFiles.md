@@ -192,7 +192,9 @@ and between two copies of one of them. Run and Remove both take the lock.
   program ends for any reason: a crash, a Force Quit, a loss of power. No
   lock stays behind, and there is nothing to clean.
 - **A scan and a dry run take no lock.** You can scan a folder while a run
-  works in it. The result can then be of a folder in change.
+  works in it. The result can then be of a folder in change. For example, a
+  DNG can show as blocked by a backup that the run is about to clear. Scan
+  again after the run ends.
 - **The lock stops only Desqueeze.** Finder, Lightroom and other programs
   work in the folder as before.
 
@@ -259,8 +261,17 @@ run in the middle of a file. The next scan or run reports what it finds:
 - **A volume that gives no lock.** The lock of a run was tested on disk
   images with the APFS, HFS+, ExFAT and MS-DOS (FAT32) file systems. Each
   one gave it. A network share was not tested. When a volume gives no lock
-  for a folder, the run goes on without one. On such a volume, do not start
-  two runs in one folder.
+  for a folder, the run goes on without one, and its result says so: "This
+  volume gives no folder lock. Do not start a second run in this folder
+  while this run works." On such a volume, do not start two runs in one
+  folder. When the lock call fails for any other reason, the run does not
+  start, and the tool says that the folder could not be read.
+- **The moment after a hard end.** When a run ends hard, for example with
+  a Force Quit, its lock is free at once. A converter that this run started
+  can still work for a moment. A run that starts in that moment can meet
+  the work file of that converter. Both converters end in under half a
+  second on the Mac of the test, and two trials showed no collision. After
+  a hard end, wait a moment before the next run.
 - **A long file name.** A file name on a Mac volume can have 255 UTF-16
   units. Most letters are one unit, also a Japanese letter. An emoji is
   two or more. Some volumes store an accented letter as two units, so the

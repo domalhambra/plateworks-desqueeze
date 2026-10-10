@@ -147,6 +147,21 @@ Kind: `convertedUnmatched`. This is not an error. dnglab converted the
 photo, Adobe DNG Converter is not installed, and the note says what the DNG
 lacks. <doc:CamerasAndLenses> explains both sentences.
 
+### The volume gives no folder lock
+
+```
+This volume gives no folder lock. Do not start a second run in this folder while this run works.
+```
+
+Kind: `noFolderLock`. This is not an error. The note is on the name of the
+folder, and it is the first note of the result. A run holds a lock on its
+folder, so that a second run in the same folder does not start. This volume
+gives no such lock, so the run worked without one, and nothing would have
+stopped a second run. On this volume, wait for a run to end before you
+start the next one in the same folder: in the window, in the tool, or
+through the MCP server. `--verbose` prints the error number that the system
+gave. <doc:WhatHappensToYourFiles> says which volumes were tested.
+
 ### The original stays
 
 ```

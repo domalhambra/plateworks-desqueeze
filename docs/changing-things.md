@@ -72,7 +72,8 @@ tool's own words on a detail line below it.
    | The box for the originals in the window: its label, the line under it, the run button with the originals | `Sources/DesqueezeCore/FolderText.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
    | One file of a run: most notes, the counts line, the Lightroom line and when it shows, the line about the two converters, the line about the originals | `Sources/DesqueezeCore/RunSummary.swift` | `Tests/DesqueezeCoreTests/RunSummaryTests.swift`, `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
    | An original that stays: the six sentences, and the detail line of a DNG that did not pass its check | `Sources/DesqueezeCore/Originals.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
-   | A run that did not start, because another run works in the folder | `Sources/DesqueezeCore/FolderLock.swift` | `Tests/DesqueezeCoreTests/FolderLockTests.swift` |
+   | A run that did not start, because another run works in the folder. The line of `--verbose` for a volume that gave no folder lock. | `Sources/DesqueezeCore/FolderLock.swift` | `Tests/DesqueezeCoreTests/FolderLockTests.swift` |
+   | The note of a run on a volume that gives no folder lock | `Sources/DesqueezeCore/RunSummary.swift` | `Tests/DesqueezeCoreTests/FolderLockTests.swift` |
    | A write that failed, a backup that was restored, a partial DNG | `Sources/DesqueezeCore/DesqueezeJob.swift` | `Tests/DesqueezeCoreTests/DesqueezeJobTests.swift` |
    | Who converts | `Sources/DesqueezeCore/ConverterChoice.swift` | `Tests/DesqueezeCoreTests/ConverterChoiceTests.swift` |
    | A failed conversion, a leftover file, a file name that is too long | `Sources/DesqueezeCore/RawConverter.swift` | `Tests/DesqueezeCoreTests/RawConverterTests.swift` |
@@ -130,11 +131,15 @@ note, never the English sentence.
    blocked file. The exit code in `Sources/DesqueezeCLI/Commands.swift` is 1
    for those, for a stopped run, and for a read-only folder.
    `Tests/DesqueezeCLITests/ExitCodeTests.swift` judges the exit code. A
-   kind that only informs, as `convertedUnmatched` and `originalKept` do,
-   also goes into `isInformation` in `App/PlateworksDesqueeze/AppModel.swift`,
+   kind that only informs, as `convertedUnmatched`, `originalKept` and
+   `noFolderLock` do, also goes into `isInformation` in `App/PlateworksDesqueeze/AppModel.swift`,
    so the window gives its note the information symbol.
 5. Tell the model about the kind in the description of `desqueeze_run`, in
-   `MCPServer/Sources/desqueeze-mcp/Tools.swift`.
+   `MCPServer/Sources/desqueeze-mcp/Tools.swift`, and in the description of
+   `desqueeze_remove` when Remove can give the note.
+6. Add the kind to the table "The kinds of note" in
+   `Sources/DesqueezeCore/DesqueezeCore.docc/TheJSONReports.md`, and its
+   sentence to `Sources/DesqueezeCore/DesqueezeCore.docc/Troubleshooting.md`.
 
 ## Add a field to the JSON
 

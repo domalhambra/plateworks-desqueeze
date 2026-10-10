@@ -179,7 +179,13 @@ Each step has the rule that keeps the user's files safe. Design 4.3, 13.3,
    until it returns or throws. No lock file is made. When another run holds
    the lock, in this process or in another, the run does not start. It
    throws `FolderLock.Busy`, and each front end says the core's sentence.
-   On a volume that gives no such lock, the run goes on without one.
+   On a volume that gives no such lock, the run goes on without one, and
+   its notes start with one of the kind `noFolderLock`, on the name of the
+   folder. Six answers of `flock` mean "no lock": `ENOTSUP`, `EOPNOTSUPP`,
+   `ENOLCK`, `EISDIR`, `ENOSYS` and `EINVAL`. `EINTR` is asked again. Any
+   other error throws `FolderLock.Failed` before a file is read, and each
+   front end says that the folder could not be read, with the system's
+   words.
    *Safety:* two runs in one folder would take each other's work file for a
    leftover. A scan and a dry run take no lock: they change no file.
 1. **Scan.** The run reads the top level of the folder itself. It never takes
@@ -260,7 +266,9 @@ has the counts and one note for each file that has something to say.
 same three functions (`ConverterChoice`, `TagDecision` and
 `OriginalDecision`), and changes no file. So a dry run and the run that
 follows cannot disagree. It takes no lock, so it can read a folder in which
-a run works. For the originals it reads no ARW and no DNG: it plans a run in
+a run works, and it never has the `noFolderLock` note of a run. It can then
+show a file in change, for example a DNG as blocked by a backup that the
+run is about to clear. For the originals it reads no ARW and no DNG: it plans a run in
 which every check passes.
 
 The option has no default value in `DesqueezeJob.run`, in
@@ -284,6 +292,11 @@ states it. The window gives the state of its box. The tool gives its flag,
   two runs in one process. It goes when the run ends, and when the process
   ends for any reason. A scan and a dry run are allowed while a run works,
   and their result can be of a folder in change.
+- **The moment after a hard end.** After a hard end of a run, the lock is
+  free at once, and a converter that the dead run started can still work
+  for a moment. A run that starts in that moment can meet its work file.
+  Both converters end in under half a second on the Mac of the measurement,
+  and two trials showed no collision (design 13.9).
 - **The server runs one tool call at a time,** on a queue with a thread of
   its own. When standard input closes, the call in work completes and is
   answered. A call that waits does not start.

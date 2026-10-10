@@ -139,15 +139,16 @@ Each note:
 
 | Kind | The file | Meaning | Counts in |
 |---|---|---|---|
-| `orphanBackup` | A `<name>.dng_original` | A backup with no DNG beside it. The tool does not touch it. These notes come first. | Nothing |
+| `orphanBackup` | A `<name>.dng_original` | A backup with no DNG beside it. The tool does not touch it. These notes come first, after a `noFolderLock` note when there is one. | Nothing |
 | `notConverted` | An ARW | No converter made its DNG. `detail` has one line for each converter that was tried. | `failed` |
 | `failed` | A DNG | The write or its check failed. The file is as it was, unless `message` says that the backup could not be restored. | `failed` |
 | `blockedByBackup` | A DNG | The run held the file back, because an older backup is beside it. | `blocked` |
 | `leftoverBackup` | A DNG | The file had the value already, and a backup is beside it. | `skipped` |
 | `backupKept` | A DNG | The tag is set. The Trash refused the backup, and it stayed beside the file. | `set` |
-| `folderReadOnly` | The folder | The folder is read-only. No file was tried, and this is the only note. | Nothing |
+| `folderReadOnly` | The folder | The folder is read-only. No file was tried, and no file has a note. | Nothing |
 | `convertedUnmatched` | A DNG | dnglab converted the photo with no full match, because Adobe DNG Converter is not installed. This is not an error. `detail` has the reason. | `converted` |
 | `originalKept` | An ARW | The run was asked to move the originals, it converted this ARW, and the ARW stays in the folder. `message` says why. This is not an error. For a DNG that did not pass its check, and for a Trash that refused the file, `detail` has the reason. | Nothing. The ARW is in `converted`, and not in `originalsInTrash`. |
+| `noFolderLock` | The folder | The volume gives no lock for a folder, so the run worked without the lock that keeps a second run out. This is not an error. It is the first note. A dry run takes no lock, and never has this note. | Nothing |
 
 <doc:Troubleshooting> has the sentence of each kind, and what a person can
 do.
@@ -234,7 +235,8 @@ keys, and its exit code is 1:
 ```
 
 `detail` is text or `null`. This happens when the folder cannot be read,
-when another run works in the folder, and when exiftool is not installed. A wrong command line prints nothing on
+when the lock call of a run failed, when another run works in the folder,
+and when exiftool is not installed. A wrong command line prints nothing on
 standard output, and its exit code is 2.
 
 The MCP server does not print this object. A call that can give no report
@@ -246,8 +248,8 @@ The exit code of `desqueeze` follows from the report of a run:
 
 - 1 when `failed` or `blocked` is above 0, when `stopped` is true, or when a
   note has the kind `folderReadOnly`.
-- 0 in every other case. A note of the kind `convertedUnmatched` or
-  `originalKept` does not change the exit code.
+- 0 in every other case. A note of the kind `convertedUnmatched`,
+  `originalKept` or `noFolderLock` does not change the exit code.
 
 A dry run has the exit code of the run that it plans. A scan that completed
 gives 0, also when `writable` is false.

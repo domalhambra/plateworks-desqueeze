@@ -31,7 +31,8 @@ can damage, lose or expose a person's files is a security problem here.
   command line tool or the MCP server. Without the lock, the second run
   would take the first run's work file for a leftover, and send it to the
   Trash. A scan and a dry run take no lock. On a volume that gives no such
-  lock, the run goes on without one. The lock does not stop another program:
+  lock, the run goes on without one, and its result says so with a note.
+  Any other error of the lock call stops the run before it reads a file. The lock does not stop another program:
   only Desqueeze asks for it.
 - **Three external programs.** It starts exiftool, dnglab and Adobe DNG
   Converter as separate processes, with no shell. It looks for exiftool and

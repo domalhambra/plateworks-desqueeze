@@ -73,7 +73,10 @@ behind each step.
 
 1. **Lock, then scan.** The run takes the ``FolderLock`` of the folder and
    holds it to its end. When another run holds it, the run throws
-   ``FolderLock/Busy`` and has read nothing. Then the run makes its own
+   ``FolderLock/Busy`` and has read nothing. On a volume that gives no lock
+   for a folder, the run goes on, and its notes start with one of the kind
+   `noFolderLock`. Any other error of the lock call throws
+   ``FolderLock/Failed``, and the run has read nothing. Then the run makes its own
    ``FolderSnapshot`` of the folder. No front end can give it an earlier
    scan: files can change between a scan and a click. A read-only folder
    gets one note, and no file is tried. Each orphan backup gets a note
@@ -121,7 +124,7 @@ is a ``RunSummary``: the counts, and the notes.
 dry run. It makes the same scan and asks the same three functions,
 ``ConverterChoice``, ``TagDecision`` and ``OriginalDecision``, and it
 changes no file. So a dry run and the run that follows cannot disagree. It
-takes no lock.
+takes no lock, so it never has the `noFolderLock` note of a run.
 
 `trashOriginals` has no default value, in the job and in
 ``DesqueezeOperations``. So each front end states it: the window gives the

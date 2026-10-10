@@ -84,7 +84,13 @@ The first version. It is built from source, and there is no download.
 - On a volume with no exclusive rename, such as ExFAT, the app checks the
   name and then renames. A moment lies between the two calls.
 - On a volume that gives no lock for a folder, a run goes on without one.
-  Two runs at once in one folder are then the user's to prevent.
+  Its result says so with a note of the kind `noFolderLock`. Two runs at
+  once in one folder are then the user's to prevent.
+- After a hard end of a run, its lock is free at once, and a converter that
+  it started can still work for a moment. A run that starts in that moment
+  can meet its work file.
+- A scan or a dry run during a run can show a file in change. Scan again
+  after the run ends.
 - The check before an original moves reads the structure and the tags of
   the DNG. It does not decode the picture. Look at the DNG files in
   Lightroom before the Trash is emptied.

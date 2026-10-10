@@ -38,7 +38,7 @@ New specs go in `docs/superpowers/specs/` and get a row in `docs/README.md`.
 10. **`DesqueezeCore` and `DesqueezeCLI` import Foundation only.** AppKit and SwiftUI stay in `App/`. Only `MCPServer/` has third-party code. File work stays in the core, behind protocols, so tests use fakes.
 11. **Every sentence that two front ends say is made once, in the core.** A front end reads a note's `kind`, never the English sentence. UI copy is sentence case, with no exclamation marks and no emoji. An error is one plain sentence, with the tool's own words on a detail line.
 12. **Not sandboxed, offline, private.** No entitlements file exists, on purpose: a sandboxed app cannot start the programs. No network requests, no analytics.
-13. **One run in a folder at a time.** A run holds an advisory lock on the folder itself (`Sources/DesqueezeCore/FolderLock.swift`). No lock file is made. A second run does not start, in any front end, and says the core's sentence. A scan and a dry run take no lock. On a volume that gives no lock, the run goes on without one.
+13. **One run in a folder at a time.** A run holds an advisory lock on the folder itself (`Sources/DesqueezeCore/FolderLock.swift`). No lock file is made. A second run does not start, in any front end, and says the core's sentence. A scan and a dry run take no lock. On a volume that gives no lock, the run goes on without one, and a `noFolderLock` note says so. Any other error of the lock call stops the run.
 
 ## Working here
 

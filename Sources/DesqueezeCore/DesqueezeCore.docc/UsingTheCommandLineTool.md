@@ -28,7 +28,7 @@ desqueeze --help
 | `--trash-originals` | For `run`: moves each original ARW to the Trash after its DNG passes the check. Off unless given. The section "Move the originals to the Trash" has its rules. |
 | `--dry-run` | For `run` and `remove`: shows what the run would do, file by file, and which converter gets each ARW. Changes no file. |
 | `--json` | Prints one JSON object on standard output, and nothing else there. |
-| `--verbose` | Prints each exiftool and converter command, its exit code, and its output on standard error. Also says when it removed a leftover work file. |
+| `--verbose` | Prints each exiftool and converter command, its exit code, and its output on standard error. Also says when it removed a leftover work file, and the error number when the volume gave no folder lock. |
 
 An option can stand before or after the command and the folder. `--` ends
 the options, so a folder whose name starts with a dash can follow it.
@@ -196,7 +196,20 @@ With `--json`, standard output gets the object with the keys `error` and
 `detail`. Wait for the first run, then run again.
 
 `scan` and `--dry-run` take no lock. While a run works, they can show a
-folder in change. <doc:WhatHappensToYourFiles> says more about the lock.
+folder in change: for example a DNG as blocked, by a backup that the run is
+about to clear. Run the command again after the run ends.
+
+On a volume that gives no lock for a folder, a run goes on without one. Its
+result then starts with a note on the name of the folder, and the exit code
+does not change:
+
+```
+Shoot 1: This volume gives no folder lock. Do not start a second run in this folder while this run works.
+```
+
+With `--verbose`, standard error also has the error number that the system
+gave: `The volume gave no folder lock: error 45, Operation not supported`.
+<doc:WhatHappensToYourFiles> says more about the lock.
 
 ## Remove
 

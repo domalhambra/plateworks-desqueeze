@@ -211,8 +211,9 @@ Another Desqueeze run is working in this folder. Wait for it to end, then run ag
 
 The tool then gives the exit code 1, and the server gives a tool error. A
 scan and a dry run take no lock. While a run works, they can show a folder
-in change. On a volume that gives no such lock, the run goes on without one.
-Do not start two runs in one folder there.
+in change: scan again after the run ends. On a volume that gives no such
+lock, the run goes on without one, and its result says so. Do not start two
+runs in one folder there.
 
 ### What happens to your files
 
