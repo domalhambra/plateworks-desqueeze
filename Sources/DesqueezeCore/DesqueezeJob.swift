@@ -28,7 +28,8 @@ import Foundation
 /// **When the next converter is not tried.** A converter can say that its
 /// failure holds for every converter (`ConvertError.failedForAll`): another
 /// program took the name `<base>.dng` while dnglab worked, or a leftover
-/// file is in the way. The ARW is then failed with that converter's words,
+/// file is in the way: `<base>.dng_exiftool_tmp`, or a work file that the
+/// Trash refused. The ARW is then failed with that converter's words,
 /// and the next converter does not start. The same holds when the Trash
 /// refuses dnglab's work file: a work file that cannot be removed stops the
 /// ARW, in this run as in the next one, and the note names it.

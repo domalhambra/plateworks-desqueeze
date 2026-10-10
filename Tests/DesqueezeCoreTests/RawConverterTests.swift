@@ -94,7 +94,12 @@ final class RawConverterTests: XCTestCase {
                            .failed("Adobe DNG Converter made no DNG. It may not support this file."))
         }
         XCTAssertEqual(runner.calls.count, 1)
-        XCTAssertEqual(disk.checked, [dngPath, dngPath])
+        // Before the start: the name, and the two leftovers of exiftool.
+        // After the converter: the name again.
+        XCTAssertEqual(disk.checked, [
+            dngPath, "/tmp/Shoot 1/DSC05680.dng_exiftool_tmp",
+            "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng_exiftool_tmp", dngPath,
+        ])
     }
 
     // A DNG with no bytes is not a DNG. The converter made it, so it is partial.
@@ -187,6 +192,44 @@ final class RawConverterTests: XCTestCase {
                            .failed("A DNG with this name exists already. Not converted.", partial: nil))
         }
         XCTAssertEqual(runner.calls, [])
+    }
+
+    // MARK: A leftover file of exiftool (design 13.3)
+
+    // exiftool that ended hard left `<name>_exiftool_tmp`. It refuses every
+    // later write beside it, so the tag step could never pass. The ARW is
+    // not converted, by no converter, and the sentence names the file.
+    func testALeftoverFileOfExiftoolStopsTheConverterBeforeItStartsAndIsNoPartial() {
+        for leftover in ["DSC05680.dng_exiftool_tmp", ".DSC05680.desqueeze-work.dng_exiftool_tmp"] {
+            setUp()
+            disk.paths = ["/tmp/Shoot 1/" + leftover]
+            XCTAssertThrowsError(try converter().convert(arw), leftover) {
+                XCTAssertEqual($0 as? ConvertError, .failedForAll(
+                    "A leftover file, \(leftover), is beside this photo. Delete it, then run again.", partial: nil))
+            }
+            XCTAssertEqual(runner.calls, [], "\(leftover): the converter never started")
+        }
+    }
+
+    // A file with another name is no leftover of this ARW.
+    func testALeftoverOfAnotherPhotoDoesNotStopTheConverter() throws {
+        converterWritesTheDNG()
+        disk.paths = ["/tmp/Shoot 1/DSC05681.dng_exiftool_tmp", "/tmp/Shoot 1/DSC05680.ARW_exiftool_tmp",
+                      "/tmp/Shoot 2/DSC05680.dng_exiftool_tmp"]
+        XCTAssertEqual(try converter().convert(arw).dng.path, dngPath)
+    }
+
+    func testOnTheRealDiskALeftoverFileOfExiftoolStopsTheConverter() throws {
+        let folder = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(folder) }
+        let leftover = folder.appendingPathComponent("frame 1.dng_exiftool_tmp")
+        try Data("half a write".utf8).write(to: leftover)
+        XCTAssertThrowsError(try converterOnTheRealDisk().convert(folder.appendingPathComponent("frame 1.ARW"))) {
+            XCTAssertEqual($0 as? ConvertError, .failedForAll(
+                "A leftover file, frame 1.dng_exiftool_tmp, is beside this photo. Delete it, then run again."))
+        }
+        XCTAssertEqual(runner.calls, [])
+        XCTAssertEqual(try Data(contentsOf: leftover), Data("half a write".utf8))
     }
 
     func testRefusesToStartWhenAnEmptyDNGExistsAlreadyAndDoesNotCallItPartial() {

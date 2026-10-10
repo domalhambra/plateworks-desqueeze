@@ -5,8 +5,9 @@ import Foundation
 ///
 /// dnglab does not write `<base>.dng`. It writes a hidden **work file**
 /// beside the ARW, `ConverterOutput.workURL`, and the DNG gets its name only
-/// when it is complete and matched (design 13.3). The steps, after the check
-/// that nothing has the name `<base>.dng`:
+/// when it is complete and matched (design 13.3). The steps, after the
+/// checks that nothing has the name `<base>.dng` and that no leftover file
+/// of exiftool is there (`ConverterRules`):
 ///
 /// 1. A work file that is there already is the leftover of a run that ended
 ///    hard. `discardLeftover` takes it. When that fails, no program starts.

@@ -17,6 +17,7 @@ public enum ConvertError: Error, Equatable {
     /// so the caller does not give the ARW to the next one:
     ///
     /// - Something took the name `<base>.dng` while dnglab worked.
+    /// - A leftover file of exiftool is beside the ARW.
     /// - The Trash refused the leftover work file of an earlier run.
     ///
     /// `partial` is as for `failed`.
@@ -146,6 +147,13 @@ public enum ConverterOutput {
         return arw.deletingLastPathComponent().appendingPathComponent(".\(base).desqueeze-work.dng")
     }
 
+    /// The file that exiftool makes beside `file` while it writes it:
+    /// `<name>_exiftool_tmp`. exiftool that ends hard leaves it there, and
+    /// refuses every later write of `file`.
+    public static func exiftoolLeftoverURL(for file: URL) -> URL {
+        URL(fileURLWithPath: file.path + "_exiftool_tmp")
+    }
+
     /// True when anything has this name: a file, a folder, or a symbolic
     /// link, also a link that points at nothing.
     ///
@@ -173,18 +181,24 @@ public enum ConverterOutput {
 /// 1. **Before the start.** When anything has the name `<base>.dng`, the
 ///    program is not started. That refusal reports no partial output: the
 ///    thing at the name is not ours.
-/// 2. **A partial output is reported only when the program ran:** after a
+/// 2. **A leftover file of exiftool stops the ARW, for every converter.**
+///    When `<base>.dng_exiftool_tmp` or `<work file>_exiftool_tmp` is
+///    there, no program is started: exiftool refuses to write beside its own
+///    leftover, so the tag step, or dnglab's match, could never pass. The
+///    sentence names the file. The file stays where it is: it is not moved
+///    to the Trash, and it is not a partial output.
+/// 3. **A partial output is reported only when the program ran:** after a
 ///    signal ended it, after a non-zero exit, after exit 0 with an empty
 ///    file, or after `complete` failed. It is the file that the program
 ///    writes. For Adobe DNG Converter, rule 1 proved that the name was free,
 ///    so a `<base>.dng` is then this run's. For dnglab it is the work file,
 ///    whose name is this app's own.
-/// 3. **Any other error from the runner passes on as it came,** with no
+/// 4. **Any other error from the runner passes on as it came,** with no
 ///    partial: for example, the program could not start. The program never
 ///    ran, so a file at the name is not ours.
-/// 4. **An unknown size is not an empty file.** When the size cannot be read
+/// 5. **An unknown size is not an empty file.** When the size cannot be read
 ///    after exit 0, the result is "made no DNG", with no partial.
-/// 5. **An exit code that says "I did not touch the output" reports no
+/// 6. **An exit code that says "I did not touch the output" reports no
 ///    partial.** dnglab returns 6 for an output that exists already. The
 ///    file at the name is then not this conversion's.
 struct ConverterRules: Sendable {
@@ -207,12 +221,12 @@ struct ConverterRules: Sendable {
     /// It follows the sentence with the exit code, on the same line. Nil
     /// when the program gave none: the sentence then stands alone.
     var reason: @Sendable (ProcessResult) -> String? = { _ in nil }
-    /// The exit codes of rule 5.
+    /// The exit codes of rule 6.
     var exitCodesThatLeaveTheOutputAlone: Set<Int32> = []
 
     /// - Parameters:
     ///   - product: the file that the program writes. Nil is `<base>.dng`.
-    ///   - prepare: runs after rule 1 passed, and before the program
+    ///   - prepare: runs after rules 1 and 2 passed, and before the program
     ///     starts. What it throws passes on as it came.
     ///   - start: runs the program for this ARW. It gets `product`.
     ///   - complete: what the converter does to the product after its
@@ -230,6 +244,14 @@ struct ConverterRules: Sendable {
         // last moment, for a DNG that appeared after the scan.
         guard !exists(output.path) else {
             throw ConvertError.failed(Self.nameTaken)
+        }
+        // exiftool writes the DNG in the tag step, and the work file in
+        // dnglab's match. Both names are checked for every converter.
+        for file in [output, ConverterOutput.workURL(for: arw)] {
+            let leftover = ConverterOutput.exiftoolLeftoverURL(for: file)
+            guard !exists(leftover.path) else {
+                throw ConvertError.failedForAll(Self.leftover(named: leftover.lastPathComponent))
+            }
         }
         try prepare()
         let result: ProcessResult

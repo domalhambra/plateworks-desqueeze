@@ -542,6 +542,23 @@ final class DnglabConverterTests: XCTestCase {
         XCTAssertEqual(runner.calls, [])
     }
 
+    // A leftover file of exiftool, beside the DNG's name or beside the work
+    // file's: no program starts, nothing is discarded, and no partial.
+    func testALeftoverFileOfExiftoolStopsTheConversionBeforeAnyProgram() {
+        for leftover in ["DSC05680.dng_exiftool_tmp", ".DSC05680.desqueeze-work.dng_exiftool_tmp"] {
+            setUp()
+            // A leftover work file is there too. It is not discarded: the
+            // conversion could not pass, so nothing is touched.
+            disk.paths = ["/tmp/Shoot 1/" + leftover, workPath]
+            assertFails(.failedForAll(
+                "A leftover file, \(leftover), is beside this photo. Delete it, then run again.", partial: nil),
+                nil, leftover)
+            XCTAssertEqual(runner.calls, [], leftover)
+            XCTAssertEqual(tools.discarded, [], leftover)
+            XCTAssertEqual(tools.renames, [], leftover)
+        }
+    }
+
     // The check of the DNG's name comes before step 1: with a DNG at the
     // name, nothing is discarded, and nothing starts.
     func testTheCheckOfTheNameComesBeforeTheLeftoverIsDiscarded() {

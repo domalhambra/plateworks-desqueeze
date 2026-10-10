@@ -261,6 +261,32 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
         XCTAssertEqual(try names(), [".frame.desqueeze-work.dng", "frame.ARW"])
     }
 
+    // Why the rule is there: the real exiftool refuses to write a file that
+    // has its own leftover beside it. So the app does not start a conversion
+    // whose tag step could never pass.
+    func testTheRealExiftoolRefusesToWriteBesideItsOwnLeftoverSoTheARWIsNotConverted() throws {
+        let arw = try copyFixture(as: "frame.ARW")
+        let leftover = folder.appendingPathComponent("frame.dng_exiftool_tmp")
+        try Data("half a write".utf8).write(to: leftover)
+
+        XCTAssertThrowsError(try converter.convert(arw, facts: try facts(of: arw))) {
+            XCTAssertEqual($0 as? ConvertError, .failedForAll(
+                "A leftover file, frame.dng_exiftool_tmp, is beside this photo. Delete it, then run again."))
+        }
+        XCTAssertEqual(try names(), ["frame.ARW", "frame.dng_exiftool_tmp"], "no DNG and no work file was made")
+
+        // The fact behind the rule, on a DNG that is put there by hand.
+        let dng = folder.appendingPathComponent("frame.dng")
+        try FileManager.default.copyItem(at: IntegrationTests.fixtures.appendingPathComponent("sample.dng"), to: dng)
+        let before = try Data(contentsOf: dng)
+        XCTAssertThrowsError(try ScaleTag(exiftool: exiftool).write(SqueezeFactor(1.5)!, to: dng)) {
+            guard case TagError.toolFailed(let words) = $0 else { return XCTFail("\($0)") }
+            XCTAssertTrue(words.contains("Temporary file already exists"), words)
+        }
+        XCTAssertEqual(try Data(contentsOf: dng), before)
+        XCTAssertEqual(try Data(contentsOf: leftover), Data("half a write".utf8))
+    }
+
     func testARealConverterLeavesADNGThatIsThereAlreadyAsItIs() throws {
         let arw = try copyFixture(as: "frame.ARW")
         let dng = folder.appendingPathComponent("frame.dng")
