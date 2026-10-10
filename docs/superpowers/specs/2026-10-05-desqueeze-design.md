@@ -720,9 +720,12 @@ Why a work file:
   never taken for the app's own: the rename fails, the work file goes to the
   Trash, and the note says "A DNG with this name exists already. Not
   converted." The next converter is not tried for that ARW.
-- dnglab's exit code 6 (the output exists) can then mean only a leftover
-  work file that step 1 could not remove. It is reported as a failure with
-  no partial output.
+- dnglab's exit code 6 (the output exists) should not occur: step 1 removes
+  a leftover work file, and when it cannot, dnglab is not started. If it
+  occurs, it is a failure with no partial output.
+- When the Trash refuses a work file, that ARW is not given to the next
+  converter. The note names the hidden file to delete, so no 12 MB file
+  stays in the folder with no one told.
 
 Adobe DNG Converter cannot write to a name the app gives it, so its rule
 stays as 4.3 has it: the check before the start, and the partial-DNG rule.
@@ -738,10 +741,12 @@ conversion, as before, with its own backup and check.
 
 The app reads these facts for the pending ARW files with one exiftool call
 for each 200 files:
-the camera model, the ISO, `WB_RGBLevelsDaylight`, and
-`DistortionCorrection`.
+the camera model, the ISO, `WB_RGBLevelsDaylight`, `DistortionCorrection`,
+and `SonyRawFileType`. The last two are read as numbers (`-n`): 255 means no
+lens-correction data, and 2 means compressed raw. Any other number, or none,
+fails its rule.
 
-A frame has a **full match** when all four hold:
+A frame has a **full match** when all five hold:
 
 1. The model has a row in the table. Version 1 has one: `ILCE-7SM3`.
 2. The ISO has a row: 50, or one of the 22 measured values from 80 to 12800.
@@ -798,7 +803,7 @@ condition.
 
 | Unit | Does |
 |---|---|
-| `ARWFacts` | The four facts of 13.4 for one ARW, and the exiftool read that gets them for a list of files. |
+| `ARWFacts` | The five facts of 13.4 for one ARW, and the exiftool read that gets them for a list of files. |
 | `AdobeMatch` | Pure: the table (a Swift literal of the data file), and from an `ARWFacts` the tags to write, or the reason there is no full match. No file access. |
 | `DnglabConverter` | A `RawConverter`: the pre-start check, `dnglab convert --embed-raw false`, the match write, the read-back. |
 | `ConverterChoice` | Pure: the table of 13.4, from the facts and what is installed to the ordered list of converters to try. The run and the dry run share it. |
@@ -833,4 +838,9 @@ condition.
   release, decide if a shipped app may carry them.
 - dnglab 0.8.0 is the version tested. The drift check is the guard for a
   later one.
+- exiftool prints a control character in a file name (a tab, a line end) as
+  a period. The app compares such names as exiftool prints them. Two files
+  whose names print the same get no facts, and so no full match.
+- On a volume with no exclusive rename (ExFAT, measured), the app checks the
+  name and then renames. A moment lies between the two.
 
