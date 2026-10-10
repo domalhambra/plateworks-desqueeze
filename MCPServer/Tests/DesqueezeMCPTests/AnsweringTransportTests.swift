@@ -147,7 +147,7 @@ final class AnsweringTransportTests: XCTestCase {
     func testASendCompletesBeforeTheNextStarts() async throws {
         let pipe = FakePipe(writeTime: .milliseconds(10))
         let transport = AnsweringTransport(inner: pipe, logger: pipe.logger, queue: CallQueue())
-        let messages = (1...8).map { Self.answer($0, text: String(repeating: "x", count: 100 + $0)) } + [Self.progress]
+        let messages = (1...8).map { AnsweringTransportTests.answer($0, text: String(repeating: "x", count: 100 + $0)) } + [AnsweringTransportTests.progress]
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             for message in messages {
@@ -169,20 +169,20 @@ final class AnsweringTransportTests: XCTestCase {
         let transport = AnsweringTransport(inner: pipe, logger: pipe.logger, queue: CallQueue())
         let events = Events()
 
-        Task { await Self.send(Self.answer(1), through: transport, then: "first written", into: events) }
+        Task { await AnsweringTransportTests.send(AnsweringTransportTests.answer(1), through: transport, then: "first written", into: events) }
         try await eventually("the first send is in work") { await pipe.sendsStarted == 1 }
         // This one arrives while the first is in work, and waits for it.
-        Task { await Self.send(Self.answer(2), through: transport, then: "second written", into: events) }
+        Task { await AnsweringTransportTests.send(AnsweringTransportTests.answer(2), through: transport, then: "second written", into: events) }
 
         try await eventually("the second message is written", timeout: 3) { events.has("second written") }
         XCTAssertEqual(events.all.count, 2, "\(events.all)")
         XCTAssertEqual(events.all.first?.hasPrefix("send failed"), true, "\(events.all)")
 
         // This one arrives when nothing is in work.
-        Task { await Self.send(Self.answer(3), through: transport, then: "third written", into: events) }
+        Task { await AnsweringTransportTests.send(AnsweringTransportTests.answer(3), through: transport, then: "third written", into: events) }
         try await eventually("the third message is written", timeout: 3) { events.has("third written") }
         let lines = await pipe.lines
-        XCTAssertEqual(lines, [Self.answer(2), Self.answer(3)], "each line is one whole message")
+        XCTAssertEqual(lines, [AnsweringTransportTests.answer(2), AnsweringTransportTests.answer(3)], "each line is one whole message")
     }
 
     // MARK: A send in work
@@ -192,16 +192,16 @@ final class AnsweringTransportTests: XCTestCase {
     // half a line written. The first message is an answer. The second is
     // not: no request waits for it.
     func testTheStreamStaysOpenUntilASendInWorkCompletes() async throws {
-        for message in [Self.answer(1), Self.progress] {
+        for message in [AnsweringTransportTests.answer(1), AnsweringTransportTests.progress] {
             let pipe = FakePipe(writeTime: .milliseconds(400))
             let transport = AnsweringTransport(inner: pipe, logger: pipe.logger, queue: CallQueue(),
                                                patience: .milliseconds(40))
             let events = Events()
             await consume(transport, into: events)
-            pipe.read(Self.request(1))
+            pipe.read(AnsweringTransportTests.request(1))
             try await eventually("the request is read") { events.has("read") }
 
-            Task { await Self.send(message, through: transport, then: "written", into: events) }
+            Task { await AnsweringTransportTests.send(message, through: transport, then: "written", into: events) }
             try await eventually("the send is in work") { await pipe.sendsStarted == 1 }
             pipe.endInput()
 
@@ -225,7 +225,7 @@ final class AnsweringTransportTests: XCTestCase {
         let transport = AnsweringTransport(inner: pipe, logger: pipe.logger, queue: queue, patience: .milliseconds(40))
         let events = Events()
         await consume(transport, into: events)
-        pipe.read(Self.request(1))
+        pipe.read(AnsweringTransportTests.request(1))
         try await eventually("the request is read") { events.has("read") }
 
         Task {
@@ -234,7 +234,7 @@ final class AnsweringTransportTests: XCTestCase {
                 events.add("call done")
                 return 1
             }
-            await Self.send(Self.answer(1), through: transport, then: "written", into: events)
+            await AnsweringTransportTests.send(AnsweringTransportTests.answer(1), through: transport, then: "written", into: events)
         }
         try await eventually("the call is in work") { !queue.isIdle }
         pipe.endInput()
@@ -256,7 +256,7 @@ final class AnsweringTransportTests: XCTestCase {
         let transport = AnsweringTransport(inner: pipe, logger: pipe.logger, queue: queue, patience: .seconds(30))
         let events = Events()
         await consume(transport, into: events)
-        pipe.read(Self.request(1))
+        pipe.read(AnsweringTransportTests.request(1))
         try await eventually("the request is read") { events.has("read") }
 
         pipe.endInput()
@@ -286,8 +286,8 @@ final class AnsweringTransportTests: XCTestCase {
         let transport = AnsweringTransport(inner: pipe, logger: pipe.logger, queue: queue, patience: .seconds(30))
         let events = Events()
         await consume(transport, into: events)
-        pipe.read(Self.request(1))
-        pipe.read(Self.request(2))
+        pipe.read(AnsweringTransportTests.request(1))
+        pipe.read(AnsweringTransportTests.request(2))
         try await eventually("both requests are read") { events.all == ["read", "read"] }
 
         let gate = DispatchSemaphore(value: 0)
@@ -297,7 +297,7 @@ final class AnsweringTransportTests: XCTestCase {
                 gate.wait()
                 return 1
             }
-            await Self.send(Self.answer(1), through: transport, then: "first answered", into: events)
+            await AnsweringTransportTests.send(AnsweringTransportTests.answer(1), through: transport, then: "first answered", into: events)
         }
         try await eventually("the first call is in work") { events.has("first starts") }
         Task {
@@ -313,7 +313,7 @@ final class AnsweringTransportTests: XCTestCase {
         // transport's work, and the thing in test. It gives the transport
         // a fixed time for the end of input, and then lets the first call
         // complete.
-        try await Task.sleep(for: Self.timeForTheEndOfInput)
+        try await Task.sleep(for: AnsweringTransportTests.timeForTheEndOfInput)
         gate.signal()
 
         try await eventually("the second call ends") {
@@ -325,7 +325,7 @@ final class AnsweringTransportTests: XCTestCase {
         XCTAssertLessThan(try XCTUnwrap(events.all.firstIndex(of: "first answered")),
                           try XCTUnwrap(events.all.firstIndex(of: "stream ended")), "\(events.all)")
         let lines = await pipe.lines
-        XCTAssertEqual(lines, [Self.answer(1)])
+        XCTAssertEqual(lines, [AnsweringTransportTests.answer(1)])
     }
 
     // A run that the client cancelled still gives its report: it stops after
@@ -337,7 +337,7 @@ final class AnsweringTransportTests: XCTestCase {
         let transport = AnsweringTransport(inner: pipe, logger: pipe.logger, queue: queue, patience: .milliseconds(40))
         let events = Events()
         await consume(transport, into: events)
-        pipe.read(Self.request(1))
+        pipe.read(AnsweringTransportTests.request(1))
         try await eventually("the request is read") { events.has("read") }
 
         let gate = DispatchSemaphore(value: 0)
@@ -346,7 +346,7 @@ final class AnsweringTransportTests: XCTestCase {
                 gate.wait()
                 return 1
             }
-            await Self.send(Self.answer(1), through: transport, then: "written", into: events)
+            await AnsweringTransportTests.send(AnsweringTransportTests.answer(1), through: transport, then: "written", into: events)
         }
         try await eventually("the call is in work") { !queue.isIdle }
         pipe.read(#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}"#)
@@ -371,7 +371,7 @@ final class AnsweringTransportTests: XCTestCase {
                                            patience: .milliseconds(100))
         let events = Events()
         await consume(transport, into: events)
-        pipe.read(Self.request(1, "ping"))
+        pipe.read(AnsweringTransportTests.request(1, "ping"))
         try await eventually("the request is read") { events.has("read") }
         let start = Date()
         pipe.endInput()
@@ -390,10 +390,10 @@ final class AnsweringTransportTests: XCTestCase {
         let transport = AnsweringTransport(inner: pipe, logger: pipe.logger, queue: queue, patience: .seconds(30))
         let events = Events()
         await consume(transport, into: events)
-        pipe.read(Self.request(1))
+        pipe.read(AnsweringTransportTests.request(1))
         try await eventually("the request is read") { events.has("read") }
 
-        Task { await Self.send(Self.answer(1), through: transport, then: "written", into: events) }
+        Task { await AnsweringTransportTests.send(AnsweringTransportTests.answer(1), through: transport, then: "written", into: events) }
         try await eventually("the send is in work") { await pipe.sendsStarted == 1 }
         await transport.stopReading()
 
