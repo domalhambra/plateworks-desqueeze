@@ -35,6 +35,14 @@ public struct TagRow: Equatable, Sendable {
     /// a DNG that exiftool can read. The two cases look the same here.
     public let scale: Scale?
     public let originalRawFileName: String?
+
+    /// Public, so a `ScaleTagging` outside this module can give rows: the
+    /// fake of the window's tests does.
+    public init(fileName: String, scale: Scale?, originalRawFileName: String?) {
+        self.fileName = fileName
+        self.scale = scale
+        self.originalRawFileName = originalRawFileName
+    }
 }
 
 /// A read or a write of a tag that failed, with the reason as text.
