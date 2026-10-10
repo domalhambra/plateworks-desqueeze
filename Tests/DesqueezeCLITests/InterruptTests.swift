@@ -53,7 +53,8 @@ final class InterruptTests: BuiltToolTestCase {
             failedName = note["name"] as? String
             XCTAssertEqual(note["kind"] as? String, "failed")
             let detail = try XCTUnwrap(note["detail"] as? String)
-            XCTAssertTrue(detail.contains("signal 2"), "the only allowed failure is signal 2: \(detail)")
+            // With its period: "signal 20" to "signal 29" must not pass.
+            XCTAssertTrue(detail.contains("signal 2."), "the only allowed failure is signal 2: \(detail)")
         }
 
         // Each file is whole: set and checked with its backup gone, or not

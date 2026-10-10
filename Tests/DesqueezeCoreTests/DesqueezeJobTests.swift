@@ -272,6 +272,42 @@ final class DesqueezeJobTests: XCTestCase {
             detail: "Adobe DNG Converter returned 1. A partial DNG, X.dng, is beside the ARW. Delete it, then run again.")])
     }
 
+    // The second lock. The converter proves that the partial DNG is its own.
+    // The job does not take its word: it moves a file only when the file is
+    // the output of that ARW, and no DNG that the scan found.
+    func testAPartialDNGThatTheScanFoundIsNotMovedAndTheNoteNamesIt() {
+        converter.failWithPartial = ["X.ARW"]
+        converter.reportedPartial = folder.appendingPathComponent("X.dng")
+        // The scan found X.dng, and X.ARW is pending all the same: a state
+        // that the scan never makes, and the one that the lock is for.
+        let summary = job().run(snapshot(dngs: [dng("X.dng", at: 1.5)], pending: ["X.ARW"]),
+                                factor: factor, convert: true)
+        XCTAssertEqual(log.entries, ["convert X.ARW"], "no file was moved")
+        XCTAssertEqual(summary.failed, 1)
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: "X.ARW", kind: .notConverted, message: "Not converted.",
+            detail: "Adobe DNG Converter returned 1. "
+                + "A file, X.dng, was reported as the partial DNG. It is not this run's file, and it was not moved.")])
+    }
+
+    func testAPartialDNGThatIsNotTheOutputOfItsARWIsNotMovedAndTheNoteNamesIt() {
+        converter.failWithPartial = ["X.ARW"]
+        converter.reportedPartial = folder.appendingPathComponent("A.dng")
+        let summary = job().run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+        XCTAssertEqual(log.entries, ["convert X.ARW"], "no file was moved")
+        XCTAssertEqual(summary.notes.map(\.detail), [
+            "Adobe DNG Converter returned 1. "
+                + "A file, A.dng, was reported as the partial DNG. It is not this run's file, and it was not moved.",
+        ])
+
+        // The same name in another folder is another file.
+        log.entries = []
+        converter.reportedPartial = URL(fileURLWithPath: "/tmp/Shoot 2/X.dng")
+        let other = job().run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+        XCTAssertEqual(log.entries, ["convert X.ARW"], "no file was moved")
+        XCTAssertEqual(other.failed, 1)
+    }
+
     func testAFailedConversionWithNoPartialDNGDiscardsNothing() {
         converter.fail = ["X.ARW"]
         _ = job().run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)

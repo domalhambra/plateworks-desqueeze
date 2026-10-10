@@ -20,8 +20,9 @@ import Foundation
 /// reported as failed ("ended by signal 2"), and it is left as it was. Run
 /// again to complete it (design 12.1).
 ///
-/// Apple does not document this behavior of `Process`, so two tests pin it:
-/// `ProcessRunnerTests` for the group, and `InterruptTests` for the run.
+/// Apple does not document this behavior of `Process`, so `ProcessRunnerTests`
+/// pins the group. `InterruptTests` does not pin the group. It pins the
+/// result: the run stops after its current file, and no file is damaged.
 /// A plain `kill` (SIGTERM) goes to the tool alone, and is taken the same way.
 ///
 /// The signals stay taken for as long as the watcher lives.

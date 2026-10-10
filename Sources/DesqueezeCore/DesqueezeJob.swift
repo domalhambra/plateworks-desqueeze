@@ -8,7 +8,8 @@ import Foundation
 /// **A failed conversion.** The ARW is listed as failed and the run goes on.
 /// When the converter left a partial DNG, the job moves it to the Trash
 /// through `BackupHandling.trashFile` and says so on the note's detail line,
-/// or names the file to delete when the Trash refuses (design 4.3). The ARW
+/// or names the file to delete when the Trash refuses (design 4.3). It moves
+/// only the output of that ARW, and never a DNG that the scan found. The ARW
 /// is never touched.
 ///
 /// The notes of a run start with one note for each orphan backup in the
@@ -138,7 +139,7 @@ public struct DesqueezeJob: Sendable {
             plan.summary.unconvertedARWs -= 1
             // The DNG is not there yet. The run will tag it, so the plan
             // must decide for it too.
-            dngs.append(Self.converted(arw, to: AdobeConverter.outputURL(for: arw)))
+            dngs.append(Self.converted(arw, to: ConverterOutput.url(for: arw)))
         }
         for dng in dngs {
             let (decision, hasBackup) = decide(dng, factor)
@@ -191,7 +192,7 @@ public struct DesqueezeJob: Sendable {
                     total -= 1
                     var detail = Self.describe(error)
                     if case ConvertError.failed(_, let partial?) = error {
-                        detail += " " + discard(partial: partial)
+                        detail += " " + discard(partial: partial, of: arw, keeping: dngs)
                     }
                     summary.notes.append(.notConverted(arw.lastPathComponent, detail: detail))
                 }
@@ -214,7 +215,24 @@ public struct DesqueezeJob: Sendable {
 
     /// Moves the partial DNG of a failed conversion to the Trash. The ARW is
     /// never touched. Returns the sentence for the note's detail line.
-    private func discard(partial: URL) -> String {
+    ///
+    /// The converter proves that the partial DNG is its own (`ConverterRules`).
+    /// This is a second lock, and it does not take the converter's word. A
+    /// file moves only when both hold:
+    ///
+    /// - It is exactly the output of this ARW, `<base>.dng` beside it.
+    /// - It is not one of `dngs`: the DNG files that the run's scan found,
+    ///   and the ones that the run made before this ARW. Letter case is
+    ///   ignored there, as most volumes ignore it.
+    ///
+    /// Any other file stays where it is, and the sentence names it.
+    private func discard(partial: URL, of arw: URL, keeping dngs: [DNGFile]) -> String {
+        let isTheOutput = partial.path == ConverterOutput.url(for: arw).path
+        let isAKnownDNG = dngs.contains { $0.url.path.lowercased() == partial.path.lowercased() }
+        guard isTheOutput, !isAKnownDNG else {
+            return "A file, \(partial.lastPathComponent), was reported as the partial DNG. "
+                + "It is not this run's file, and it was not moved."
+        }
         do {
             try backups.trashFile(partial)
             return "The partial DNG was moved to the Trash."

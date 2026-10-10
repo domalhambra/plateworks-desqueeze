@@ -133,6 +133,9 @@ final class FakeConverter: RawConverter, @unchecked Sendable {
     var fail: Set<String> = []
     /// ARW names whose failed conversion also left a partial DNG.
     var failWithPartial: Set<String> = []
+    /// What a failed conversion names as its partial DNG, in place of the
+    /// output of the ARW. A correct converter never does this.
+    var reportedPartial: URL?
     var onConvert: (() -> Void)?
 
     init(log: CallLog) { self.log = log }
@@ -142,7 +145,8 @@ final class FakeConverter: RawConverter, @unchecked Sendable {
         onConvert?()
         if fail.contains(arw.lastPathComponent) { throw ConvertError.failed("made no DNG") }
         if failWithPartial.contains(arw.lastPathComponent) {
-            throw ConvertError.failed("Adobe DNG Converter returned 1.", partial: AdobeConverter.outputURL(for: arw))
+            throw ConvertError.failed("Adobe DNG Converter returned 1.",
+                                      partial: reportedPartial ?? AdobeConverter.outputURL(for: arw))
         }
         return AdobeConverter.outputURL(for: arw)
     }

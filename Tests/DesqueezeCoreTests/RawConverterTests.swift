@@ -76,11 +76,15 @@ final class RawConverterTests: XCTestCase {
         }
     }
 
-    func testARunnerErrorAfterTheStartWithAFileReportsThePartialDNG() {
+    // Any other error means that the converter never ran: for example, the
+    // program could not start. A file at the name is then not this run's,
+    // so the error passes on as it came, and no partial is reported.
+    func testARunnerErrorThatIsNoSignalPassesOnAsItCameAndReportsNoPartialDNG() {
         converterWritesTheDNG(bytes: 10)
-        runner.failure = NamedError(text: "The program could not be read.")
+        runner.failure = NamedError(text: "The program could not start.")
         XCTAssertThrowsError(try converter().convert(arw)) {
-            XCTAssertEqual($0 as? ConvertError, .failed("The program could not be read.", partial: dng))
+            XCTAssertNil($0 as? ConvertError, "not a conversion that failed: \($0)")
+            XCTAssertEqual(($0 as? NamedError)?.text, "The program could not start.")
         }
     }
 
@@ -99,6 +103,78 @@ final class RawConverterTests: XCTestCase {
         XCTAssertThrowsError(try converter().convert(arw)) {
             XCTAssertEqual($0 as? ConvertError, .failed("Adobe DNG Converter made an empty DNG.", partial: dng))
         }
+    }
+
+    // The size could not be read: the file may be gone again. That is not
+    // "0 bytes", so nothing here says that the file is this run's.
+    func testExitZeroWithADNGOfUnknownSizeMadeNoDNGAndReportsNoPartialDNG() {
+        converterWritesTheDNG()
+        disk.unreadableSizes = [dngPath]
+        XCTAssertThrowsError(try converter().convert(arw)) {
+            XCTAssertEqual($0 as? ConvertError,
+                           .failed("Adobe DNG Converter made no DNG. It may not support this file.", partial: nil))
+        }
+    }
+
+    // MARK: The real disk
+
+    /// A converter on the real disk, with a runner that starts nothing.
+    func converterOnTheRealDisk() -> AdobeConverter { AdobeConverter(executable: executable, runner: runner) }
+
+    func testTheDefaultSizeReaderReadsARealFile() throws {
+        let folder = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(folder) }
+        let file = folder.appendingPathComponent("a.dng")
+        try Data("nine byte".utf8).write(to: file)
+        XCTAssertEqual(ConverterOutput.size(atPath: file.path), 9)
+
+        try Data().write(to: file)
+        XCTAssertEqual(ConverterOutput.size(atPath: file.path), 0, "an empty file has a size, and it is 0")
+        XCTAssertNil(ConverterOutput.size(atPath: folder.appendingPathComponent("no such.dng").path))
+    }
+
+    // A converter on the real disk takes a real DNG of some bytes as a DNG.
+    func testAConverterOnTheRealDiskAcceptsADNGWithBytes() throws {
+        let folder = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(folder) }
+        let dng = folder.appendingPathComponent("a.dng")
+        runner.handler = { _ in
+            FileManager.default.createFile(atPath: dng.path, contents: Data("a DNG".utf8))
+            return ProcessResult(exitCode: 0, stdout: "", stderr: "")
+        }
+        XCTAssertEqual(try converterOnTheRealDisk().convert(folder.appendingPathComponent("a.ARW")).path, dng.path)
+    }
+
+    // Anything at the name stops the converter: a file, a folder, a link, and
+    // a link that points at nothing. `fileExists` follows a link, so it says
+    // that a dangling link is not there.
+    func testAnythingAtTheNameStopsTheConverterBeforeItStarts() throws {
+        let folder = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(folder) }
+        let files = FileManager.default
+        let target = folder.appendingPathComponent("elsewhere.bin")
+        try Data("x".utf8).write(to: target)
+
+        let plant: [(String, (URL) throws -> Void)] = [
+            ("a file", { try Data("x".utf8).write(to: $0) }),
+            ("an empty file", { try Data().write(to: $0) }),
+            ("a folder", { try files.createDirectory(at: $0, withIntermediateDirectories: false) }),
+            ("a link to a file", { try files.createSymbolicLink(at: $0, withDestinationURL: target) }),
+            ("a link to a folder", { try files.createSymbolicLink(at: $0, withDestinationURL: folder) }),
+            ("a dangling link", {
+                try files.createSymbolicLink(atPath: $0.path, withDestinationPath: folder.path + "/no such file")
+            }),
+        ]
+        for (number, (what, make)) in plant.enumerated() {
+            let arw = folder.appendingPathComponent("frame \(number).ARW")
+            let dng = folder.appendingPathComponent("frame \(number).dng")
+            try make(dng)
+            XCTAssertThrowsError(try converterOnTheRealDisk().convert(arw), what) {
+                XCTAssertEqual($0 as? ConvertError,
+                               .failed("A DNG with this name exists already. Not converted.", partial: nil), what)
+            }
+        }
+        XCTAssertEqual(runner.calls, [], "the converter never started")
     }
 
     // The real converter never overwrites: it would write DSC05680_1.dng.
@@ -130,8 +206,12 @@ final class FakeDisk: @unchecked Sendable {
     var sizes: [String: Int] = [:]
     var checked: [String] = []
 
+    /// Files that are there, and whose size cannot be read.
+    var unreadableSizes: Set<String> = []
+
     func size(_ path: String) -> Int? {
-        paths.contains(path) ? sizes[path, default: 1_000] : nil
+        guard paths.contains(path), !unreadableSizes.contains(path) else { return nil }
+        return sizes[path, default: 1_000]
     }
 
     func exists(_ path: String) -> Bool {
