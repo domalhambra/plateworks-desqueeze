@@ -117,7 +117,8 @@ final class ExclusiveRenameTests: XCTestCase {
 }
 
 /// Both paths of `ExclusiveRename` on real volumes: two small disk images,
-/// one APFS and one ExFAT, in a temporary folder.
+/// one APFS and one ExFAT, in a temporary folder. A third image, with
+/// case-sensitive names, is for the job's rule about letter case.
 ///
 /// Each image is attached with `-nobrowse`, at a mount point inside the
 /// temporary folder, and detached in `tearDown`. The test touches no other
@@ -241,14 +242,59 @@ final class ExclusiveRenameVolumeTests: XCTestCase {
     }
 
     func testOnAPFSTheSystemChecksAndRenamesInOneStep() throws {
-        let calls = try renameOnce(in: try volume("APFS", named: "apfs"))
+        let shoot = try volume("APFS", named: "apfs")
+        let calls = try renameOnce(in: shoot)
         XCTAssertEqual(calls.taken, ["renamex_np \(EEXIST)"])
         XCTAssertEqual(calls.free, ["renamex_np 0"])
+        XCTAssertEqual(DesqueezeJob.volumeHasCaseSensitiveNames(shoot), false)
     }
 
     func testOnExFATAFreeNameTakesTheCheckAndThenAPlainRename() throws {
-        let calls = try renameOnce(in: try volume("ExFAT", named: "exfat"))
+        let shoot = try volume("ExFAT", named: "exfat")
+        let calls = try renameOnce(in: shoot)
         XCTAssertEqual(calls.taken, ["renamex_np \(EEXIST)"])
         XCTAssertEqual(calls.free, ["renamex_np \(ENOTSUP)", "check", "rename 0"])
+        XCTAssertEqual(DesqueezeJob.volumeHasCaseSensitiveNames(shoot), false)
+    }
+
+    // A volume with case-sensitive names: x.dng and X.dng are two files. The
+    // scan found x.dng. Adobe DNG Converter fails on X.ARW and leaves an
+    // empty X.dng. The job asks the real volume, takes X.dng for this run's
+    // partial output, and moves it. x.dng stays as it was.
+    func testOnACaseSensitiveVolumeThePartialDNGMovesAndTheDNGWithTheOtherLetterCaseStays() throws {
+        let shoot = try volume("Case-sensitive APFS", named: "cs")
+        XCTAssertEqual(DesqueezeJob.volumeHasCaseSensitiveNames(shoot), true)
+        let files = FileManager.default
+        let trash = shoot.deletingLastPathComponent().appendingPathComponent("Test trash")
+        try files.createDirectory(at: trash, withIntermediateDirectories: false)
+        let arw = shoot.appendingPathComponent("X.ARW")
+        let persons = shoot.appendingPathComponent("x.dng")
+        try Data("raw bytes".utf8).write(to: arw)
+        try Data("the person's DNG".utf8).write(to: persons)
+
+        let runner = FakeRunner()
+        runner.handler = { _ in
+            files.createFile(atPath: shoot.appendingPathComponent("X.dng").path, contents: Data())
+            return ProcessResult(exitCode: 0, stdout: "", stderr: "")
+        }
+        let log = CallLog()
+        let backups = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: trash.path]).backups
+        let job = DesqueezeJob(
+            tag: FakeTag(log: log, backups: FakeBackups(log: log)),
+            converters: RawConverters(
+                dnglab: nil, adobe: AdobeConverter(executable: ScriptedTools.adobe, runner: runner), facts: nil),
+            backups: backups)
+        let known = DNGFile(url: persons, scale: Scale(horizontal: 1.5, vertical: 1), originalRawFileName: nil,
+                            hasBackup: false)
+
+        let summary = job.run(
+            FolderSnapshot(folder: shoot, dngs: [known], pendingARWs: [arw], orphanBackups: [], isWritable: true),
+            factor: SqueezeFactor(1.5)!, convert: true)
+
+        XCTAssertEqual(summary.notes.map(\.detail),
+                       ["Adobe DNG Converter made an empty DNG. The partial DNG was moved to the Trash."])
+        XCTAssertEqual(try files.contentsOfDirectory(atPath: trash.path), ["X.dng"])
+        XCTAssertEqual(try files.contentsOfDirectory(atPath: shoot.path).sorted(), ["X.ARW", "x.dng"])
+        XCTAssertEqual(try Data(contentsOf: persons), Data("the person's DNG".utf8))
     }
 }

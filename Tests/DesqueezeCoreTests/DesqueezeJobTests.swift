@@ -320,6 +320,62 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(other.failed, 1)
     }
 
+    // MARK: Letter case, by the rule of the volume
+
+    /// Adobe DNG Converter fails on X.ARW and leaves X.dng. The scan found
+    /// `known`.
+    func adobeLeavesXDNG(besideAKnown known: String, caseSensitive: Bool?) -> [String] {
+        setUp()
+        converter.failWithPartial = ["X.ARW"]
+        let job = DesqueezeJob(tag: tag, converters: RawConverters(dnglab: nil, adobe: converter, facts: facts),
+                               backups: backups, namesAreCaseSensitive: { _ in caseSensitive })
+        _ = job.run(snapshot(dngs: [dng(known, at: 1.5)], pending: ["X.ARW"]), factor: factor, convert: true)
+        return log.entries
+    }
+
+    // On a volume with case-sensitive names, x.dng and X.dng are two files.
+    // The DNG that the scan found is x.dng, so X.dng is this run's partial
+    // output, and it moves.
+    func testOnACaseSensitiveVolumeADNGWithAnotherLetterCaseIsAnotherFile() {
+        XCTAssertEqual(adobeLeavesXDNG(besideAKnown: "x.dng", caseSensitive: true), ["convert X.ARW", "trashFile X.dng"])
+    }
+
+    // The same name, letter for letter, is the DNG that the scan found, on
+    // every volume. It does not move.
+    func testTheSameNameIsTheKnownDNGOnEveryVolume() {
+        for caseSensitive in [true, false, nil] as [Bool?] {
+            XCTAssertEqual(adobeLeavesXDNG(besideAKnown: "X.dng", caseSensitive: caseSensitive), ["convert X.ARW"],
+                           "\(String(describing: caseSensitive))")
+        }
+    }
+
+    // On a volume that ignores letter case, x.dng and X.dng are one file:
+    // the one that the scan found. It does not move. When the volume does
+    // not say, the job takes this direction too.
+    func testOnAVolumeThatIgnoresCaseOrDoesNotSayADNGWithAnotherLetterCaseIsTheKnownDNG() {
+        XCTAssertEqual(adobeLeavesXDNG(besideAKnown: "x.dng", caseSensitive: false), ["convert X.ARW"])
+        XCTAssertEqual(adobeLeavesXDNG(besideAKnown: "x.dng", caseSensitive: nil), ["convert X.ARW"])
+    }
+
+    // The job asks about the folder of the ARW.
+    func testTheVolumeIsAskedAboutTheFolderOfTheARW() {
+        converter.failWithPartial = ["X.ARW"]
+        let asked = CallLog()
+        let job = DesqueezeJob(tag: tag, converters: RawConverters(dnglab: nil, adobe: converter, facts: facts),
+                               backups: backups, namesAreCaseSensitive: { asked.entries.append($0.path); return true })
+        _ = job.run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+        XCTAssertEqual(asked.entries, ["/tmp/Shoot 1"])
+    }
+
+    func testTheDefaultAsksTheRealVolume() throws {
+        let shoot = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(shoot) }
+        // The volume of the temporary folder says one or the other.
+        XCTAssertNotNil(DesqueezeJob.volumeHasCaseSensitiveNames(shoot))
+        XCTAssertNil(DesqueezeJob.volumeHasCaseSensitiveNames(shoot.appendingPathComponent("no such folder")),
+                     "a folder that is not there says nothing")
+    }
+
     func testAFailedConversionWithNoPartialDNGDiscardsNothing() {
         converter.fail = ["X.ARW"]
         _ = job().run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)

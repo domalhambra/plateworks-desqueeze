@@ -54,6 +54,7 @@ public struct DesqueezeJob: Sendable {
     private let tag: ScaleTagging
     private let converters: RawConverters
     private let backups: BackupHandling
+    private let namesAreCaseSensitive: @Sendable (URL) -> Bool?
 
     /// - Parameter converters: dnglab and Adobe DNG Converter, each nil when
     ///   it is not installed, and the reader of the ARW facts. With neither
@@ -62,10 +63,26 @@ public struct DesqueezeJob: Sendable {
     ///   check, and where the partial output of a failed conversion goes. There
     ///   is no default, so no caller reaches the Trash by
     ///   leaving it out. The window and the tool name the Trash themselves.
-    public init(tag: ScaleTagging, converters: RawConverters, backups: BackupHandling) {
+    /// - Parameter namesAreCaseSensitive: whether the volume of a folder
+    ///   takes `A.dng` and `a.dng` as two files. Nil when the volume does
+    ///   not say. The default asks the volume. Tests inject it.
+    public init(
+        tag: ScaleTagging, converters: RawConverters, backups: BackupHandling,
+        namesAreCaseSensitive: @escaping @Sendable (URL) -> Bool? = DesqueezeJob.volumeHasCaseSensitiveNames
+    ) {
         self.tag = tag
         self.converters = converters
         self.backups = backups
+        self.namesAreCaseSensitive = namesAreCaseSensitive
+    }
+
+    /// What the volume of `folder` says about letter case in file names
+    /// (`URLResourceKey.volumeSupportsCaseSensitiveNamesKey`): true when
+    /// `A.dng` and `a.dng` are two files there. Nil when the volume does not
+    /// say, or the folder cannot be read.
+    public static func volumeHasCaseSensitiveNames(_ folder: URL) -> Bool? {
+        (try? folder.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey]))?
+            .volumeSupportsCaseSensitiveNames
     }
 
     /// Scans `folder`, then runs on what that scan found.
@@ -356,7 +373,10 @@ public struct DesqueezeJob: Sendable {
     /// - From Adobe DNG Converter: the output of this ARW, `<base>.dng`
     ///   beside it, when it is not one of `dngs`: the DNG files that the
     ///   run's scan found, and the ones that the run made before this ARW.
-    ///   Letter case is ignored there, as most volumes ignore it.
+    ///   Two names are compared by the rule of the volume: on a volume with
+    ///   case-sensitive names, `A.dng` and `a.dng` are two files, and on any
+    ///   other they are one. When the volume does not say, letter case is
+    ///   ignored: that is the direction in which no file moves.
     ///
     /// Any other file stays where it is.
     private func discard(partial: URL, of arw: URL, from converter: ConverterKind, keeping dngs: [DNGFile]) -> Discarded {
@@ -365,7 +385,10 @@ public struct DesqueezeJob: Sendable {
         case .dnglab:
             isThisRuns = partial.path == ConverterOutput.workURL(for: arw).path
         case .adobe:
-            let isAKnownDNG = dngs.contains { $0.url.path.lowercased() == partial.path.lowercased() }
+            let caseMatters = namesAreCaseSensitive(arw.deletingLastPathComponent()) == true
+            let isAKnownDNG = dngs.contains {
+                caseMatters ? $0.url.path == partial.path : $0.url.path.lowercased() == partial.path.lowercased()
+            }
             isThisRuns = partial.path == ConverterOutput.url(for: arw).path && !isAKnownDNG
         }
         guard isThisRuns else { return .notThisRuns }
