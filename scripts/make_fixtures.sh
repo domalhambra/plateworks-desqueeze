@@ -1,10 +1,17 @@
 #!/bin/bash
-# Make the two files the integration tests need.
+# Make the two files that the tests on the real programs need.
 #
-#   scripts/make_fixtures.sh "/path/to/one A7S III file.ARW"
+#   scripts/make_fixtures.sh "/path/to/one file.ARW"
 #
-# The source file is copied, never changed. fixtures/ is gitignored: the
-# photo is Dom's and this repo may become public.
+# Give it one Sony ARW of your own. Your photo is copied, never changed.
+# fixtures/ is gitignored, so your photo never enters the repo.
+#
+# The script needs Adobe DNG Converter in /Applications: it makes the DNG.
+#
+# Any Sony ARW that dnglab and Adobe DNG Converter can read works. The tests
+# of the dnglab match need a frame that the match table covers: a Sony
+# A7S III, compressed raw, ISO 50 or 80 to 12800, adapted lens. With another
+# frame those tests skip, and the others still run.
 set -euo pipefail
 
 src="${1:?Give the path of one ARW file}"

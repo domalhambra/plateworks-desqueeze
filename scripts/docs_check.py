@@ -4,7 +4,9 @@
 A copy of the check that the Plateworks documentation standard defines. The
 canonical copy, its tests and the standard are kept outside this repo. Do not
 change the checks here: a change is made in the canonical copy, and this copy
-is then replaced. Local adaptation: this header names no path outside the repo.
+is then replaced. Local adaptation: this header names no path outside the repo,
+and the skip rule for workspace canon paths is removed, because this repo
+quotes none.
 
 Run:  python3 docs_check.py [ROOT] [--budget 2000] [--require docs/architecture.md ...]
 
@@ -25,11 +27,10 @@ Path extraction is deliberately narrow: only backtick-quoted tokens that look
 like repo paths. Skipped on purpose: URLs and other scheme-prefixed tokens,
 tokens with spaces or placeholder brackets or globs, `~` and `/` prefixes,
 `dist...` build output, scoped npm packages (`@scope/name`), a bare extension
-quoted as a word (`.ics`), a hostname with a path (`bit.ly/abc`), and anything
-under `00_Resources/`, which is workspace canon quoted by convention and lives
-outside every project repo. A quoted path is resolved from the quoting file's
-own folder first and the repo root second. A bare filename with a known
-extension passes when any file of that name exists anywhere in the tree.
+quoted as a word (`.ics`), and a hostname with a path (`bit.ly/abc`). A quoted
+path is resolved from the quoting file's own folder first and the repo root
+second. A bare filename with a known extension passes when any file of that
+name exists anywhere in the tree.
 
 Exit 0 when clean, 1 with findings, 2 on a usage error. Standard library only.
 """
@@ -132,8 +133,6 @@ def quoted_paths(text: str, base_dir: str, root: Path) -> list[str]:
             continue  # build output
         if token.startswith("@"):
             continue  # scoped npm packages
-        if token.startswith("00_Resources/"):
-            continue  # workspace canon, outside every project repo
         if re.match(r"^\.\w+$", token):
             continue  # a bare extension quoted as a word (`.ics`); `.github/...` still counts
         has_slash = "/" in token
