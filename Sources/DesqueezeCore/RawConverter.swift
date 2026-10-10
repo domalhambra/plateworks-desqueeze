@@ -67,8 +67,11 @@ public protocol RawConverter: Sendable {
     /// - Parameter facts: what the ARW says about itself, from the one read
     ///   that the run makes for all pending files. `ARWFacts.none` when
     ///   nothing is known. A converter reads no facts itself.
-    /// - Throws: `ConvertError.failed` when the conversion failed, and the
-    ///   runner's own error when the program never ran.
+    /// - Throws: `ConvertError.failed` when the conversion failed, and
+    ///   `ConvertError.failedForAll` when it failed for a reason that holds
+    ///   for every converter, so the caller does not try the next one. The
+    ///   runner's own error passes on as it came when the program could not
+    ///   start, and when a signal ended it and it left no file.
     func convert(_ arw: URL, facts: ARWFacts) throws -> Conversion
 }
 

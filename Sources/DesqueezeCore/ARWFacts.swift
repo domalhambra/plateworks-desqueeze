@@ -132,7 +132,7 @@ enum ExiftoolText {
 /// Compressed RAW". The number is the stable form: the words are exiftool's,
 /// and a later exiftool can change them.
 public struct ARWFactsReader: ARWFactsReading {
-    /// The five tags, in the order of the columns that `parse` reads.
+    /// The five tags, in the order of the columns that `rows` reads.
     static let tags = [
         "-IFD0:Model", "-ExifIFD:ISO", "-SR2SubIFD:WB_RGBLevelsDaylight", "-SubIFD:DistortionCorrection",
         "-SubIFD:SonyRawFileType",
@@ -175,18 +175,6 @@ public struct ARWFactsReader: ARWFactsReading {
             for row in Self.rows(result.stdout) { rows[row.name, default: []].append(row.facts) }
         }
         return ExiftoolText.pair(files: arws.map(\.lastPathComponent), rows: rows)
-    }
-
-    /// The facts by the file name that exiftool printed. A name that two
-    /// rows share is not in the result: no one can say which row is whose.
-    static func parse(_ text: String) -> [String: ARWFacts] {
-        var facts: [String: ARWFacts] = [:]
-        var shared: Set<String> = []
-        for row in rows(text) {
-            if facts.updateValue(row.facts, forKey: row.name) != nil { shared.insert(row.name) }
-        }
-        for name in shared { facts[name] = nil }
-        return facts
     }
 
     /// Parses the tab-separated read: the file name, then the five tags, one

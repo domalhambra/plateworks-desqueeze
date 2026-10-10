@@ -28,8 +28,19 @@ final class ARWFactsTests: XCTestCase {
                  distortionCorrection: noLensCorrection ? 255 : 17, rawFileType: 2)
     }
 
+    /// The names of the seven files of `realOutput`.
+    static let realNames = ["iso80.ARW", "iso3200.ARW", "iso400.ARW", "iso50.ARW", "iso12800.ARW", "junk.ARW",
+                            "empty.ARW"]
+
+    /// The facts that the reader gives for the files `names` when exiftool
+    /// prints `output`: `ARWFactsReader.read`, the one way in that the
+    /// product uses. Every test of the parsing goes through it.
+    func parse(_ output: String, files names: [String] = ["a.ARW"]) -> [String: ARWFacts] {
+        reader(printing: output).0.read(names.map { URL(fileURLWithPath: "/tmp/Shoot 1/\($0)") })
+    }
+
     func testParsesTheRealOutputOfBothKindsOfFrame() {
-        let parsed = ARWFactsReader.parse(Self.realOutput)
+        let parsed = parse(Self.realOutput, files: Self.realNames)
         XCTAssertEqual(parsed.count, 7)
         // A lens that reports itself: other daylight levels, and correction data.
         XCTAssertEqual(parsed["iso80.ARW"], facts(80, 2496, 1617, noLensCorrection: false))
@@ -47,7 +58,7 @@ final class ARWFactsTests: XCTestCase {
     // exiftool prints a row of dashes for a file that it cannot read. Such a
     // file has no facts. That is not an error.
     func testAFileThatExiftoolCannotReadHasNoFacts() {
-        let parsed = ARWFactsReader.parse(Self.realOutput)
+        let parsed = parse(Self.realOutput, files: Self.realNames)
         XCTAssertEqual(parsed["junk.ARW"], ARWFacts.none)
         XCTAssertEqual(parsed["empty.ARW"], ARWFacts.none)
         XCTAssertEqual(ARWFacts.none, ARWFacts(model: nil, iso: nil, daylightLevels: nil,
@@ -61,7 +72,7 @@ final class ARWFactsTests: XCTestCase {
     func testOnlyTheValue255SaysThatTheARWHasNoLensCorrectionData() {
         for (value, expected) in [("255", true), ("17", false), ("0", false), ("1", false), ("-", false),
                                   ("", false), ("255 255", false), ("No correction params available", false)] {
-            let parsed = ARWFactsReader.parse("a.ARW\tILCE-7SM3\t800\t2597 1024 1556\t\(value)\t2\n")
+            let parsed = parse("a.ARW\tILCE-7SM3\t800\t2597 1024 1556\t\(value)\t2\n")
             XCTAssertEqual(parsed["a.ARW"]?.saysNoLensCorrection, expected, "\"\(value)\"")
         }
     }
@@ -69,15 +80,14 @@ final class ARWFactsTests: XCTestCase {
     // The fact is the number that the file holds. No number is "the ARW does
     // not say", and that is not the same as another number.
     func testTheLensFactIsTheNumberOrNilWhenTheARWDoesNotSay() {
-        func parse(_ value: String) -> Int? {
-            ARWFactsReader.parse("a.ARW\tILCE-7SM3\t800\t2597 1024 1556\t\(value)\t2\n")["a.ARW"]?
-                .distortionCorrection
+        func lensFact(_ value: String) -> Int? {
+            parse("a.ARW\tILCE-7SM3\t800\t2597 1024 1556\t\(value)\t2\n")["a.ARW"]?.distortionCorrection
         }
-        XCTAssertEqual(parse("255"), 255)
-        XCTAssertEqual(parse("17"), 17)
-        XCTAssertEqual(parse("0"), 0)
+        XCTAssertEqual(lensFact("255"), 255)
+        XCTAssertEqual(lensFact("17"), 17)
+        XCTAssertEqual(lensFact("0"), 0)
         for value in ["-", "", "255 255", "No correction params available", "-1", "1.5"] {
-            XCTAssertNil(parse(value), "\"\(value)\"")
+            XCTAssertNil(lensFact(value), "\"\(value)\"")
         }
     }
 
@@ -89,7 +99,7 @@ final class ARWFactsTests: XCTestCase {
             ("22", 22, false), ("-", nil, false), ("", nil, false), ("2 2", nil, false), ("2.0", nil, false),
             ("-2", nil, false), ("Sony Compressed RAW", nil, false),
         ] {
-            let parsed = ARWFactsReader.parse("a.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t\(value)\n")["a.ARW"]
+            let parsed = parse("a.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t\(value)\n")["a.ARW"]
             XCTAssertEqual(parsed?.rawFileType, kind, "\"\(value)\"")
             XCTAssertEqual(parsed?.isCompressedRaw, expected, "\"\(value)\"")
             XCTAssertEqual(parsed?.iso, 800, "the other facts stay")
@@ -98,28 +108,28 @@ final class ARWFactsTests: XCTestCase {
     }
 
     func testAValueThatIsNotWhatTheTagHoldsIsNoFact() {
-        func parse(iso: String = "800", levels: String = "2597 1024 1556") -> ARWFacts? {
-            ARWFactsReader.parse("a.ARW\tILCE-7SM3\t\(iso)\t\(levels)\t255\t2\n")["a.ARW"]
+        func facts(iso: String = "800", levels: String = "2597 1024 1556") -> ARWFacts? {
+            parse("a.ARW\tILCE-7SM3\t\(iso)\t\(levels)\t255\t2\n")["a.ARW"]
         }
-        XCTAssertEqual(parse()?.iso, 800)
+        XCTAssertEqual(facts()?.iso, 800)
         for iso in ["-", "", "800 800", "8e2", "800.5", "auto", "-800", "0"] {
-            XCTAssertNil(parse(iso: iso)?.iso, "\"\(iso)\"")
-            XCTAssertEqual(parse(iso: iso)?.model, "ILCE-7SM3", "the other facts stay")
+            XCTAssertNil(facts(iso: iso)?.iso, "\"\(iso)\"")
+            XCTAssertEqual(facts(iso: iso)?.model, "ILCE-7SM3", "the other facts stay")
         }
         for levels in ["-", "", "2597 1024", "2597 1024 1556 1024", "2597 1024 x", "2597.5 1024 1556",
                        "-2597 1024 1556"] {
-            XCTAssertNil(parse(levels: levels)?.daylightLevels, "\"\(levels)\"")
+            XCTAssertNil(facts(levels: levels)?.daylightLevels, "\"\(levels)\"")
         }
     }
 
     func testARowWithTheWrongNumberOfCellsIsDropped() {
-        let parsed = ARWFactsReader.parse("""
+        let parsed = parse("""
         a.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255
         b.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t2\textra
         Warning: something
         c.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t2
 
-        """)
+        """, files: ["a.ARW", "b.ARW", "c.ARW", "Warning: something"])
         XCTAssertEqual(Array(parsed.keys), ["c.ARW"])
     }
 
@@ -144,11 +154,13 @@ final class ARWFactsTests: XCTestCase {
     // Two rows share a name: no one can say which row is whose. Neither
     // file gets facts, and "no facts" is "no full match".
     func testANameThatTwoRowsShareGivesNoFacts() {
-        let parsed = ARWFactsReader.parse(Self.realOutputWithATab)
+        // One file of the list has the name that the two rows share.
+        let files = ["a.b.ARW", "plain.ARW"]
+        let parsed = parse(Self.realOutputWithATab, files: files)
         XCTAssertEqual(parsed.keys.sorted(), ["plain.ARW"])
         XCTAssertEqual(parsed["plain.ARW"], facts(800, 2597, 1556, noLensCorrection: true))
         // Also when the two rows are equal, and when there are three.
-        XCTAssertEqual(ARWFactsReader.parse(Self.realOutputWithATab + Self.realOutputWithATab), [:])
+        XCTAssertEqual(parse(Self.realOutputWithATab + Self.realOutputWithATab, files: files), [:])
     }
 
     func reader(printing output: String) -> (ARWFactsReader, FakeRunner) {
