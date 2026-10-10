@@ -90,7 +90,7 @@ Test files are in `Tests/DesqueezeCoreTests/`.
 
 | File | Owns | Tests |
 |---|---|---|
-| `SqueezeFactor.swift` | A factor: the range 1 to 4, four decimal places, the presets, the tag value `<factor> 1`, the read-back tolerance, and the sentence for a wrong factor | `SqueezeFactorTests.swift` |
+| `SqueezeFactor.swift` | A factor: the range 1 to 4, four decimal places, the presets, the tag value `<factor> 1`, the read-back tolerance, the sentence for a wrong factor, and the hint for a comma | `SqueezeFactorTests.swift` |
 | `FolderChoice.swift` | What counts as a folder: a link to a folder is that folder, a package is not one. The sentence that says why a path is no folder. | `FolderChoiceTests.swift` |
 | `FolderScan.swift` | The lists of one folder: DNG files, ARW files, orphan backups. The rule for a pending ARW. | `FolderScanTests.swift` |
 | `FolderScanner.swift` | `FolderSnapshot`: the lists, the tag of each DNG, the backup state, and whether the folder is writable | `FolderScannerTests.swift` |
@@ -100,15 +100,16 @@ Test files are in `Tests/DesqueezeCoreTests/`.
 | `ToolLocator.swift` | Where the three programs are, and the sentences for a missing exiftool and for the dnglab install | `ToolLocatorTests.swift` |
 | `ScaleTag.swift` | `Scale`, and the three exiftool calls for `DefaultScale`: read a folder, write one file, read one file back | `ScaleTagTests.swift`. With the real exiftool: `IntegrationTests.swift` |
 | `Backups.swift` | The `_original` backup: exists, to the Trash, restore with one rename. The test variable `DESQUEEZE_TEST_BACKUP_FOLDER`. | `BackupsTests.swift`, `BackupTestFolderTests.swift` |
-| `RawConverter.swift` | The converter protocol, the pair of converters, the names of the output and of the work file, and the Adobe converter. The rules that hold for every converter: the checks before the start, the leftovers of an earlier run, the work file, the rename, and what counts as a partial output. | `RawConverterTests.swift`. With the real converter: `IntegrationTests.swift` |
+| `RawConverter.swift` | The converter protocol, the pair of converters, the names of the output and of the work file, and the Adobe converter. The rules that hold for every converter: a name that is too long, the checks before the start, the leftovers of an earlier run, the work file, the rename, and what counts as a partial output. | `RawConverterTests.swift`. With the real converter: `IntegrationTests.swift` |
 | `DnglabConverter.swift` | The steps that only dnglab has: its command, the match write into the work file, the read-back, and dnglab's own words for a failure | `DnglabConverterTests.swift`. With the real dnglab: `DnglabIntegrationTests.swift` |
 | `ExclusiveRename.swift` | A rename that fails when the name is taken, and the path for a volume that has no such call | `ExclusiveRenameTests.swift`, which also makes APFS and ExFAT disk images |
 | `ARWFacts.swift` | The five facts about an ARW, the exiftool read that gets them, and how exiftool prints a file name | `ARWFactsTests.swift`. With the real exiftool: `DnglabIntegrationTests.swift` |
 | `AdobeMatch.swift` | The match table, the five rules of a full match, the tags to write, and the compare of numbers at the read-back | `AdobeMatchTests.swift`. Against the real Adobe DNG Converter: the drift check in `DnglabIntegrationTests.swift` |
 | `ConverterChoice.swift` | Which converter gets an ARW, in which order. The names of the converters and the sentences about who converts. | `ConverterChoiceTests.swift` |
 | `RunPlan.swift` | The one decision for a DNG: skip, blocked, or write. The plan of a dry run. | `PlanTests.swift` |
-| `RunSummary.swift` | The counts of a run, the note for each file with its `kind`, the counts line, the progress value, and the cancel flag | `RunSummaryTests.swift` |
-| `DesqueezeJob.swift` | The run and the dry run, in order, on a fresh scan | `DesqueezeJobTests.swift`, `PlanTests.swift`. With the real programs: `IntegrationTests.swift`, `DnglabIntegrationTests.swift` |
+| `RunSummary.swift` | The counts of a run, the note for each file with its `kind`, the counts line, the line about the two converters, the rule of the Lightroom line, the progress value, and the cancel flag | `RunSummaryTests.swift` |
+| `FolderLock.swift` | One run in a folder at a time: the advisory lock on the folder, what each answer of the system means, and the sentence of a run that did not start | `FolderLockTests.swift`, which also makes an ExFAT disk image. With two processes of the built tool: `TwoRunsTests.swift` in `Tests/DesqueezeCLITests/` |
+| `DesqueezeJob.swift` | The run and the dry run, in order, on a fresh scan. The run holds the folder lock. | `DesqueezeJobTests.swift`, `PlanTests.swift`, `FolderLockTests.swift`. With the real programs: `IntegrationTests.swift`, `DnglabIntegrationTests.swift` |
 | `Reports.swift` | The report types and their JSON: `ScanReport`, `RunReport`, `ErrorReport`, and the one function that prints them | `ReportsTests.swift` |
 | `Operations.swift` | `DesqueezeOperations`: scan, run, remove, each with a report that is ready to print | `OperationsTests.swift` |
 | `InterruptWatcher.swift` | A flag that a signal sets, so a run stops after its current file | No unit test. `InterruptTests.swift` in `Tests/DesqueezeCLITests/` sends real signals to the built tool. |
@@ -127,7 +128,7 @@ Test files are in `Tests/DesqueezeCLITests/`.
 | `Sources/DesqueezeCLI/Commands.swift` | `DesqueezeTool`: parse, do, print. The exit codes. `ToolEnvironment`, which holds everything the tool takes from the outside. | `CommandsTests.swift`, `ExitCodeTests.swift` |
 | `Sources/DesqueezeCLI/TextOutput.swift` | The layout of the text for a person | `TextOutputTests.swift` |
 | `Sources/DesqueezeCLI/Usage.swift` | The version line, the help, and how a usage error is shown | `CommandsTests.swift` |
-| `Sources/DesqueezeCLI/LiveEnvironment.swift` | The real environment: the programs, the Trash, the signals, the two standard streams | No unit test. The end-to-end tests start the built tool: `EndToEndTests.swift`, `EndToEndFailureTests.swift`, `InterruptTests.swift`. |
+| `Sources/DesqueezeCLI/LiveEnvironment.swift` | The real environment: the programs, the Trash, the signals, the two standard streams | No unit test. The end-to-end tests start the built tool: `EndToEndTests.swift`, `EndToEndFailureTests.swift`, `InterruptTests.swift`, `TwoRunsTests.swift`. |
 | `Sources/desqueeze/main.swift` | One line that starts the tool | The same end-to-end tests |
 
 `BuiltTool.swift` starts the built tool for the end-to-end tests, and
@@ -144,7 +145,7 @@ Test files are in `MCPServer/Tests/DesqueezeMCPTests/`.
 | `ToolCall.swift` | The check of the arguments of one call | `ToolErrorTests.swift`, through the built server |
 | `ToolEnvironment.swift` | One tool call from its arguments to its result, through `DesqueezeOperations` | `InProcessTests.swift`, `ToolErrorTests.swift`, `ServerEndToEndTests.swift` |
 | `ToolHandlers.swift` | The handlers for the list of tools and for a tool call, the progress messages, and the cancel of a call | `InProcessTests.swift`, `ServerEndToEndTests.swift` |
-| `CallQueue.swift` | One tool call at a time. The queue closes when the client is gone. | `InProcessTests.swift` |
+| `CallQueue.swift` | One tool call at a time. The queue closes when the client is gone. | `InProcessTests.swift`, `AnsweringTransportTests.swift` |
 | `AnsweringTransport.swift` | The transport: one message is written at a time, and the program does not end with an answer owed | `AnsweringTransportTests.swift` |
 | `main.swift` | One line that starts the program | The end-to-end tests |
 
@@ -156,7 +157,7 @@ tests check the bytes on the wire.
 
 | File | Owns | Tests |
 |---|---|---|
-| `AppModel.swift` | The window's state: the folder, the factor, the one job in flight, Cancel, the quit during a run, the launch arguments | `AppModelTests.swift` in `App/PlateworksDesqueezeTests/`. `Fakes.swift` beside it holds its fakes. |
+| `AppModel.swift` | The window's state: the folder, the factor, the one job in flight, Cancel, a run that another run kept out, the quit during a run, the launch arguments | `AppModelTests.swift` in `App/PlateworksDesqueezeTests/`. `Fakes.swift` beside it holds its fakes. |
 | `ContentView.swift` | The one view: the drop zone, the factor row, the buttons, the progress bar, the result list | - |
 | `DesqueezeApp.swift` | The app and its delegate: one window, and the reply to a quit | - |
 | `Info.plist` | Written by XcodeGen from `project.yml`. A hand edit is lost. | - |
@@ -169,9 +170,17 @@ no app and opens no window.
 ## One run, step by step
 
 `DesqueezeJob.run(folder:)` does these steps in order, one file at a time.
-Each step has the rule that keeps the user's files safe. Design 4.3 and
-13.3 are the contract.
+Each step has the rule that keeps the user's files safe. Design 4.3, 13.3
+and 13.9 are the contract.
 
+0. **Lock the folder.** Before the scan, the run takes an advisory lock on
+   the folder: it opens the folder and asks for `flock`. It holds the lock
+   until it returns or throws. No lock file is made. When another run holds
+   the lock, in this process or in another, the run does not start. It
+   throws `FolderLock.Busy`, and each front end says the core's sentence.
+   On a volume that gives no such lock, the run goes on without one.
+   *Safety:* two runs in one folder would take each other's work file for a
+   leftover. A scan and a dry run take no lock: they change no file.
 1. **Scan.** The run reads the top level of the folder itself. It never takes
    an earlier scan from a front end. Subfolders and hidden files are not
    read. *Safety:* a read-only folder gets one note, and no file is tried.
@@ -184,6 +193,9 @@ Each step has the rule that keeps the user's files safe. Design 4.3 and
    `<base>.dng`, the converter does not start. Neither converter may write
    over a file. A leftover file of exiftool beside the photo,
    `<base>.dng_exiftool_tmp`, stops that ARW, and the note names the file.
+   So does a base name of more than 235 bytes: the name of the work file
+   would be longer than the 255 bytes that a file name can have, and the
+   note says that the name is too long.
 4. **Convert to a work file.** Each converter writes the hidden file
    `.<base>.desqueeze-work.dng`, not `<base>.dng`. dnglab takes the path of
    the work file. Adobe DNG Converter takes its name with `-o`. A work file
@@ -229,7 +241,8 @@ has the counts and one note for each file that has something to say.
 
 `DesqueezeJob.plan(folder:)` is the dry run. It makes the same scan, asks the
 same two functions (`ConverterChoice` and `TagDecision`), and changes no
-file. So a dry run and the run that follows cannot disagree.
+file. So a dry run and the run that follows cannot disagree. It takes no
+lock, so it can read a folder in which a run works.
 
 ## Runtime behavior worth knowing
 
@@ -242,6 +255,11 @@ file. So a dry run and the run that follows cannot disagree.
 - **A program in work does not get the Control-C.** Each program starts in a
   process group of its own. A program that is only just starting can still
   get it. That file is then reported as failed and is left as it was.
+- **One run in a folder at a time.** The lock is on the folder, not in the
+  app, so it holds between the window, the tool and the server, and between
+  two runs in one process. It goes when the run ends, and when the process
+  ends for any reason. A scan and a dry run are allowed while a run works,
+  and their result can be of a folder in change.
 - **The server runs one tool call at a time,** on a queue with a thread of
   its own. When standard input closes, the call in work completes and is
   answered. A call that waits does not start.
@@ -254,7 +272,12 @@ file. So a dry run and the run that follows cannot disagree.
 - **The window scans again** when the app becomes active, and after every
   run. A scan that lands late is discarded.
 - **The window remembers the factor** of the last run in the app's saved
-  settings. The launch arguments are read from the command line only.
+  settings. The first time, it starts at 1.5. The launch arguments are read
+  from the command line only.
+- **The Lightroom line and the line about the two converters** are decided
+  in the core (`RunSummary`). The window and the tool show them for the
+  same runs, and the description of the server's tools gives a model the
+  same rule.
 
 ## Delivery
 
@@ -281,16 +304,17 @@ it sends each discarded file to a folder in place of the Trash.
 
 | Suite | Command | Covers |
 |---|---|---|
-| The root package | `swift test` | The core and the tool: unit tests on fakes, the docs check, the changelog test, and the tests on the real programs |
+| The root package | `swift test` | The core and the tool: unit tests on fakes, the docs check, the site test, the changelog test, and the tests on the real programs |
 | The server package | `swift test --package-path MCPServer` | The server: the built server over its pipes, and the parts that start no server |
 | The window | `xcodebuild` with the `test` action, after `xcodegen generate` | The window's state, on fakes |
 
 The tests on the real programs copy `fixtures/sample.ARW` and
 `fixtures/sample.dng` to a temporary folder first. `fixtures/` is gitignored
-and is made with `scripts/make_fixtures.sh`. A test that needs a fixture or a
-program skips when it is absent. It does not fail. The ARW can be any Sony
-ARW that dnglab and Adobe DNG Converter can read: a test takes each value
-that it expects from the frame itself.
+and is made with `scripts/make_fixtures.sh`. The script makes the DNG with
+Adobe DNG Converter, or with dnglab and exiftool when that is not installed.
+A test that needs a fixture or a program skips when it is absent. It does
+not fail. The ARW can be any Sony ARW that dnglab and Adobe DNG Converter can
+read: a test takes each value that it expects from the frame itself.
 
 - **No fixtures:** the tests on the real programs skip. So do the end-to-end
   tests of the tool, and each server test that runs on a photo.
@@ -307,24 +331,46 @@ that it expects from the frame itself.
   run. With both converters installed, Adobe DNG Converter converts such a
   frame, and the end-to-end tests expect that.
 - **Two more skips:** the disk-image tests in `ExclusiveRenameTests.swift`
-  skip when `hdiutil` cannot make or attach an image. One server test skips
-  on a Mac that is too fast for it, and says so.
+  and `FolderLockTests.swift` skip when `hdiutil` cannot make or attach an
+  image. One server test skips on a Mac that is too fast for it, and says
+  so.
 
 **The drift check** is `AdobeDriftTests` in `DnglabIntegrationTests.swift`. It
 converts the fixture with Adobe DNG Converter and with the app's dnglab
 path, and compares every matched tag. It fails when a new version of either
 converter, or new camera firmware, changes a value. It needs a fixture frame
-that the match table covers.
+that the match table covers. The helper `factsOfACoveredFrame` decides that
+with no code of the product: it asks exiftool for each fact, and reads the
+data file of the A7S III. So a broken facts reader fails the check, and does
+not skip it. A new camera must be added to that helper.
 
 **The docs check** is `DocsCheckTests.swift`. It runs
 `scripts/docs_check.py`. So `swift test` fails when `README.md`, `CLAUDE.md`,
 `AGENTS.md` or a document at the top of `docs/` quotes a path that does not
 exist.
 
+**The site test** is `Tests/DesqueezeCoreTests/DocsSiteTests.swift`. It reads
+the source of the documentation site, the DocC catalog
+`Sources/DesqueezeCore/DesqueezeCore.docc`. It fails when the first page
+names an article that does not exist, when a link between two pages points
+to no page, and when a page quotes a test or a path of the repo that does
+not exist. It does not build the site.
+
+**The site build** is `scripts/build_docs.sh`. It builds the site with the
+`docc` of Xcode, and it must end with no warning. No suite runs it: run it
+after a change to an article or to a documentation comment.
+
+**Two workflows** are in `.github/workflows/`, for the time when the repo is
+on GitHub. `tests.yml` runs the three suites on every push and on every pull
+request. `docs.yml` builds the site with `scripts/build_docs.sh` and
+publishes it to GitHub Pages. Neither has run yet: the header of each file
+lists what to check on its first run.
+
 **No test reaches the real Trash.** A unit test gives `FileBackups` its own
 function. A test that starts a built tool sets
 `DESQUEEZE_TEST_BACKUP_FOLDER`. The window's tests use fakes, and they do
-not read or write the saved settings.
+not read or write the saved settings. A test of the folder lock takes the
+system's lock on a temporary folder: the lock makes no file.
 
 **By hand:** the acceptance pass of design 9, on a copy of a shoot folder,
 and one photo opened in Lightroom at each factor. No test can do those.

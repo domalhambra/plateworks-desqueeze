@@ -65,15 +65,17 @@ skip and the other tests still run.
 scripts/make_fixtures.sh "/path/to/one file.ARW"
 ```
 
-The script needs Adobe DNG Converter in the Applications folder. It copies
-your ARW and does not change it. Any Sony ARW that dnglab and Adobe DNG
-Converter can read works: a test takes each value that it expects from the
-frame itself. The drift check and the tests of the real dnglab match need a
+The script copies your ARW and does not change it. It makes the DNG with
+Adobe DNG Converter. When that is not in the Applications folder, it makes
+the DNG with dnglab and exiftool. With neither, it stops before it copies a
+file. Any Sony ARW that dnglab and Adobe DNG Converter can read works: a
+test takes each value that it expects from the frame itself. The drift check and the tests of the real dnglab match need a
 frame that the match table covers: a Sony A7S III, compressed raw, ISO 50
 or 80 to 12800, adapted lens. With another frame they skip, and the other
 tests still run. Say in your pull request which tests skipped on your Mac.
 
-Never commit a photo.
+Never commit a photo. `.gitignore` ignores every ARW, every DNG and every
+backup of a DNG in the tree, so `git add` does not take one by accident.
 
 ## One source for each sentence
 
@@ -168,7 +170,12 @@ The method is in the design, section 13.2. The steps:
 9. **Add the row.** Add a `Camera` value to
    `Sources/DesqueezeCore/AdobeMatch.swift`, and add it to `cameras`. Copy
    the digits from the data file.
-10. **Run the drift check.** It converts the frame in `fixtures/` with Adobe
+10. **Teach the test helper your camera.** `factsOfACoveredFrame` in
+    `Tests/DesqueezeCoreTests/DnglabIntegrationTests.swift` decides which
+    fixture frames the table covers. It reads the data file of the A7S III,
+    and no other. Make it read your data file too. Until it does, the drift
+    check skips for a frame of your camera, and a skip proves nothing.
+11. **Run the drift check.** It converts the frame in `fixtures/` with Adobe
     DNG Converter and with dnglab plus your row, and compares every tag. Make
     the fixtures from one of your frames that the new row covers, then run
     it. The check skips for a frame that the table does not cover, so see
@@ -178,7 +185,7 @@ The method is in the design, section 13.2. The steps:
     swift test --filter AdobeDriftTests
     ```
 
-11. **Update the documents.** The design, sections 13.4 and 13.9, and
+12. **Update the documents.** The design, sections 13.4 and 13.9, and
     `README.md` say that the table has one camera. Add a row to
     `docs/decisions.md`. Give the firmware version and the ISO settings that
     you measured.

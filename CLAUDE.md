@@ -16,7 +16,7 @@ This file is a router: the rules that must not break, and the one document to re
 | How a program is called, or what its output means | Design 2.1 and 13.2. Each claim there was tested by hand. |
 | The command line tool or its JSON | Design 12.1, `Sources/DesqueezeCore/Reports.swift` |
 | The MCP server | Design 12.2, `MCPServer/` |
-| The converters, the work file, the match table | Design 13, `Sources/DesqueezeCore/AdobeMatch.swift`, and the data file `docs/superpowers/specs/2026-10-09-ilce-7sm3-adobe-values.json` |
+| The converters, the work file, the match table, the folder lock | Design 13, `Sources/DesqueezeCore/AdobeMatch.swift`, and the data file `docs/superpowers/specs/2026-10-09-ilce-7sm3-adobe-values.json` |
 | A sentence that a front end says | It is made once, in the core. `docs/changing-things.md` says where. |
 | Something that looks like a past decision | `docs/decisions.md` |
 | A change that you send from outside | `CONTRIBUTING.md` |
@@ -37,11 +37,12 @@ New specs go in `docs/superpowers/specs/` and get a row in `docs/README.md`.
 10. **`DesqueezeCore` and `DesqueezeCLI` import Foundation only.** AppKit and SwiftUI stay in `App/`. Only `MCPServer/` has third-party code. File work stays in the core, behind protocols, so tests use fakes.
 11. **Every sentence that two front ends say is made once, in the core.** A front end reads a note's `kind`, never the English sentence. UI copy is sentence case, with no exclamation marks and no emoji. An error is one plain sentence, with the tool's own words on a detail line.
 12. **Not sandboxed, offline, private.** No entitlements file exists, on purpose: a sandboxed app cannot start the programs. No network requests, no analytics.
+13. **One run in a folder at a time.** A run holds an advisory lock on the folder itself (`Sources/DesqueezeCore/FolderLock.swift`). No lock file is made. A second run does not start, in any front end, and says the core's sentence. A scan and a dry run take no lock. On a volume that gives no lock, the run goes on without one.
 
 ## Working here
 
 - Run the three suites before any claim of done: `swift test`, then `swift test --package-path MCPServer`, then `xcodegen generate` and `xcodebuild -project PlateworksDesqueeze.xcodeproj -scheme PlateworksDesqueeze -derivedDataPath build test`. The docs check runs inside the first and holds this file under 2,000 tokens.
-- The tests on the real programs skip until `fixtures/` exists. Make it with `scripts/make_fixtures.sh` and one ARW. `fixtures/` is gitignored: the photo is private. Any Sony ARW that both converters can read works. The tests of the dnglab match skip for a frame that the match table does not cover.
+- The tests on the real programs skip until `fixtures/` exists. Make it with `scripts/make_fixtures.sh` and one ARW. `fixtures/` is gitignored, and so is every ARW and DNG in the tree: the photo is private. Any Sony ARW that both converters can read works. The tests of the dnglab match skip for a frame that the match table does not cover.
 - The drift check, `AdobeDriftTests`, needs both converters and a fixture frame that the match table covers. Run it after a new version of a converter or new camera firmware.
 - A behavioral test counts only after it fails against a break.
 - Never test on a real shoot folder. Copy it first.

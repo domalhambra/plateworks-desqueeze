@@ -47,6 +47,15 @@ The first version. It is built from source, and there is no download.
   it is complete. A DNG that another program made is never replaced.
 - A hidden work file that a run left when it ended hard goes to the Trash
   before its photo converts again. `--verbose` says so.
+- One run in a folder at a time. A run holds a lock on the folder, which
+  makes no file. A second run in the same folder does not start, from any
+  front end, and says: "Another Desqueeze run is working in this folder.
+  Wait for it to end, then run again." A scan and a dry run take no lock.
+- An ARW whose name is too long for the hidden work file gets no converter.
+  The note says: "The file name is too long. Shorten it, then run again."
+  The limit is a base name of 235 bytes.
+- A factor with a comma, such as "1,5", is refused with the rule and one
+  more sentence: "Use a period for the decimal point."
 - Control-C, a plain `kill` and a closed Terminal window stop a run after
   the current file.
 
@@ -61,4 +70,6 @@ The first version. It is built from source, and there is no download.
   way out, and no file is harmed.
 - On a volume with no exclusive rename, such as ExFAT, the app checks the
   name and then renames. A moment lies between the two calls.
+- On a volume that gives no lock for a folder, a run goes on without one.
+  Two runs at once in one folder are then the user's to prevent.
 - The app is not signed with a Developer ID and not notarized.

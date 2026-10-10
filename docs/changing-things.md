@@ -34,14 +34,20 @@ during a run.
 The tests on the real programs need one ARW and one DNG in `fixtures/`. The
 folder is gitignored: the photo is yours and stays on your Mac.
 
-1. Install Adobe DNG Converter in `/Applications`. The script uses it to
-   make the DNG.
+1. Install the programs that make the DNG. With Adobe DNG Converter in
+   `/Applications`, the script uses it. Without it, the script uses dnglab,
+   and exiftool then writes the name of the ARW into the DNG, as the app
+   does. With neither, the script stops before it copies a file.
 2. Run the script with one ARW file. The script copies the file and does not
    change it.
 
    ```bash
    scripts/make_fixtures.sh "/path/to/one file.ARW"
    ```
+
+Every test passes with either DNG. The tests that start Adobe DNG Converter
+skip on a Mac that does not have it. `.gitignore` also ignores every ARW,
+every DNG and every backup of a DNG, wherever it is in the tree.
 
 Any Sony ARW that dnglab and Adobe DNG Converter can read works. A test
 takes each value that it expects from the frame itself. The drift check and
@@ -63,12 +69,13 @@ tool's own words on a detail line below it.
    | The sentence is about | File | Test |
    |---|---|---|
    | A folder: the counts, the run button, read-only, the advice about the converters | `Sources/DesqueezeCore/FolderText.swift` | `Tests/DesqueezeCoreTests/FolderTextTests.swift` |
-   | One file of a run: most notes, the counts line, the Lightroom line | `Sources/DesqueezeCore/RunSummary.swift` | `Tests/DesqueezeCoreTests/RunSummaryTests.swift` |
+   | One file of a run: most notes, the counts line, the Lightroom line and when it shows, the line about the two converters | `Sources/DesqueezeCore/RunSummary.swift` | `Tests/DesqueezeCoreTests/RunSummaryTests.swift` |
+   | A run that did not start, because another run works in the folder | `Sources/DesqueezeCore/FolderLock.swift` | `Tests/DesqueezeCoreTests/FolderLockTests.swift` |
    | A write that failed, a backup that was restored, a partial DNG | `Sources/DesqueezeCore/DesqueezeJob.swift` | `Tests/DesqueezeCoreTests/DesqueezeJobTests.swift` |
    | Who converts | `Sources/DesqueezeCore/ConverterChoice.swift` | `Tests/DesqueezeCoreTests/ConverterChoiceTests.swift` |
-   | A failed conversion, a leftover file | `Sources/DesqueezeCore/RawConverter.swift` | `Tests/DesqueezeCoreTests/RawConverterTests.swift` |
+   | A failed conversion, a leftover file, a file name that is too long | `Sources/DesqueezeCore/RawConverter.swift` | `Tests/DesqueezeCoreTests/RawConverterTests.swift` |
    | A missing exiftool, the dnglab install | `Sources/DesqueezeCore/ToolLocator.swift` | `Tests/DesqueezeCoreTests/ToolLocatorTests.swift` |
-   | A wrong factor | `Sources/DesqueezeCore/SqueezeFactor.swift` | `Tests/DesqueezeCoreTests/SqueezeFactorTests.swift` |
+   | A wrong factor, and the hint for a factor with a comma | `Sources/DesqueezeCore/SqueezeFactor.swift` | `Tests/DesqueezeCoreTests/SqueezeFactorTests.swift` |
    | A path that is no folder | `Sources/DesqueezeCore/FolderChoice.swift` | `Tests/DesqueezeCoreTests/FolderChoiceTests.swift` |
    | The help and the usage errors of the tool | `Sources/DesqueezeCLI/Usage.swift`, `Sources/DesqueezeCLI/Arguments.swift` | `Tests/DesqueezeCLITests/CommandsTests.swift`, `Tests/DesqueezeCLITests/ArgumentsTests.swift` |
    | The layout of the tool's text | `Sources/DesqueezeCLI/TextOutput.swift` | `Tests/DesqueezeCLITests/TextOutputTests.swift` |
@@ -194,6 +201,12 @@ The files to change:
 - `Tests/DesqueezeCoreTests/AdobeMatchTests.swift`:
   `testTheTableIsTheDataFile` pins one camera today. Extend it to the new
   data file first, and see it fail.
+- `Tests/DesqueezeCoreTests/DnglabIntegrationTests.swift`: the helper
+  `factsOfACoveredFrame` decides which fixture frames the table covers. It
+  reads the data file of the A7S III, and no other. Make it read the new
+  data file too. Until it does, the drift check and the tests of the real
+  dnglab match skip for a frame of the new camera, and a skip proves
+  nothing.
 - The design, 13.4 and 13.9, and `README.md`: both say that the table has one
   camera.
 
@@ -213,6 +226,7 @@ Read design 4.3 step 1, 13.3 and 13.4 first. Then read the rules in
 | The rename that never replaces | `Sources/DesqueezeCore/ExclusiveRename.swift` | `Tests/DesqueezeCoreTests/ExclusiveRenameTests.swift` |
 | Which converter gets an ARW | `Sources/DesqueezeCore/ConverterChoice.swift` | `Tests/DesqueezeCoreTests/ConverterChoiceTests.swift` |
 | What the run does after a failed conversion | `Sources/DesqueezeCore/DesqueezeJob.swift` | `Tests/DesqueezeCoreTests/DesqueezeJobTests.swift` |
+| One run in a folder at a time: the lock, and what each answer of the system means | `Sources/DesqueezeCore/FolderLock.swift` | `Tests/DesqueezeCoreTests/FolderLockTests.swift`, and `Tests/DesqueezeCLITests/TwoRunsTests.swift` with two processes |
 
 1. Change the design first. The design is the contract.
 2. Write the test on fakes, and see it fail.

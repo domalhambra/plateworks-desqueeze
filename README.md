@@ -49,6 +49,21 @@ Adobe DNG Converter is not part of this project. The app does not contain
 it, and you do not need it. With no converter at all, Desqueeze still sets
 the tag on the DNG files that you have, and leaves the ARW files alone.
 
+The build needs a Swift compiler of version 6.1 or later: the manifest of
+the MCP server, `MCPServer/Package.swift`, asks for it. The manifest of the
+root package asks for 5.9. The window is built in the Swift 6 language mode,
+which `project.yml` sets. Everything was built and tested with Swift 6.4 and
+Xcode 27 only. The section "Built and tested on" has each version.
+
+Where each front end looks for the programs:
+
+- **exiftool and dnglab.** `/opt/homebrew/bin`, then `/usr/local/bin`, then
+  each folder of `PATH`. A window that Finder starts gets a short `PATH`,
+  so it finds the two programs in the two Homebrew folders only.
+- **Adobe DNG Converter.** The window asks macOS where the app is, so it
+  finds it wherever it is installed. The command line tool and the MCP
+  server look in the Applications folder only.
+
 ## One camera is measured
 
 A DNG from dnglab and a DNG from Adobe DNG Converter do not render the same.
@@ -93,6 +108,8 @@ cp -R build/Build/Products/Release/Desqueeze.app /Applications/
 1. Open Desqueeze.
 2. Drop a folder of photos on the window, or click "Choose folder".
 3. Select the squeeze factor of the lens: 1.33, 1.5, 1.8 or 2, or type one.
+   The first time, 1.5 is selected. After that, the window starts with the
+   factor of the last run.
 4. Click the button that reads "Desqueeze", with the count of photos. The
    window shows the progress, then the counts and a line for each file that
    has something to say.
@@ -112,8 +129,13 @@ swift build -c release
 Copy the tool to a folder on your `PATH`, for example:
 
 ```bash
+mkdir -p ~/.local/bin
 cp .build/release/desqueeze ~/.local/bin/
 ```
+
+`~/.local/bin` must be on your `PATH`. A new Mac does not have it there.
+Add it in the start file of your shell, or copy the tool to a folder that
+is on the `PATH` already.
 
 ```bash
 desqueeze scan "/path/to/a folder"                         # what the folder holds. Changes no file.
@@ -133,8 +155,9 @@ desqueeze remove "/path/to/a folder"                       # set every DNG back 
 The exit code is 0 when the command completed and no file failed or was
 blocked. It is 1 when a file failed or was blocked, or when the run was
 stopped. It is also 1 when the folder could not be read, when a run met a
-read-only folder, and when exiftool is missing. It is 2 for a wrong command line. Control-C stops
-a run after the current file, and the tool still prints the result so far.
+read-only folder, when another run works in the folder, and when exiftool is
+missing. It is 2 for a wrong command line. Control-C stops a run after the
+current file, and the tool still prints the result so far.
 
 ### The MCP server
 
@@ -155,6 +178,22 @@ claude mcp add desqueeze -- /absolute/path/to/desqueeze-mcp
 The server has three tools: `desqueeze_scan`, `desqueeze_run` and
 `desqueeze_remove`. They do the work of the three commands above and return
 the same JSON. A person does not type to the server.
+
+### One run in a folder at a time
+
+Only one run works in a folder at a time. A run holds a lock on the folder
+until it ends. The lock makes no file. A second run in the same folder does
+not start and changes nothing: from the window, from the tool, or from the
+server. It says:
+
+```
+Another Desqueeze run is working in this folder. Wait for it to end, then run again.
+```
+
+The tool then gives the exit code 1, and the server gives a tool error. A
+scan and a dry run take no lock. While a run works, they can show a folder
+in change. On a volume that gives no such lock, the run goes on without one.
+Do not start two runs in one folder there.
 
 ### What happens to your files
 
@@ -192,15 +231,17 @@ ARW of your own:
 scripts/make_fixtures.sh "/path/to/one file.ARW"
 ```
 
-The script needs Adobe DNG Converter. Any Sony ARW that dnglab and Adobe DNG
-Converter can read works: a test takes each value that it expects from the
-frame itself. A test skips, and does not fail, when what it needs is absent:
+The script makes the DNG with Adobe DNG Converter. When that is not
+installed, it makes the DNG with dnglab and exiftool. With neither, it stops
+before it copies a file. Any Sony ARW that dnglab and Adobe DNG Converter can
+read works: a test takes each value that it expects from the frame itself.
+A test skips, and does not fail, when what it needs is absent:
 
 | Absent | What skips |
 |---|---|
 | `fixtures/` | Every test on the real programs, and the end-to-end tests of the tool and of the server that run on a photo |
 | dnglab | The tests of the real dnglab conversion, and the drift check |
-| Adobe DNG Converter | The tests of the real Adobe conversion, the drift check, and the end-to-end tests that run on a photo |
+| Adobe DNG Converter | The tests of the real Adobe conversion, the tests of the real exiftool in `Tests/DesqueezeCoreTests/IntegrationTests.swift`, the drift check, and the end-to-end tests that run on a photo |
 | A frame that the match table covers (the section "One camera is measured") | The drift check, and the tests of the real dnglab match |
 
 Never test on a real shoot folder. Copy it first.

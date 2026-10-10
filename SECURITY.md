@@ -16,6 +16,15 @@ can damage, lose or expose a person's files is a security problem here.
   exiftool can leave beside that work file. It moves a leftover of an
   earlier run only when it is a regular file, not a folder and not a link.
   It deletes nothing.
+- **One run in a folder at a time.** A run holds an advisory lock on the
+  folder until it ends: `flock` on the folder itself. The lock makes no
+  file, and it goes when the run ends or the program ends. A second run in
+  the same folder does not start and changes nothing: from the window, the
+  command line tool or the MCP server. Without the lock, the second run
+  would take the first run's work file for a leftover, and send it to the
+  Trash. A scan and a dry run take no lock. On a volume that gives no such
+  lock, the run goes on without one. The lock does not stop another program:
+  only Desqueeze asks for it.
 - **Three external programs.** It starts exiftool, dnglab and Adobe DNG
   Converter as separate processes, with no shell. It looks for exiftool and
   dnglab in `/opt/homebrew/bin`, then `/usr/local/bin`, then each folder of
@@ -50,3 +59,10 @@ the command with `--verbose` when you can. Do not attach a photo that you do
 not want public.
 
 Only the newest version gets fixes.
+
+## For the maintainer
+
+The report path above needs private vulnerability reporting. GitHub has it
+off for a new repo. When the GitHub repo is made, switch it on in the
+security settings of the repo: "Private vulnerability reporting". Until
+then, the "Report a vulnerability" button is not there.
