@@ -492,7 +492,8 @@ desqueeze --help
 - When Adobe DNG Converter is missing, `run` still tags the DNG files, says
   how many ARW files it left, and exits 0.
 - Control-C stops the run after the current file, prints the result so far,
-  and exits 1. `stopped` is true only when the run left work undone. A
+  and exits 1. A closed Terminal window (`SIGHUP`) and a plain `kill`
+  (`SIGTERM`) do the same. `stopped` is true only when the run left work undone. A
   Control-C that arrives during the last file leaves nothing undone: the
   result is the complete result, `stopped` is false, and the exit code is the
   one the complete run gives. The window's Cancel follows the same rule.
@@ -684,18 +685,51 @@ available`, and neither converter writes a block.
 | Killed in work, it left a DNG of 0 bytes, 4 bytes, or a cut-off 12.1 MB. | The partial-DNG rule of 4.3 holds for dnglab too. |
 | The output is DNG 1.6, lossless, and passes `exiftool -validate`, also after the tags are written. | |
 
-### 13.3 The match
+### 13.3 The match, on a work file
 
-After dnglab made `<base>.dng`, the app writes the tags of 13.2 and
-`IFD0:OriginalRawFileName` with **one** exiftool call, with `-m` and
-`-overwrite_original`: the file is this run's own, a minute old, and has no
-earlier state to keep. Then it reads the tags back and compares them. The
-conversion passes only when dnglab returned 0, the DNG has bytes, and the
-read-back equals what was written.
+dnglab does not write `<base>.dng`. It writes a **work file** in the same
+folder, `.<base>.desqueeze-work.dng`. The name starts with a period, so the
+scan (4.1), Finder and Lightroom do not see it. The steps:
 
-If any of these fails, the DNG is this run's partial output: the partial-DNG
-rule of 4.3 moves it to the Trash, and the next converter, if there is one,
-gets the ARW.
+1. If a work file with that name is there, a run that ended hard left it.
+   Its name says it is this app's own, so the app moves it to the Trash and
+   goes on.
+2. `dnglab convert --embed-raw false <in.ARW> <work file>`.
+3. The app writes the tags of 13.2 and `IFD0:OriginalRawFileName` into the
+   work file with **one** exiftool call, with `-m` and `-overwrite_original`:
+   the file is this run's own, a second old, and has no earlier state to
+   keep.
+4. It reads the tags back and compares them.
+5. It moves the work file to `<base>.dng` with a rename that **fails when
+   anything has that name** (`renamex_np` with `RENAME_EXCL`). On a volume
+   that does not have that call, it checks the name without following links
+   and then renames.
+
+The conversion passes only when dnglab returned 0, the work file has bytes,
+the read-back equals what was written, and the rename passed.
+
+Why a work file:
+
+- `<base>.dng` appears only when it is complete and matched. A run that ends
+  hard (Force Quit, a crash, a closed Terminal window, power loss) leaves a
+  hidden work file and a pending ARW, never a DNG that looks done and is not
+  matched. Before this, such a DNG claimed its ARW, and later runs tagged it
+  with no note.
+- The only file a failed dnglab conversion sends to the Trash is the work
+  file. A `<base>.dng` that another program made at the wrong moment is
+  never taken for the app's own: the rename fails, the work file goes to the
+  Trash, and the note says "A DNG with this name exists already. Not
+  converted." The next converter is not tried for that ARW.
+- dnglab's exit code 6 (the output exists) can then mean only a leftover
+  work file that step 1 could not remove. It is reported as a failure with
+  no partial output.
+
+Adobe DNG Converter cannot write to a name the app gives it, so its rule
+stays as 4.3 has it: the check before the start, and the partial-DNG rule.
+
+Before either converter starts, a file named `<base>.dng_exiftool_tmp` stops
+the conversion of that ARW, with a note that names it: exiftool refuses to
+write beside its own leftover, so the tag step could never pass.
 
 The tag step of 4.3 (`DefaultScale`) is not changed. It runs after the
 conversion, as before, with its own backup and check.
@@ -712,6 +746,7 @@ A frame has a **full match** when all four hold:
 2. The ISO has a row: 50, or one of the 22 measured values from 80 to 12800.
 3. The daylight levels are there, with green 1024.
 4. The ARW says that it has no lens-correction data.
+5. The ARW is compressed raw, the only kind that was measured.
 
 | The ARW | dnglab and Adobe installed | Only dnglab | Only Adobe | Neither |
 |---|---|---|---|---|
@@ -719,9 +754,9 @@ A frame has a **full match** when all four hold:
 | No full match | Adobe | dnglab, matched as far as the table goes, with a note | Adobe | Not converted |
 | dnglab or its match failed | Adobe, then failed if Adobe fails too | Failed | | |
 
-"Matched as far as the table goes": when rules 1 to 3 hold and only rule 4
-fails, the app writes every tag, and the note says the DNG has no built-in
-lens correction. When rule 1, 2 or 3 fails, the app writes only
+"Matched as far as the table goes": when rules 1, 2, 3 and 5 hold and only
+rule 4 fails, the app writes every tag, and the note says the DNG has no built-in
+lens correction. When rule 1, 2, 3 or 5 fails, the app writes only
 `OriginalRawFileName`, and the note says the levels are dnglab's own. Each
 note ends: "Install Adobe DNG Converter for the same file that Lightroom
 makes." Such a file counts as converted. It is not failed and not blocked,
@@ -779,8 +814,10 @@ other is installed.
 
 ### 13.9 Known limits
 
-- The table is one camera, at firmware 5.00, compressed raw, ISO 50 and 80 to
-  12800 without 1250. Any other frame goes to Adobe, or gets the note.
+- The table is one camera, compressed raw, ISO 50 and 80 to 12800 without
+  1250. Any other frame goes to Adobe, or gets the note. The values were
+  measured at firmware 5.00. The app does not check the firmware: after a
+  firmware update, run the drift check on a new frame.
 - A matched render is not bit-identical to Adobe's. The mean of each colour
   channel is within 0.7%.
 - The table's numbers come from Adobe DNG Converter's output. Before a public
