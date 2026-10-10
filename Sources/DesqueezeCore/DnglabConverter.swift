@@ -39,7 +39,8 @@ import Foundation
 ///
 /// **dnglab's exit code 6** says that its output exists, and that it did not
 /// touch it. Step 1 removed the leftover, so the file came after that. It is
-/// reported as a failure with no partial output.
+/// reported as a failure with no partial output. dnglab names the file by
+/// its whole path, and the sentence gives its name only.
 ///
 /// **The tags** are what `AdobeMatch` gives for the facts of the ARW, and
 /// `IFD0:OriginalRawFileName`, which dnglab does not write with

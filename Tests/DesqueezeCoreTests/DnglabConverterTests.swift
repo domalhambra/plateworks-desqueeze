@@ -317,7 +317,9 @@ final class DnglabConverterTests: XCTestCase {
     // leftover was discarded before dnglab started, so this file came after
     // that. It is not this conversion's, and it is not reported.
     // The words are what dnglab 0.8.0 printed on 2026-10-09 for a work file
-    // that was there, with exit code 6.
+    // that was there, with exit code 6. dnglab names the file by its whole
+    // path. The sentence has the name only: the file is beside the photo,
+    // and a note names every other file by its name.
     func testExitCodeSixReportsNoPartialAlsoWithAFileAtTheWorkName() {
         tools.dnglabExit = 6
         tools.dnglabError = [
@@ -326,11 +328,35 @@ final class DnglabConverterTests: XCTestCase {
             "Total time: 0.00s",
             "Error: Already exists: /tmp/Shoot 1/.DSC05680.desqueeze-work.dng",
         ].joined(separator: "\n") + "\n"
-        assertFails(.failed("dnglab returned 6. Already exists: /tmp/Shoot 1/.DSC05680.desqueeze-work.dng.",
-                            partial: nil))
+        assertFails(.failed("dnglab returned 6. Already exists: .DSC05680.desqueeze-work.dng.", partial: nil))
         XCTAssertTrue(disk.paths.contains(workPath), "a file is at the work name")
         XCTAssertEqual(runner.calls, [convertCall])
         XCTAssertEqual(tools.renames, [])
+    }
+
+    // dnglab's reason is cut to 200 characters. The path of the work file
+    // becomes its name before that, so a long path does not stay as a path
+    // that is cut in the middle.
+    func testTheWorkFileIsNamedByItsNameAlsoWhenItsPathIsLong() {
+        let deep = "/tmp/" + String(repeating: "a folder with a long name/", count: 9) + "Shoot 1"
+        let arw = URL(fileURLWithPath: deep + "/DSC05680.ARW")
+        XCTAssertGreaterThan(deep.count, DnglabConverter.reasonLimit)
+        tools.dnglabExit = 6
+        tools.dnglabError = "Error: Already exists: \(deep)/.DSC05680.desqueeze-work.dng\n"
+        XCTAssertThrowsError(try converter().convert(arw, facts: adapted)) {
+            XCTAssertEqual($0 as? ConvertError,
+                           .failed("dnglab returned 6. Already exists: .DSC05680.desqueeze-work.dng.", partial: nil))
+        }
+    }
+
+    // Only the path of the work file changes. Every other word of dnglab's
+    // stays, also another path.
+    func testTheOtherWordsOfDnglabsReasonStayAsTheyAre() {
+        tools.dnglabExit = 1
+        tools.dnglabError = "Error: Cannot read /tmp/Shoot 1/DSC05680.ARW, wanted by /tmp/Shoot 1/other.dng\n"
+        assertFails(.failed(
+            "dnglab returned 1. Cannot read /tmp/Shoot 1/DSC05680.ARW, wanted by /tmp/Shoot 1/other.dng.",
+            partial: work))
     }
 
     // A file that dnglab cannot read: exit code 7, and no DNG.

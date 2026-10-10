@@ -274,7 +274,8 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
 
     // The real dnglab returns 6 for an output that exists, and does not
     // touch it. Here the discard says yes and leaves the file. The file is
-    // not reported as partial, so nothing sends it anywhere.
+    // not reported as partial, so nothing sends it anywhere. The real dnglab
+    // prints the whole path of the file, and the sentence has its name.
     func testTheRealDnglabReturnsSixForAWorkFileThatIsStillThereAndReportsNoPartial() throws {
         let arw = try copyFixture(as: "frame.ARW")
         let work = folder.appendingPathComponent(".frame.desqueeze-work.dng")
@@ -282,7 +283,7 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
         let converter = DnglabConverter(executable: dnglab, exiftool: exiftool, discardLeftover: { _ in })
         XCTAssertThrowsError(try converter.convert(arw, facts: try facts(of: arw))) {
             XCTAssertEqual($0 as? ConvertError,
-                           .failed("dnglab returned 6. Already exists: \(work.path).", partial: nil))
+                           .failed("dnglab returned 6. Already exists: .frame.desqueeze-work.dng.", partial: nil))
         }
         XCTAssertEqual(try Data(contentsOf: work), Data("not this run's".utf8))
         XCTAssertEqual(try names(), [".frame.desqueeze-work.dng", "frame.ARW"])

@@ -279,6 +279,9 @@ struct ConverterRules: Sendable {
     /// The program's own reason for a non-zero exit, from what it printed.
     /// It follows the sentence with the exit code, on the same line. Nil
     /// when the program gave none: the sentence then stands alone.
+    ///
+    /// In what it gets, the path of the work file is its name already
+    /// (`naming`): a sentence names a file beside the photo by its name.
     var reason: @Sendable (ProcessResult) -> String? = { _ in nil }
     /// The exit codes of rule 7.
     var exitCodesThatLeaveTheOutputAlone: Set<Int32> = []
@@ -325,7 +328,9 @@ struct ConverterRules: Sendable {
             var text = "\(name) returned \(result.exitCode)."
             // The reason is the program's, and the next sentence can be the
             // job's, about the partial DNG. A period keeps the two apart.
-            if let reason = reason(result) { text += " " + reason + (reason.hasSuffix(".") ? "" : ".") }
+            if let reason = reason(Self.naming(work, in: result)) {
+                text += " " + reason + (reason.hasSuffix(".") ? "" : ".")
+            }
             let wrote = !exitCodesThatLeaveTheOutputAlone.contains(result.exitCode)
             throw ConvertError.failed(text, partial: wrote && exists(work.path) ? work : nil)
         }
@@ -347,6 +352,17 @@ struct ConverterRules: Sendable {
         }
         try move(work, to: output)
         return output
+    }
+
+    /// What a program printed, with the name of the work file where the
+    /// program wrote its whole path. dnglab says `Already exists: <path>`
+    /// for exit code 6. The change is made before `reason` cuts the words
+    /// to their limit, so a long path is never left cut in the middle.
+    static func naming(_ work: URL, in result: ProcessResult) -> ProcessResult {
+        func named(_ text: String) -> String {
+            text.replacingOccurrences(of: work.path, with: work.lastPathComponent)
+        }
+        return ProcessResult(exitCode: result.exitCode, stdout: named(result.stdout), stderr: named(result.stderr))
     }
 
     /// The work file as the partial output of a step that came after the
