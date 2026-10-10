@@ -12,43 +12,31 @@
 
 **Revisions after review, 2026-10-09.** The code blocks in Tasks 1 to 8 are the first version of each file. Each task's quality review changed the code, and the changes for Tasks 6 to 8 were designed by the fix implementers from review requirements, not from this plan. The repo and the design are the source of truth. Tasks 9 and 10 (the command line tool and the MCP server) were added at Dom's request and are requirement-driven. The documents task is now Task 11, workspace registration Task 12, acceptance Task 13, and the GitHub repo Task 14.
 
-## Status, 2026-10-09 night
+## Status, 2026-10-09 late night
 
-Branch `build/v1`. Tests at the last full check: 260 core, 90 tool, 22 window
-(hostless, `xcodebuild test`), 43 MCP server (`swift test --package-path
-MCPServer`), 0 failures.
+Branch `build/v1`. Tests at the last full check: 497 core (with the three
+docs tests), 115 tool, 34 window (hostless, `xcodebuild test`), 61 MCP server
+(`swift test --package-path MCPServer`), 0 failures.
 
 | Task | State |
 |---|---|
-| 1 to 7 | Complete. |
-| 8, the window | Complete: three review rounds, then `b13f74b` and `87af8cf`. The window's state logic has unit tests in `App/PlateworksDesqueezeTests/`. |
-| 9, core support and `desqueeze` | Complete but for three small converter items from its last review, which Task 15A carries (its Part 1). |
-| 10, `desqueeze-mcp` | Complete: built, merged (`c32be50`), fixed (`70f7c82`), re-reviewed. In its own package, `MCPServer/`. |
-| 15A, dnglab first: the core | Complete (`b914abb` to `6467cde`), reviewed. Design section 13. |
-| 15B, dnglab first: the three front ends | Complete (`665e09e` to `f3cab30`), reviewed. |
-| 15C, the work file | Built (`bb61646` to `85f6a6c`): dnglab writes a hidden work file and an exclusive rename gives the DNG its name. In review. |
-| 15D, the words | Fixes from the review of 15B. In work. |
-| 16, the documentation site | **New, Dom's decision 2026-10-09.** A DocC catalog in `Sources/DesqueezeCore/`, built with Xcode's `docc` and no package dependency: a user guide, how the match works, the tool and MCP reference, a contributor guide, and the API reference from the code. Built on Dom's Mac. Published later, on Dom's yes: a published site is a new property under the brand rules. After Task 11. |
-| 11 to 14 | Task 11 now also carries the MIT license (copyright Plateworks), the Medium tier (`docs/architecture.md`, `docs/changing-things.md`), and `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`. The repo stays private until Dom says. Before it goes public: Dom looks at the match table's origin, the render image in the specs folder (his photo), and the workspace paths in the documents. Not started. Task 11's texts in this plan predate the command line tool, the MCP server and dnglab, and must cover all three. Task 13 also installs both tools and dnglab (`brew install dnglab` is done on Dom's Mac), registers the MCP server on Dom's yes, and needs Dom for the Lightroom check and one real drag from Finder. |
-
-**Task 15, dnglab first.** Dom asked for dnglab as the converter, matched to
-Adobe's output, with Adobe DNG Converter as an optional backup. The match was
-measured on scratch copies at 23 ISO settings and is in design section 13,
-with the values in `docs/superpowers/specs/2026-10-09-ilce-7sm3-adobe-values.json`.
-15A is the core: `ARWFacts`, `AdobeMatch`, `DnglabConverter`,
-`ConverterChoice`, both converters in the job, the new report keys, and a
-drift check that converts one file with both tools and compares the tags.
-15B is the front ends: the dependency messages of 13.5, the tool's text, the
-MCP tool descriptions.
-
-**Not yet seen by anyone:** the window in the foreground at launch (focus), a
-real drag from Finder, VoiceOver, Command-Q twice during a run. All are in
-Task 13.
+| 1 to 10 | Complete, each reviewed. |
+| 15A to 15E, dnglab first | Complete. dnglab converts each photo it can match, into a hidden work file, with the match written and read back, then an exclusive rename. Adobe DNG Converter is the optional backup and uses the same work file. Design section 13. A final review of 15E is still owed (it is part of the whole-implementation review). |
+| 11, the documents | Written and merged (`7eebdd1`): Medium tier, the MIT license (copyright Plateworks), `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`, issue and pull-request templates. |
+| 17A, ready for a public reader | In work: the last private names in the tree, fixture tests that work for anyone, and the documents brought in line with the last code change. |
+| 16, the documentation site | In work, on the branch `build/v1-site` in a worktree: a DocC catalog, `scripts/build_docs.sh`, and two workflows (the site to GitHub Pages; the tests). Merge after 17A. |
+| Whole-implementation review | After 16 and 17A are merged. Then `finishing-a-development-branch`. |
+| 12, workspace registration | Not started. Notes in the session scratch `tasks/task-12-notes.md`: the Desqueeze copy of `docs_check.py` is a registered local adaptation in `VENDORED.md`; the rows describe today's product. |
+| 13, acceptance and install | Not started. Needs Dom: one file in Lightroom at each factor he uses, one real drag from Finder, the window at launch, VoiceOver, Command-Q twice during a run. Installs the app, `desqueeze` and `desqueeze-mcp`; registers the MCP server on Dom's yes. |
+| 17B, the public tree | After acceptance. Dom's decisions, 2026-10-09: the public repo starts with **one clean first commit**; the full history stays in a private local branch and is never pushed; the render image is removed (done, `2666c03`). This task replaces this plan with a short build history, removes the plan's task file, runs the search for private names on the whole tree, and makes the orphan first commit. |
+| 14, the GitHub repo | On Dom's explicit yes at that time: create `plateworks-desqueeze`, push the one first commit, then make it public on a second yes. After the first push: prove the two workflows, and turn on GitHub Pages. |
+| The brand checklist | A public repo with a site is a published property: a register row, an accent colour, a privacy page for the site. Drafts for Dom's review. |
 
 **To tell Dom at the end:** the Trash was emptied twice on 2026-10-09 (about
 15:14 and 15:59) by something that was not an agent. 270 empty test
 preference files were moved from `~/Library/Preferences` to the session
-scratch folder. The scratch folder holds about 14 GB of fixture copies.
+scratch folder. The scratch folder holds fixture copies and can be cleared.
+Old `desqueeze-*-tests-*` folders from the afternoon are in `$TMPDIR`.
 
 **Rules for every task**
 
