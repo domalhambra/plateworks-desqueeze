@@ -19,6 +19,24 @@ final class ToolLocatorTests: XCTestCase {
         XCTAssertEqual(found.exiftool()?.path, "/usr/local/bin/exiftool")
     }
 
+    // dnglab is found as exiftool is (design 13.5).
+    func testDnglabCandidateOrder() {
+        let found = locator(path: "/usr/bin:/opt/tools:/usr/local/bin", present: [])
+        XCTAssertEqual(found.dnglabCandidates, [
+            "/opt/homebrew/bin/dnglab", "/usr/local/bin/dnglab", "/usr/bin/dnglab", "/opt/tools/dnglab",
+        ])
+        XCTAssertEqual(locator(path: "bin:.:~/bin::/opt/tools", present: []).dnglabCandidates, [
+            "/opt/homebrew/bin/dnglab", "/usr/local/bin/dnglab", "/opt/tools/dnglab",
+        ])
+    }
+
+    func testDnglabTakesTheFirstExecutableCandidate() {
+        let found = locator(path: "/opt/tools", present: ["/usr/local/bin/dnglab", "/opt/tools/dnglab",
+                                                          "/opt/homebrew/bin/exiftool"])
+        XCTAssertEqual(found.dnglab()?.path, "/usr/local/bin/dnglab")
+        XCTAssertEqual(found.exiftool()?.path, "/opt/homebrew/bin/exiftool")
+    }
+
     func testConverterPrefersTheRegisteredApp() {
         let registered = URL(fileURLWithPath: "/Users/x/Apps/Adobe DNG Converter.app")
         let binary = "/Contents/MacOS/Adobe DNG Converter"
@@ -31,6 +49,7 @@ final class ToolLocatorTests: XCTestCase {
     func testMissingToolsReturnNil() {
         let found = locator(path: "/usr/bin", present: [])
         XCTAssertNil(found.exiftool())
+        XCTAssertNil(found.dnglab())
         XCTAssertNil(found.dngConverter())
     }
 

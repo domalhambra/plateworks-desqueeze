@@ -1,6 +1,7 @@
 import Foundation
 
-/// Finds the two external tools. Holds no path that is specific to one Mac.
+/// Finds the three external tools: exiftool, dnglab, and Adobe DNG Converter.
+/// Holds no path that is specific to one Mac.
 ///
 /// A Mac app started from Finder gets a short `PATH` with no Homebrew folder,
 /// so the two fixed Homebrew locations come first.
@@ -15,6 +16,8 @@ public struct ToolLocator: Sendable {
     public static let exiftoolInstallCommand = "brew install exiftool"
 
     public let exiftoolCandidates: [String]
+    /// dnglab is looked for where exiftool is (design 13.5).
+    public let dnglabCandidates: [String]
     public let converterApps: [String]
     private let isExecutable: @Sendable (String) -> Bool
 
@@ -25,13 +28,14 @@ public struct ToolLocator: Sendable {
         registeredConverterApp: URL? = nil,
         isExecutable: @escaping @Sendable (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
     ) {
-        var tools = ["/opt/homebrew/bin/exiftool", "/usr/local/bin/exiftool"]
-        // A relative entry would resolve against the app's working folder.
-        for folder in (pathVariable ?? "").split(separator: ":") where folder.hasPrefix("/") {
-            let candidate = "\(folder)/exiftool"
-            if !tools.contains(candidate) { tools.append(candidate) }
+        // The two Homebrew folders, then each folder of `PATH`. A relative
+        // entry would resolve against the app's working folder.
+        var folders = ["/opt/homebrew/bin", "/usr/local/bin"]
+        for folder in (pathVariable ?? "").split(separator: ":").map(String.init) where folder.hasPrefix("/") {
+            if !folders.contains(folder) { folders.append(folder) }
         }
-        exiftoolCandidates = tools
+        exiftoolCandidates = folders.map { "\($0)/exiftool" }
+        dnglabCandidates = folders.map { "\($0)/dnglab" }
 
         var apps: [String] = []
         if let registered = registeredConverterApp { apps.append(registered.path) }
@@ -42,6 +46,10 @@ public struct ToolLocator: Sendable {
 
     public func exiftool() -> URL? {
         exiftoolCandidates.first(where: isExecutable).map { URL(fileURLWithPath: $0) }
+    }
+
+    public func dnglab() -> URL? {
+        dnglabCandidates.first(where: isExecutable).map { URL(fileURLWithPath: $0) }
     }
 
     public func dngConverter() -> URL? {
