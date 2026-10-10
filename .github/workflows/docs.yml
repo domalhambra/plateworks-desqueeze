@@ -1,0 +1,78 @@
+# Builds the documentation site and publishes it to GitHub Pages.
+#
+# NOT YET RUN. This workflow was written before the repo was on GitHub, so it
+# has never started. Only scripts/build_docs.sh was run, on one Mac (macOS
+# 27.2, Xcode 27.0, Swift 6.4). Check these on the first run:
+#
+#   1. Pages. In the repo settings, under Pages, the source must be "GitHub
+#      Actions". Without it, the configure-pages step fails.
+#   2. The runner image. Read the output of the "Versions" step. The package
+#      has the tools version 5.9, and it was built with Swift 6.4 only. If
+#      the default Xcode of the image cannot build it, pin `runs-on` to an
+#      image that can, or select another Xcode with `sudo xcode-select -s`
+#      before the build.
+#   3. docc. The script stops with a clear message when `xcrun --find docc`
+#      finds none. It treats each warning of docc as an error, so a docc that
+#      is newer or older than the one of Xcode 27 can fail on a warning that
+#      Xcode 27 does not give.
+#   4. The base path. configure-pages gives the path of the site, for
+#      example /plateworks-desqueeze, and the script takes it. Open the
+#      published site, and see that a page loads its style and its text.
+#   5. The first address. The address of the site with nothing after it
+#      must go to documentation/desqueezecore/.
+#   6. The permissions below are the three that the Pages actions name. See
+#      that the deploy step passes with them.
+#   7. The actions. Each one is at the major version that was the newest on
+#      2026-10-09.
+name: docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. A run in work completes, so a site is never
+# left half published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: macos-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Versions
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+          xcrun --find docc
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Build the site
+        env:
+          DOCS_HOSTING_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          DOCS_SOURCE_BASE_URL: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.sha }}
+        run: scripts/build_docs.sh
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -236,6 +236,15 @@ tested.
 | To report a problem that can harm files | `SECURITY.md` |
 | Every document | `docs/README.md` |
 
+## The documentation site
+
+The guides for a photographer and for a contributor, and the API reference
+of `DesqueezeCore`, are one DocC catalog:
+`Sources/DesqueezeCore/DesqueezeCore.docc`. Build the site with
+`scripts/build_docs.sh`. It needs Xcode, and it adds no dependency to the
+package. The site is not published yet. `.github/workflows/docs.yml`
+publishes it when the repo is on GitHub.
+
 ## License
 
 MIT. Copyright (c) 2026 Plateworks. The text is in `LICENSE`.

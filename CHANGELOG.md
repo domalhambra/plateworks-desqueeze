@@ -32,6 +32,9 @@ The first version. It is built from source, and there is no download.
 - A dry run that lists what each file would get and changes no file.
 - JSON output, the same from the tool and from the server.
 - `--verbose`, which shows each command that the tool starts.
+- A documentation site: guides for a photographer and for a contributor,
+  and the API reference of `DesqueezeCore`. `scripts/build_docs.sh` builds
+  it from the DocC catalog. It is not published yet.
 
 ### Safety
 
