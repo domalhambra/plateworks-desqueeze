@@ -547,7 +547,7 @@ official Swift MCP library, `modelcontextprotocol/swift-sdk`, pinned to one
 minor version because the library is not yet at 1.0.
 
 The server is its own Swift package, in the folder `MCPServer/`, and takes
-`DesqueezeCore` from the root package by path. The library brings five more
+`DesqueezeCore` from the root package by path. The library brings six more
 packages, swift-nio among them. In the root manifest, every build of the core
 and every Xcode build of the app would fetch them. In its own package, the
 root package and the app stay free of third-party code at build time too.
@@ -571,6 +571,16 @@ Build and test: `swift build --package-path MCPServer`,
 - Each tool's description tells the model what the tool changes, that the
   change is reversible with `desqueeze_remove`, and to call `desqueeze_scan`
   first.
+- A client stops a server with a signal. On `SIGTERM`, `SIGINT` or `SIGHUP`
+  the server sets the cancel flag of the call in work, starts no waiting
+  call, lets the current file complete, writes that call's report with
+  `stopped`, and exits 0. A server that ended at once would leave a backup
+  beside the file exiftool was writing.
+- When standard input closes, the call in work completes and is answered.
+  A call that waits and has not started does not start: the client has gone,
+  and a file-changing call must not run for nobody.
+- One message is written to standard output at a time, and the server does
+  not exit while an answer is being written.
 
 ### 12.3 Install
 
