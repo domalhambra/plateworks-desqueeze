@@ -989,10 +989,22 @@ An ARW goes to the Trash only when every line holds:
    exiftool -m -n -T -IFD0:OriginalRawFileName -SubIFD:DefaultScale <file.dng>
    ```
 
-The run asks the lines in the order 1, 2, 3, 5, 4, so the second read of
-the ARW is the last thing before the move. An ARW that is gone, or that has
-no record from before its conversion, counts as changed. The name in line 5
-is compared exactly, also in letter case. A DNG whose own backup the Trash
+6. `<base>.dng` is the file that this run made. The name in
+   `OriginalRawFileName` cannot prove that: another photo's DNG can carry
+   the same name (seen 2026-10-10 in a trial: an outside rename put the DNG
+   of another `frame.ARW` at `frame.dng` after the conversion, and the ARW
+   moved). So the run records the DNG's size, modification date and file
+   number, as for the ARW in line 4, at two moments: directly after the
+   conversion passed, and directly after the tag step ended (exiftool
+   writes a new file, so the record changes there). The first record must
+   hold directly before the tag step reads or writes that DNG. The second
+   must hold at step 5. A DNG that fails either check is still tagged as
+   any DNG in the folder is, but its ARW stays.
+
+The run asks the lines in the order 1, 2, 3, 6, 5, 4, so the second read of
+the ARW is the last thing before the move. An ARW that has no record from before its conversion counts as changed. The name in line 5
+is compared exactly, also in letter case. An ARW that is gone gets its own
+sentence (14.3), because "it stays" would be false. A DNG whose own backup the Trash
 refused (`backupKept`) is still complete.
 
 Then the app moves the ARW to the Trash through the same injected function
@@ -1023,6 +1035,8 @@ change. The core makes each sentence:
 | Line 4, changed | "The original changed during the run, so it stays." |
 | Line 4, not a regular file | "The original is not a regular file, so it stays." |
 | Line 5 | "The original stays, because its DNG could not be checked." The detail line has exiftool's words, or what differed. |
+| Line 6 | "The original stays, because its DNG changed during the run." |
+| The ARW is gone at step 5 | "The original was not in the folder at the end of the run. The app did not move it." |
 | The Trash refused | "The original could not go to the Trash, so it stays." The detail line has the system's words. |
 
 An ARW whose conversion failed gets no such note: its `failed` or
@@ -1119,6 +1133,24 @@ One unit records and compares the ARW's three facts of line 4.
 
 ### 14.7 Known limits
 
+- Lines 4 and 6 compare size, modification date and file number. They do
+  not compare the bytes. A program that writes an ARW in place, keeps its
+  size, and puts the date back is not seen. On FAT32, a file that is deleted
+  and made again at the same name with the same size and date gets the same
+  file number (measured on a disk image; APFS, HFS+ and ExFAT gave another
+  number).
+- A moment lies between the end of a conversion and the first record of its
+  DNG, and between the end of a tag step and the second record. A file that
+  another program puts at `<base>.dng` in one of those moments is taken as
+  the run's own.
+- The line under the box, the Run button and a dry run count from the last
+  scan. The run scans again (4.3), so it can convert and move more or fewer
+  ARW files than they said, when the folder changed in between.
+- A dry run lists a `trashOriginal` step for each ARW that it expects to
+  convert. When a conversion then fails in the real run, that ARW stays.
+- The MCP server has no parameter for the option, but an agent that has a
+  shell can start the command line tool with the flag. The server's text
+  does not tell a model where the option is.
 - The check of line 5 reads the DNG's structure and tags. It does not decode
   the picture. The Trash is the guard for the rest: look at the DNG files in
   Lightroom before the Trash is emptied.
