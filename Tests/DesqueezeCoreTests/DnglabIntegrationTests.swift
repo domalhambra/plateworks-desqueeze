@@ -64,24 +64,44 @@ class RealDnglabTestCase: XCTestCase {
     /// match table does not cover the frame: the photo in `fixtures/` is the
     /// reader's own, and it can be any Sony ARW.
     ///
-    /// The five rules of design 13.4 are spelled here, against the data
-    /// file, and `AdobeMatch` is not asked. So a rule that breaks in
-    /// `AdobeMatch` fails the assertion below for a frame that the table
-    /// covers. It does not turn the test into a skip.
+    /// Whether the table covers the frame is decided with no code of the
+    /// product. The five values come from exiftool, each tag read alone
+    /// (`value(of:in:)`), and the five rules of design 13.4 are spelled
+    /// here, against the data file. `ARWFactsReader` and `AdobeMatch` are
+    /// not asked. So a reader or a rule that breaks fails an assertion
+    /// below for a frame that the table covers. It does not turn the test
+    /// into a skip, and the drift check cannot pass by not running.
+    ///
+    /// A new camera needs its own data file here: this helper reads the one
+    /// of the A7S III, and it skips for every other model.
+    ///
+    /// - Returns: the facts as exiftool gave them. A test goes on with the
+    ///   true facts, also when the product's reader gave others.
     func factsOfACoveredFrame(_ arw: URL, file: StaticString = #filePath, line: UInt = #line) throws -> ARWFacts {
-        let facts = try facts(of: arw)
+        let model = try value(of: "IFD0:Model", in: arw)
+        let iso = try value(of: "ExifIFD:ISO", in: arw)
+        let levels = (try value(of: "SR2SubIFD:WB_RGBLevelsDaylight", in: arw) ?? "")
+            .split(separator: " ").map { Int($0) }
+        let lens = try value(of: "SubIFD:DistortionCorrection", in: arw)
+        let raw = try value(of: "SubIFD:SonyRawFileType", in: arw)
         let table = try JSONDecoder().decode(AdobeMatchTests.DataFile.self,
                                              from: Data(contentsOf: AdobeMatchTests.dataFile))
-        let levels = facts.daylightLevels
-        let covered = facts.model == table.model
-            && facts.iso.map { table.byISO[String($0)] != nil } == true
-            && levels?.green == table.daylightReference.green && (levels?.red ?? 0) > 0 && (levels?.blue ?? 0) > 0
-            && facts.distortionCorrection == 255
-            && facts.rawFileType == 2
-        guard covered else { throw XCTSkip(Self.needsACoveredFrame, file: file, line: line) }
-        XCTAssertTrue(AdobeMatch.match(facts).isFull, "the table covers this frame, so it is a full match: \(facts)",
+        guard model == table.model,
+              let iso, table.byISO[iso] != nil, let isoNumber = Int(iso),
+              levels.count == 3, let red = levels[0], let green = levels[1], let blue = levels[2],
+              green == table.daylightReference.green, red > 0, blue > 0,
+              lens == "255", raw == "2"
+        else { throw XCTSkip(Self.needsACoveredFrame, file: file, line: line) }
+
+        let truth = ARWFacts(model: model, iso: isoNumber,
+                             daylightLevels: ARWFacts.DaylightLevels(red: red, green: green, blue: blue),
+                             distortionCorrection: 255, rawFileType: 2)
+        XCTAssertEqual(ARWFactsReader(exiftool: exiftool).read([arw])[arw.lastPathComponent], truth,
+                       "the product's reader must give what exiftool prints for each tag alone", file: file,
+                       line: line)
+        XCTAssertTrue(AdobeMatch.match(truth).isFull, "the table covers this frame, so it is a full match: \(truth)",
                       file: file, line: line)
-        return facts
+        return truth
     }
 
     /// The value that the match writes into `tag` for an ARW with these
