@@ -207,8 +207,8 @@ keys, and its exit code is 1:
 }
 ```
 
-`detail` is text or `null`. This happens when the folder cannot be read and
-when exiftool is not installed. A wrong command line prints nothing on
+`detail` is text or `null`. This happens when the folder cannot be read,
+when another run works in the folder, and when exiftool is not installed. A wrong command line prints nothing on
 standard output, and its exit code is 2.
 
 The MCP server does not print this object. A call that can give no report

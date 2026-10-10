@@ -52,7 +52,9 @@ swift build -c release
 ```
 
 To use the tool by its name, copy `.build/release/desqueeze` to a folder that
-is on your `PATH`. <doc:UsingTheCommandLineTool> has every command.
+is on your `PATH`. `~/.local/bin` is a usual one. Make it first, with
+`mkdir -p ~/.local/bin`, and see that it is on your `PATH`: a new Mac does
+not have it there. <doc:UsingTheCommandLineTool> has every command.
 
 ### The window
 

@@ -22,7 +22,7 @@ desqueeze --help
 
 | Option | Does |
 |---|---|
-| `--factor <number>` | The squeeze factor of the lens: a number from 1 to 4, with at most four decimal places. For `run` only, and `run` needs it. There is no default. `--factor=1.5` is the same as `--factor 1.5`. |
+| `--factor <number>` | The squeeze factor of the lens: a number from 1 to 4, with at most four decimal places. For `run` only, and `run` needs it. There is no default. `--factor=1.5` is the same as `--factor 1.5`. Use a period for the decimal point: the tool refuses `1,5`, and says so. |
 | `--no-convert` | For `run`: leaves the ARW files alone. |
 | `--dry-run` | For `run` and `remove`: shows what the run would do, file by file, and which converter gets each ARW. Changes no file. |
 | `--json` | Prints one JSON object on standard output, and nothing else there. |
@@ -117,6 +117,27 @@ A second run with the same factor changes nothing:
 0 set · 2 skipped · 0 failed
 ```
 
+The Lightroom line shows only after a run that set the tag in at least one
+photo. A dry run never shows it. When both converters did work in a run, one
+more line follows the counts: `Converted with dnglab: 11. With Adobe DNG
+Converter: 1.`
+
+## One run in a folder at a time
+
+A run holds a lock on the folder until it ends. A second `run` or `remove`
+in the same folder does not start, also when the first run is in the window
+or in the MCP server. It changes no file, and the exit code is 1:
+
+```
+desqueeze: Another Desqueeze run is working in this folder. Wait for it to end, then run again.
+```
+
+With `--json`, standard output gets the object with the keys `error` and
+`detail`. Wait for the first run, then run again.
+
+`scan` and `--dry-run` take no lock. While a run works, they can show a
+folder in change. <doc:WhatHappensToYourFiles> says more about the lock.
+
 ## Remove
 
 ```bash
@@ -193,7 +214,7 @@ that you can read each argument, and paste the line into a shell.
 | Code | Meaning |
 |---|---|
 | 0 | The command completed, no file failed, and no file was blocked. A scan that completed gives 0, also for a read-only folder. |
-| 1 | A file failed or was blocked, the run was stopped, the folder could not be read, a run or a dry run met a read-only folder, or exiftool is missing. |
+| 1 | A file failed or was blocked, the run was stopped, the folder could not be read, a run or a dry run met a read-only folder, another run works in the folder, or exiftool is missing. |
 | 2 | The command line was wrong. Nothing ran. |
 
 A wrong command line prints the reason and one line that points to the help,

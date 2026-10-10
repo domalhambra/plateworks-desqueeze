@@ -41,6 +41,7 @@ row says another folder.
 | When anything has the name `<base>.dng`, no converter starts. | The scan can be a moment old. This check is at the last moment. | `testRefusesToStartWhenTheDNGExistsAlready`, `testAnythingAtTheNameStopsTheConverterBeforeItStarts` |
 | A converter writes a hidden work file, never `<base>.dng`. | `<base>.dng` appears only when it is complete and matched. A run that ends hard leaves a hidden file and a pending ARW, never a DNG that looks complete. | `testTheWorkFileIsAHiddenFileBesideTheARWWithTheBaseNameInIt`, `testTheScanDoesNotSeeAWorkFile` |
 | The rename of the work file fails when the name is taken. | A DNG that another program made while the converter worked is never replaced. | `ExclusiveRenameTests`, `ExclusiveRenameVolumeTests`, `testADNGThatAnotherProgramMakesJustBeforeTheRenameIsLeftAsItIs` |
+| An ARW whose work-file name would be longer than 255 bytes gets no converter. | No file can have that name. A converter fails on it with words that do not say what to do. | `testAnARWWhoseWorkFileNameIsTooLongStartsNoConverterAndTouchesNothing`, `testARealRunStartsNoConverterForAnARWWithANameThatIsTooLong` |
 | Never pass `-f` to dnglab. | `-f` writes over an existing file. | `testNoCallEverPassesTheOverrideFlag` |
 | Never pass `-h` to Adobe DNG Converter. | It opens a window, and the process never returns. | `testTheOutputNameIsTheNameOfTheWorkFileAndNeverAPath` |
 
@@ -60,6 +61,25 @@ row says another folder.
 | A leftover is discarded only when it is a regular file. | A folder can hold the person's files, and a link is not the tool's to judge. | `testAFolderOrALinkAtALeftoverNameStopsTheARWAndNothingGoesToTheTrash` |
 | The Trash is a parameter with no default. | No caller reaches the Trash by leaving an argument out, and no test fills a person's Trash. | The signature of ``FileBackups/init(trash:)``. `testTheRealTrashIsANamedConstant` |
 
+## One run in a folder at a time
+
+| Rule | Why | Guard |
+|---|---|---|
+| A run holds an advisory lock on the folder, from before its scan to its end. A second run does not start, and reads and changes nothing. | The second run would take the first run's work file for a leftover and send it to the Trash. Each run could then act on the other's half-written file. | `testARunDoesNotStartWhileAnotherRunHoldsTheLock`, `testTheLockIsTakenBeforeTheScanAndHeldToTheLastFile`. With two processes, in `Tests/DesqueezeCLITests/`: `testASecondRunInTheSameFolderIsRefusedAndTheFirstCompletes` |
+| The lock is `flock` on the folder itself. No lock file is made. | A lock file would be a file of the tool in a photo folder, and a run that ends hard would leave a stale one. This lock goes with the process. | `testTheLockMakesNoFileAndChangesNoFileInTheFolder`, `testASecondTakeInTheSameProcessIsBusyUntilTheFirstIsReleased` |
+| The run releases the lock when it returns and when it throws. | A lock that stays would stop the next run in the same process, as in the window. | `testTheLockIsReleasedAfterARunWhoseScanThrows`, `testTwoRunsInARowBothPass` |
+| A scan and a dry run take no lock. | They change no file. A person must be able to look at a folder while a run works in it. | `testADryRunTakesNoLock` |
+| On a volume that gives no lock for a folder, the run goes on without one. | A lock that the volume does not give must not stop every run on that volume. | `testOnAVolumeWithNoSuchLockTheRunGoesOnWithoutOne` |
+| A program that the run starts does not get the lock. | The lock must go when the run ends, also while a converter still works. | `testTheDescriptorOfTheLockIsClosedInAProgramThatTheRunStarts` |
+
+Each front end has a test of what it says to a run that did not start:
+`testARunWhileAnotherRunWorksInTheFolderGivesOneWithTheSentenceAndStartsNoProgram`
+in `Tests/DesqueezeCLITests/`,
+`testARunWhileAnotherRunWorksInTheFolderIsAToolErrorAndAScanAndADryRunAreNot`
+in `MCPServer/Tests/DesqueezeMCPTests/`, and
+`testARunWhileAnotherRunWorksInTheFolderShowsTheSentenceAndReturnsToIdle`
+in `App/PlateworksDesqueezeTests/`.
+
 ## The scan
 
 | Rule | Why | Guard |
@@ -75,6 +95,7 @@ row says another folder.
 | Rule | Why | Guard |
 |---|---|---|
 | Each number of the match table comes from a measurement. Never estimate one. | A wrong value changes how every photo of that camera renders, with no error. | `testTheTableIsTheDataFile`, and the drift check `AdobeDriftTests` against the real Adobe DNG Converter |
+| The drift check decides with no code of the tool whether the table covers the fixture frame. | A broken reader of the facts must fail the check. It must not turn the check into a skip. | The helper `factsOfACoveredFrame` in `Tests/DesqueezeCoreTests/DnglabIntegrationTests.swift` asks exiftool for each fact, and reads the data file. |
 
 ## Stopping
 
@@ -82,7 +103,7 @@ row says another folder.
 |---|---|---|
 | A cancel is honored between files, never in the middle of one. | A tool that ended at once would leave a backup beside the file that exiftool was writing. | `testCancelStopsBeforeTheNextFile`. In `Tests/DesqueezeCLITests/`: `InterruptTests` |
 | A program starts in a process group of its own. | A Control-C in the terminal must not reach an exiftool that is writing a file. | `testAProgramStartsInAProcessGroupOfItsOwn` |
-| The server runs one tool call at a time, and answers the call in work before it ends. | The job assumes one run in a folder at a time. | In `MCPServer/Tests/DesqueezeMCPTests/`: `testCallsRunOneAtATime`, `testClosingStandardInputDuringARunLetsTheRunComplete` |
+| The server runs one tool call at a time, and answers the call in work before it ends. | Two calls of one client must not meet in a folder: the second would be refused by the lock. A call in work must not end with a file half done. | In `MCPServer/Tests/DesqueezeMCPTests/`: `testCallsRunOneAtATime`, `testClosingStandardInputDuringARunLetsTheRunComplete` |
 
 ## The shape of the code
 
@@ -103,9 +124,13 @@ One more rule has tests:
   a person is in sentence case, with no exclamation mark and no emoji.
   Guards: `testTheSentencesAboutWhoConvertsAreMadeOnce`,
   `testEachKindIsWrittenAsItsName`, and in `Tests/DesqueezeCLITests/`,
-  `testHelpIsPlain`.
+  `testHelpIsPlain`. The same holds for a rule about when a line shows: the
+  Lightroom line shows only after a run that set a photo, and the core
+  decides it for the window and the tool
+  (`testTheLightroomLineShowsWhenTheRunSetAtLeastOnePhoto`,
+  `testADryRunNeverShowsTheLightroomLine`).
 
-## One known gap
+## Two known gaps
 
 On a volume with no exclusive rename, such as ExFAT, ``ExclusiveRename``
 checks the name and then renames. A file that another program makes at
@@ -113,3 +138,10 @@ checks the name and then renames. A file that another program makes at
 one path on which the tool can replace a file that it did not make.
 `testOnExFATAFreeNameTakesTheCheckAndThenAPlainRename` pins that ExFAT takes
 this path.
+
+On a volume that gives no lock for a folder, ``FolderLock`` lets the run go
+on, and two runs can then work in one folder. APFS, HFS+, ExFAT and FAT32
+gave the lock when they were measured, and
+`testOnExFATAFolderLockIsHeldAndASecondTakeIsBusy` pins ExFAT. A network
+volume was not measured. The source comment of ``FolderLock`` has each
+answer of the system and what it means.

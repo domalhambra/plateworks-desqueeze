@@ -150,9 +150,11 @@ The commands below use three folders: `/path/to/frames` with the ARW files,
    The tests on the real programs have a rule of their own for a frame that
    the table covers: `factsOfACoveredFrame`, in
    `Tests/DesqueezeCoreTests/DnglabIntegrationTests.swift`. It reads the
-   data file of the A7S III, and it does not ask the table in the code.
-   Extend it to your data file too. Until you do, the drift check skips for
-   a frame of your camera.
+   data file of the A7S III, and it does not ask the table in the code. It
+   takes the five facts of the frame from exiftool, each tag alone, and not
+   from the reader of the tool. Extend it to your data file too. Until you
+   do, the drift check skips for a frame of your camera, and a skip proves
+   nothing.
 
 10. **Add the row.** In `Sources/DesqueezeCore/AdobeMatch.swift`, add a
     `Camera` value with the digits of the data file, and add it to

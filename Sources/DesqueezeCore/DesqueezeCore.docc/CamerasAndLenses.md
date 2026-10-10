@@ -99,9 +99,10 @@ the Dock once for each file that it converts. dnglab opens nothing.
   versions that were tested. A later version can write other values.
 - **Unusual file names.** exiftool prints a tab or a line end in a file name
   as a period. Two ARW files whose names print the same get no full match.
-- **Very long file names.** A base name longer than about 235 bytes makes
-  the name of the work file too long for the file system. The conversion of
-  that photo fails, with the words of the converter.
+- **Very long file names.** A base name longer than 235 bytes makes the
+  name of the work file too long for the file system. No converter starts
+  for that photo, and its note says: "The file name is too long. Shorten
+  it, then run again."
 
 The limits that concern files, and not cameras, are in
 <doc:WhatHappensToYourFiles>. <doc:AddingACamera> says how to measure

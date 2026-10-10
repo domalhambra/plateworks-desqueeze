@@ -56,8 +56,14 @@ Make it with one ARW of your own:
 scripts/make_fixtures.sh "/path/to/one file.ARW"
 ```
 
-The script copies your ARW and does not change it. It needs Adobe DNG
-Converter in the Applications folder, to make the DNG.
+The script copies your ARW and does not change it. It makes the DNG with
+Adobe DNG Converter. When that is not in the Applications folder, it makes
+the DNG with dnglab, and exiftool writes the name of the ARW into it, as
+the tool does. Every test passes with either DNG. With neither program, the
+script stops before it copies a file.
+
+`.gitignore` ignores `fixtures/`, and also every ARW, every DNG and every
+backup of a DNG in the tree. Never commit a photo.
 
 Any Sony ARW that dnglab and Adobe DNG Converter can read works. A test
 takes each value that it expects from the frame itself. The drift check and
@@ -76,12 +82,13 @@ tests skipped.
 |---|---|
 | `fixtures/` | Every test on the real programs, the end-to-end tests of the tool, and each test of the server that runs on a photo |
 | dnglab | The tests of the real dnglab conversion, and the drift check |
-| Adobe DNG Converter | The tests of the real Adobe conversion, the drift check, the end-to-end tests of the tool, and the end-to-end tests of the server that run on a photo |
+| Adobe DNG Converter | The tests of the real Adobe conversion, the tests of the real exiftool in `Tests/DesqueezeCoreTests/IntegrationTests.swift`, the drift check, the end-to-end tests of the tool, and the end-to-end tests of the server that run on a photo |
 | exiftool | All of the above, and the tests of the tool errors of the server |
 | A frame in `fixtures/` that the match table covers | The drift check, and the tests of the real dnglab match |
 
-Two more tests can skip. The tests that make APFS and ExFAT disk images
-skip when `hdiutil` cannot make or attach an image. One test of the server
+Two more kinds of test can skip. The tests that make APFS and ExFAT disk
+images, for the rename and for the folder lock, skip when `hdiutil` cannot
+make or attach an image. One test of the server
 skips on a Mac that is too fast for it, and says so.
 
 To list the skipped tests of a run:
@@ -150,6 +157,25 @@ swift test --filter AdobeDriftTests
 ```
 
 <doc:AddingACamera> says how to read its result.
+
+The check skips for a frame that the match table does not cover. It decides
+that with no code of the tool: the helper `factsOfACoveredFrame` asks
+exiftool for each fact of the frame, and reads the data file. So a reader of
+the facts that breaks fails the check. It does not turn the check into a
+skip.
+
+## The folder lock
+
+One run works in a folder at a time, and ``FolderLock`` holds that rule.
+Its tests are in `Tests/DesqueezeCoreTests/FolderLockTests.swift`. The unit
+tests give the lock three fake system calls, so they need no second
+process. Other tests take the system's own lock on a temporary folder: the
+lock makes no file. `Tests/DesqueezeCLITests/TwoRunsTests.swift` starts the
+built tool twice on one folder, and the second run must not start.
+
+A test of a front end holds the lock itself, and then asks the front end
+for a run. That is the real case, because the lock holds between two runs
+in one process as it does between two processes.
 
 ## What no test can do
 

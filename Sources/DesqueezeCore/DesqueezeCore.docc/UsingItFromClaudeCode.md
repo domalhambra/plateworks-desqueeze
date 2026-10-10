@@ -111,11 +111,24 @@ blocked file is still a successful tool call. The failure is in the counts
 and in the notes of the report.
 
 A tool error means that the server could give no report: the call broke a
-rule, the folder could not be read, or exiftool is not installed.
+rule, the folder could not be read, another run works in the folder, or
+exiftool is not installed.
+
+The line about Lightroom is not in the JSON. The description of
+`desqueeze_run` and of `desqueeze_remove` gives the model the rule of the
+other two front ends: when `set` is above 0 and `dry_run` was false, the
+model tells you "Photos already in Lightroom: Metadata › Read Metadata from
+File." After a dry run, and when `set` is 0, it does not.
 
 ## How the server runs
 
 - It runs one tool call at a time. A second call waits for the first.
+- One run works in a folder at a time, across all three front ends. While
+  the window or the command line tool runs in a folder, `desqueeze_run` and
+  `desqueeze_remove` on that folder are a tool error, and change no file:
+  "Another Desqueeze run is working in this folder. Wait for it to end,
+  then run again." `desqueeze_scan` and a call with `dry_run` true still
+  work. Their result can then be of a folder in change.
 - When the client asks for progress, the server sends one progress message
   for each step of a run.
 - When the client stops the server with a signal, the run in work stops

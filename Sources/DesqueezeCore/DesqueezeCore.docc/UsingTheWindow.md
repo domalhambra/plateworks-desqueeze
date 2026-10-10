@@ -42,6 +42,7 @@ warning symbol:
 | This folder is read-only. Desqueeze cannot change its files. | Both buttons are off. |
 | `<name>.dng_original`: A backup with no DNG beside it. Rename it to `<name>.dng` to get the photo back. | An earlier write did not complete. <doc:Troubleshooting> says what to do. The window names up to five such files, then gives a count of the others. |
 | This folder could not be read. | The scan failed. No file is tried. |
+| Another Desqueeze run is working in this folder. Wait for it to end, then run again. | A click on a button started no run, and no file was changed. Another run works in this folder: in the command line tool, in the MCP server, or in a second copy of the app. The message goes at the next click on a button, or with the next folder. |
 
 ## Select the squeeze factor
 
@@ -55,7 +56,8 @@ is selected.
 
 When the text in the field is not a factor, a click on the run button shows
 "Enter a number from 1 to 4, with at most four decimal places." and starts
-nothing.
+nothing. For text with a comma, such as "1,5", the window adds: "Use a
+period for the decimal point."
 
 ## Run
 
@@ -105,8 +107,18 @@ The symbol is a check mark when the run is complete, a warning triangle when
 a file failed or was blocked, and a stop symbol when the run was cancelled. The
 meaning is never in a colour alone.
 
-Below the counts, the window can show how many ARW files the run left, and
-it always shows this line:
+Below the counts, the window can show three more lines.
+
+When both converters did work in the run, one line says how many photos
+each converted:
+
+```
+Converted with dnglab: 11. With Adobe DNG Converter: 1.
+```
+
+When the run left ARW files, one line says how many.
+
+When the run set the tag in at least one photo, the window shows this line:
 
 ```
 Photos already in Lightroom: Metadata › Read Metadata from File.
@@ -114,7 +126,8 @@ Photos already in Lightroom: Metadata › Read Metadata from File.
 
 Lightroom reads the tag when it imports a photo, and keeps what it read. For
 a photo that is in the catalog already, select it in Lightroom and use that
-menu command.
+menu command. After a run that set no photo, the line does not show: there
+is nothing to read again.
 
 Then comes a list, with one entry for each file that has something to say:
 the name of the file, one plain sentence, and, on a smaller line, the words
@@ -123,7 +136,12 @@ sentence.
 
 ## The messages about missing programs
 
-The window looks for the three programs each time it opens.
+The window looks for the three programs each time it opens. It looks for
+exiftool and dnglab in `/opt/homebrew/bin`, then in `/usr/local/bin`, then
+in each folder of `PATH`. An app that Finder starts gets a short `PATH`, so
+in practice it finds the two programs in the two Homebrew folders. It asks
+macOS where Adobe DNG Converter is, so it finds that app wherever it is
+installed.
 
 | Missing | What the window shows | What still works |
 |---|---|---|

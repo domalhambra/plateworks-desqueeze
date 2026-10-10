@@ -122,6 +122,7 @@ one line for each converter that was tried.
 | The detail line | Meaning, and what to do |
 |---|---|
 | "A DNG with this name exists already. Not converted." | Something has the name `<base>.dng`: a file, a folder, or a link. It can also be a DNG that another program made while the converter worked. The tool did not touch it. Look at what has the name. |
+| "The file name is too long. Shorten it, then run again." | The base name of the ARW has more than 235 bytes. The hidden work file of the tool has that name and 20 more bytes, and a file name can have 255. No converter started. Give the ARW a shorter name, then run again. |
 | "A leftover file, `<name>`, is beside this photo. Delete it, then run again." | The file is `<base>.dng_exiftool_tmp`, which exiftool left when it was ended in the middle of a write. Or it is a hidden work file that the tool could not move to the Trash, or a folder or a link with the name of a work file. The tool removes only a regular file. Look at what the line names, and delete it. For a hidden file, press Command-Shift-Period in Finder to see it. |
 | "dnglab returned 7.", with a reason | dnglab cannot read this file. Is it a Sony ARW? |
 | "Adobe DNG Converter made no DNG. It may not support this file." | Adobe DNG Converter cannot read this file. |
@@ -169,6 +170,17 @@ installed.
 | "This folder could not be read." | The line below it says why: nothing is at the path, the path is a file, or the path is a package such as an app or a photo library. |
 | "This folder is read-only. Desqueeze cannot change its files." | A scan works, and a run changes nothing. Unlock the card, or copy the folder to a disk that you can write to. The note of a run has the kind `folderReadOnly`. |
 | "Drop a folder" | The window got a file, a package, or more than one item. |
+| "Another Desqueeze run is working in this folder. Wait for it to end, then run again." | The run did not start, and no file was changed. Another run holds the folder: in the window, in the command line tool, or in the MCP server. Wait for that run, then run again. If you see no run, look in Activity Monitor for a Desqueeze, a `desqueeze` or a `desqueeze-mcp` that still runs. The lock goes when that program ends. |
+
+## A message about the factor
+
+```
+The factor must be a number from 1 to 4, with at most four decimal places. It was 1,5. Use a period for the decimal point.
+```
+
+The tool takes a period for the decimal point, and no comma: `1.5`, not
+`1,5`. The window says the same after its own first words, "Enter a number
+from 1 to 4, with at most four decimal places."
 
 ## Messages about missing programs
 

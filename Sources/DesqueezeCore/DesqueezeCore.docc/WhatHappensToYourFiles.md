@@ -15,6 +15,7 @@ because one piece of code does the file work for all three.
   no other: the backup of a DNG after a good write, and its own hidden work
   files.
 - **A conversion never replaces a DNG that is there already.**
+- **One run works in a folder at a time.** A second run does not start.
 - **The tool works on the top level of one folder.** It does not read a
   subfolder, and it ignores hidden files.
 - **The tool is offline.** It makes no network request and collects no data.
@@ -35,7 +36,8 @@ still belongs to its ARW.
 The conversion has four steps:
 
 1. **The check.** When anything in the folder has the name `frame.dng`
-   already, no converter starts for `frame.ARW`.
+   already, no converter starts for `frame.ARW`. No converter starts either
+   for an ARW whose name is too long: the last section says how long.
 2. **The work file.** No converter writes `frame.dng`. dnglab and Adobe DNG
    Converter both write a hidden file in the same folder,
    `.frame.desqueeze-work.dng`. The name starts with a period, so Finder and
@@ -102,6 +104,32 @@ result says so: "Done. The backup stayed beside the file, because the Trash
 refused it." The Trash was tested on disk images with the APFS, HFS+ and
 ExFAT file systems. A physical card and a network share were not tested.
 
+## One run in a folder at a time
+
+A run holds a lock on the folder from its start to its end. A second run in
+the same folder does not start. It reads no photo and changes no file, and
+it says:
+
+```
+Another Desqueeze run is working in this folder. Wait for it to end, then run again.
+```
+
+This holds between the window, the command line tool and the MCP server,
+and between two copies of one of them. Run and Remove both take the lock.
+
+- **The lock makes no file.** It is a mark that the system keeps on the
+  folder itself. Nothing shows in Finder.
+- **The lock goes with the run.** It goes when the run ends, and when the
+  program ends for any reason: a crash, a Force Quit, a loss of power. No
+  lock stays behind, and there is nothing to clean.
+- **A scan and a dry run take no lock.** You can scan a folder while a run
+  works in it. The result can then be of a folder in change.
+- **The lock stops only Desqueeze.** Finder, Lightroom and other programs
+  work in the folder as before.
+
+Without the lock, the second run would take the hidden work file of the
+first run for a leftover, and send it to the Trash.
+
 ## When a run stops early
 
 **You cancel.** Cancel in the window, and Control-C in the terminal, stop
@@ -156,6 +184,16 @@ run in the middle of a file. The next scan or run reports what it finds:
   `<base>.dng` in the moment between the two, that file is replaced. This is
   the one case in which the tool can replace a file that it did not make. On
   an APFS or HFS+ volume, the system does both in one step.
+- **A volume that gives no lock.** The lock of a run was tested on disk
+  images with the APFS, HFS+, ExFAT and MS-DOS (FAT32) file systems. Each
+  one gave it. A network share was not tested. When a volume gives no lock
+  for a folder, the run goes on without one. On such a volume, do not start
+  two runs in one folder.
+- **A long file name.** The hidden work file has the base name of the ARW
+  and 20 more bytes, and a file name can have 255 bytes. So for an ARW whose
+  base name has more than 235 bytes, no converter starts. The result lists
+  the ARW as not converted: "The file name is too long. Shorten it, then run
+  again." Most letters are one byte. An accented letter can be two or more.
 - **A leftover work file can stay.** The tool removes a leftover work file
   only when it converts the same ARW again. If the ARW is gone, or if a DNG
   now belongs to it, the hidden file stays until you delete it.

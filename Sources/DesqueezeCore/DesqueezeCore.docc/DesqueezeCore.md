@@ -99,6 +99,7 @@ is no download. The build was tested on macOS 27.2 with Xcode 27 only.
 ### The job, the plan and the summary
 
 - ``DesqueezeJob``
+- ``FolderLock``
 - ``TagDecision``
 - ``RunPlan``
 - ``RunSummary``

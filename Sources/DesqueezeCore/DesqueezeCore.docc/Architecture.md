@@ -47,7 +47,7 @@ in the built app. ``ToolLocator`` finds them on the Mac at run time.
 | The backup | ``BackupHandling``, ``FileBackups`` | The `_original` file that exiftool keeps: is it there, send it to the Trash, put it back. |
 | The converters | ``RawConverter``, ``DnglabConverter``, ``AdobeConverter``, ``ConverterOutput``, ``ExclusiveRename`` | One ARW to one DNG, through a hidden work file and a rename that never replaces. |
 | The match | ``ARWFacts``, ``AdobeMatch``, ``ConverterChoice`` | The facts of an ARW, the tags that make a dnglab DNG render as Adobe's, and which converter gets the ARW. |
-| The job | ``DesqueezeJob``, ``TagDecision``, ``RunPlan``, ``RunSummary``, ``FileNote`` | The run and the dry run, in order, with the counts and one note for each file that has something to say. |
+| The job | ``DesqueezeJob``, ``FolderLock``, ``TagDecision``, ``RunPlan``, ``RunSummary``, ``FileNote`` | The run and the dry run, in order, with the counts and one note for each file that has something to say. One run in a folder at a time. |
 | The reports | ``DesqueezeOperations``, ``ScanReport``, ``RunReport``, ``ReportJSON`` | Scan, run and remove, each with a report that is ready to print as JSON. |
 | The text | ``FolderText``, ``ConverterText`` | Each sentence that more than one front end says, made once. |
 | The programs | ``ProcessRunner``, ``LoggingProcessRunner``, ``ToolLocator`` | Start a program with no shell, show each command for `--verbose`, and find the three programs. |
@@ -70,16 +70,20 @@ Three choices shape the code:
 one file at a time, in this order. <doc:SafetyRulesForCode> has the rule
 behind each step.
 
-1. **Scan.** The run makes its own ``FolderSnapshot`` of the folder. No
-   front end can give it an earlier scan: files can change between a scan
-   and a click. A read-only folder gets one note, and no file is tried.
-   Each orphan backup gets a note first.
+1. **Lock, then scan.** The run takes the ``FolderLock`` of the folder and
+   holds it to its end. When another run holds it, the run throws
+   ``FolderLock/Busy`` and has read nothing. Then the run makes its own
+   ``FolderSnapshot`` of the folder. No front end can give it an earlier
+   scan: files can change between a scan and a click. A read-only folder
+   gets one note, and no file is tried. Each orphan backup gets a note
+   first.
 2. **Choose a converter for each pending ARW.** When dnglab is installed,
    one exiftool read gets the ``ARWFacts`` of up to 200 files.
    ``ConverterChoice`` gives each ARW its list of converters, from
    ``AdobeMatch`` and from what is installed.
 3. **Convert.** Both converters follow the same steps. The converter checks
-   that nothing has the name `<base>.dng`. It sends to the Trash a work file
+   that the name of the work file is not too long, and that nothing has the
+   name `<base>.dng`. It sends to the Trash a work file
    that an earlier run left, and the `_exiftool_tmp` file of exiftool beside
    it, when each is a regular file. It writes the hidden work file from
    ``ConverterOutput/workURL(for:)``. ``DnglabConverter`` then writes the
@@ -106,7 +110,7 @@ is a ``RunSummary``: the counts, and the notes.
 ``DesqueezeJob/plan(folder:factor:convert:remove:)`` is the dry run. It
 makes the same scan and asks the same two functions, ``ConverterChoice`` and
 ``TagDecision``, and it changes no file. So a dry run and the run that
-follows cannot disagree.
+follows cannot disagree. It takes no lock.
 
 ## The two packages
 
