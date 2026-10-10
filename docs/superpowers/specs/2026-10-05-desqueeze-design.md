@@ -2,8 +2,14 @@
 
 Date: 2026-10-05. Red-teamed 2026-10-09; section 2.1 holds the findings and
 each one's fix is in the body. Revised 2026-10-09 after the code reviews of
-the job and the window, and extended with section 12 (command line and MCP). Status: approved by Dom in session, pending his
-read of this file.
+the job and the window, and extended with section 12 (command line and MCP)
+and section 13 (dnglab first). Status: approved by Dom, and built.
+
+**How to read this document.** It grew in one week, and the later sections
+changed earlier decisions. Sections 12 and 13 are the newest. Where they
+differ from any earlier section, they win. The earlier text was corrected
+where it would mislead, and it still tells the story in the order it
+happened: Adobe DNG Converter was the only converter until section 13.
 
 ## 1. Purpose
 
@@ -13,8 +19,8 @@ tag, and Lightroom and Camera Raw stretch the image by that tag when they render
 it. No pixels change, and the tag is reversible.
 
 Until now Dom wrote the tag with six terminal steps, from a guide of his own.
-Desqueeze is one Mac window that
-does the same job: drop a folder, pick a factor, run.
+Desqueeze does the same job: drop a folder on its window, pick a factor, run.
+Section 12 added a command line tool and an MCP server on the same core.
 
 **Done for version 1:** Dom drops a shoot folder on the window, picks a factor,
 and each DNG in the folder opens in Lightroom at the correct shape. ARW files in
@@ -50,7 +56,7 @@ section named.
 | A failed write (read-only folder) exits 1, leaves the file unchanged, and makes no backup. | 4.3 step 4: restore only when a backup exists. |
 | exiftool never replaces an existing `_original`. A second write keeps the old backup. | 4.1 and 4.3 step 2: the skip rule. |
 | The converter's command line ignores its window preferences. `-h` opens a window and never returns. | 4.3 step 1: the output format, and never call `-h`. |
-| Both converters write `OriginalRawFileName` into the DNG. | 4.1: the pending rule reads it. |
+| Adobe DNG Converter writes `OriginalRawFileName` into the DNG. dnglab does when it embeds the raw file, and the app does not let it (13.2), so the app writes the tag itself. | 4.1: the pending rule reads it. |
 | Finder and Quick Look ignore `DefaultScale`. Previews stay squeezed. | 4.4: a known limitation. |
 | Camera Raw honors the tag: a 4240-wide DNG opened at 6360 wide at 1.5, from both converters. | Confirms section 1. |
 | One tag write takes 0.10 s. One conversion takes 0.37 s, or 0.52 s with the converter's window open. A 228-file folder takes about 30 s. | 3: parallel writes are not needed. |
@@ -63,7 +69,7 @@ through Camera Raw with default settings and were compared pixel by pixel.
 
 | | dnglab | Adobe |
 |---|---|---|
-| Time for one file | 0.07 s | 0.37 s |
+| Time for one file | 0.07 s (0.09 s with `--embed-raw false`, as the app calls it) | 0.37 s |
 | `exiftool -validate` | OK | 5 warnings |
 | DNG version, raw compression | 1.6, lossless | 1.4, lossless |
 | Size, no embedded raw | 12.1 MB | 11.5 MB |
@@ -96,7 +102,7 @@ until Dom asks for it.
 | Item | Why it waits |
 |---|---|
 | Bundled exiftool | Dom's Mac has exiftool. A shipped app must carry its own. |
-| A bundled dnglab | dnglab is the first converter since 2026-10-09 (section 13). Version 1 finds the one Homebrew installed. A shipped app must carry its own. |
+| A bundled dnglab | dnglab converts since 2026-10-09 (section 13). Version 1 finds the one Homebrew installed. A shipped app must carry its own. |
 | A match table for cameras other than the A7S III | Section 13 has one measured row. Each other camera needs its own. |
 | Code signing and notarization | Needed only for other people's Macs. |
 | Brand marks, accent color, app icon art | The Plateworks brand standards, kept outside this repo, govern them. Version 1 uses system colors and the system font. |
@@ -121,8 +127,9 @@ The app reads the top level of the folder only. It does not enter subfolders.
   output itself.
 - A DNG **claims** an ARW when the two have the same base name, or when the
   DNG's `OriginalRawFileName` tag equals the ARW's file name. Both comparisons
-  ignore letter case. Both converters write that tag, so a DNG that was renamed
-  on import still claims its ARW.
+  ignore letter case. Every DNG this app makes has that tag (Adobe's converter
+  writes it, and the app writes it into a dnglab DNG), so a DNG that was
+  renamed on import still claims its ARW.
 - An ARW is **pending** when no DNG in the folder claims it. An orphan backup
   (below) claims an ARW the same way its DNG would, by base name, so the run
   never converts a photo whose DNG is waiting to be renamed back.
@@ -175,15 +182,18 @@ Then the run does these steps in order. One file at a time.
    "<Adobe DNG Converter>" -c -d <folder> -o <work file name> <file.ARW>
    ```
 
-   The conversion passes when the exit code is 0 and `<base>.dng` exists. Both
-   conditions are needed: the converter returns 0 on a file it cannot read, and
-   makes no DNG. A DNG with no bytes is not a DNG: that conversion failed.
+   The converter writes a hidden work file, not `<base>.dng` (13.3). The
+   conversion passes when the exit code is 0, the work file exists and has
+   bytes, and the rename to `<base>.dng` passed. The exit code alone is not
+   enough: Adobe's converter returns 0 on a file it cannot read, and makes no
+   DNG.
    The app never changes, moves, or deletes an ARW. If `<base>.dng` appeared
    after the scan, the app does not start the converter for that ARW, and
    reports it.
 
-   A converter that is ended before it completes can leave a `<base>.dng`
-   with no bytes (tested 2026-10-09: the terminate and kill signals at 0.30 s
+   (Until 13.3, the converter wrote `<base>.dng` itself, and this was the
+   rule. Read "the work file" for `<base>.dng` below.) A converter that is
+   ended before it completes can leave a `<base>.dng` with no bytes (tested 2026-10-09: the terminate and kill signals at 0.30 s
    of a 0.37 s conversion). Left there, that file would claim the ARW in every
    later scan, and the photo would never convert. So when a conversion fails
    after the converter started, and `<base>.dng` is there, the app moves that
@@ -192,8 +202,8 @@ Then the run does these steps in order. One file at a time.
    name. If the Trash refuses, the note names the file to delete by hand.
 
    The command line ignores the converter's window preferences. With `-c` it
-   writes DNG 1.4, lossless raw, JPEG previews. That is the format of every DNG
-   this app makes. Never pass `-h`: it opens a window and the process never
+   writes DNG 1.4, lossless raw, JPEG previews. A DNG that dnglab makes is DNG
+   1.6, lossless raw (13.2). Never pass `-h`: it opens a window and the process never
    returns.
 
 2. **Tag.** For each DNG, including the new ones:
@@ -254,16 +264,21 @@ skipped, blocked (when it is not zero), failed, and "stopped" after a Cancel. Be
 reported file has its name, one plain sentence, and the tool's own words on a
 detail line.
 
-When a run left ARW files unconverted because Adobe DNG Converter is missing,
-the result says so, with the count.
+When a run left ARW files unconverted because no converter is installed, the
+result says so, with the count (13.5).
 
 The result line and each error message carry a symbol, and the counts stay in
 the primary text colour. Colour is never the only signal: the Mac's accent
 colour can be the same red as an error. A result with a failed or blocked file
 gets the "needs attention" symbol.
 
-Under the counts, one fixed line: "Photos already in Lightroom: Metadata ›
-Read Metadata from File." Lightroom caches the tag at import.
+Under the counts, when the run set the tag on at least one photo, one line:
+"Photos already in Lightroom: Metadata › Read Metadata from File." Lightroom
+caches the tag at import. A run that set nothing, and a dry run, do not show
+it. Every front end follows this one rule, from the core.
+
+When both converters did work in one run, a line says how many photos each
+converted. Every front end shows it.
 
 Known limitations:
 
@@ -282,7 +297,7 @@ One fixed-width window, about 440 points wide.
 | Drop zone | Accepts one folder. A symbolic link to a folder counts as that folder. A package, such as an app or a Lightroom library, is not a folder here. A dropped file that is not a folder shows "Drop a folder" until the next folder loads. That message never replaces a message about the loaded folder. Holds the "Choose folder" button, which opens the standard folder panel. |
 | Folder summary | Folder name and the counts from the scan. While a scan runs, the previous folder's counts are gone and Run and Remove are off. A read-only folder gets a message here. Each orphan backup is named here with the name to rename it to: up to five by name, then a count of the others. |
 | Factor row | Four preset buttons and one custom field. One factor is selected at a time. A click in the custom field selects it. VoiceOver hears which factor is selected. |
-| Run button | Label: `Desqueeze N photos`, `Desqueeze 1 photo`, or `Desqueeze` when there is nothing to run. N is the count of DNG files plus the pending ARW files that can convert. When Adobe DNG Converter is missing, the ARW files are not in N. |
+| Run button | Label: `Desqueeze N photos`, `Desqueeze 1 photo`, or `Desqueeze` when there is nothing to run. N is the count of DNG files plus the pending ARW files that can convert. When no converter is installed, the ARW files are not in N (13.5). |
 | Remove button | Writes `1 1`. On only when the folder has a DNG. It asks nothing and runs at once: the change is reversible. |
 | Progress bar | One step for each conversion and one for each tag write. Before the first step completes, the bar is indeterminate. During a run, the Run button becomes Cancel, and Escape presses it. After a Cancel the button reads "Finishing…" and is off until the run has ended, so a second click cannot start a new run. The run stays "running" until the scan after it has landed, so no click can act on old counts. |
 | Quit during a run | The app cancels the run, lets the current file complete, then quits. |
@@ -325,14 +340,18 @@ signed, notarized download.
 
 ## 7. Structure
 
-The repo follows Plateworks Undercurrent: a Swift package for the logic, and a
-SwiftUI app generated by XcodeGen.
+A Swift package for the logic, and a SwiftUI app generated by XcodeGen.
 
 ```
-Package.swift                     DesqueezeCore library and its tests
+Package.swift                     the core, the tool, and their tests
 Sources/DesqueezeCore/            logic, no UI, no AppKit
+Sources/DesqueezeCLI/             the command line tool, as a library
+Sources/desqueeze/                the tool's entry point
 Tests/DesqueezeCoreTests/
+Tests/DesqueezeCLITests/
 App/PlateworksDesqueeze/          SwiftUI app
+App/PlateworksDesqueezeTests/     tests of the window's state, with no app host
+MCPServer/                        the MCP server, a package of its own (12.2)
 project.yml                       XcodeGen spec
 ```
 
@@ -351,10 +370,10 @@ project.yml                       XcodeGen spec
 | `FolderScan` | Turns a folder into lists: DNG files, ARW files, orphan backups. Decides which ARW files are pending. | the file system |
 | `FolderScanner` | Joins the folder lists, the tag rows, and the backup state into one `FolderSnapshot`. | `ScaleTagging`, `BackupHandling` |
 | `ProcessRunner` | A protocol with one method: run a program with arguments, return exit code, output, and error text. The real one wraps `Process`. | nothing |
-| `ToolLocator` | Finds exiftool and Adobe DNG Converter. Returns a typed error that names the missing tool. | the file system |
+| `ToolLocator` | Finds exiftool, dnglab and Adobe DNG Converter. Gives no path for a tool that is not there, and holds the sentence that names it. | the file system |
 | `ScaleTag` | Behind the `ScaleTagging` protocol: reads the tag for a folder, writes it for one file, reads it back from one file. A `Scale` is two numbers. An unknown scale is `nil`. | `ProcessRunner` |
 | `FileBackups` | Behind the `BackupHandling` protocol: says whether a backup exists, moves it to the Trash, restores it with one rename. | the file system |
-| `RawConverter` | A protocol: convert one ARW and confirm the DNG exists. Version 1 has one implementation, `AdobeConverter`. A dnglab one is the planned swap (section 3). | `ProcessRunner` |
+| `RawConverter` | A protocol: convert one ARW and confirm the DNG exists. Two implementations: `DnglabConverter` and `AdobeConverter` (13.7). | `ProcessRunner` |
 | `DesqueezeJob` | `run(folder:)` scans, then runs section 4.3 in order, reports progress for each step, honors Cancel, returns the result. `plan(folder:)` returns what a run would do and changes nothing. | the units above |
 
 **Text rules live in the core.** The folder counts line, the run count, the
@@ -394,7 +413,7 @@ a detail line below the plain sentence.
   exact arguments for each call, the parsing of each output, the skip rules,
   the backup rules, and the order of a run. One test asserts that the converter
   is never called for an ARW that a DNG claims: a call there would make a
-  `_1.dng` duplicate.
+  second DNG of one photo.
 - **`FolderScan` tests** build temporary folders: mixed case extensions, a
   subfolder, a hidden file, an ARW with and without its DNG, a renamed DNG that
   claims its ARW through `OriginalRawFileName`, an existing backup.
@@ -406,7 +425,9 @@ a detail line below the plain sentence.
 - **Acceptance, by hand:** a scratch copy of a real shoot folder. All four
   presets, a custom factor, a second run (every file skipped), Remove, a path
   with spaces, a start with the launch argument `-simulateMissingTools YES`
-  (this Mac has exiftool in two places, so a rename proves nothing). The launch argument
+  (this Mac has exiftool in two places, so a rename proves nothing), and with
+  `-simulateMissingDnglab YES` and `-simulateMissingAdobe YES` for the two
+  states with one converter. The launch argument
   `-openFolder <path>` loads a folder at launch, because the standard Open
   panel runs in another process that a script cannot drive. Both are read from
   the launch arguments only, never from saved defaults. Then one file opened in
@@ -443,7 +464,7 @@ private repo.
 | One exiftool call for each write | Clear progress and a failure that stays with one file. At 0.10 s a file, speed is not a reason to batch. |
 | Adobe DNG Converter in version 1, behind a protocol | Its output is the file Lightroom's "Copy as DNG" makes, and it keeps 0.09 stops of highlight headroom that dnglab clips (2.1). dnglab is the swap for a release, because Adobe's converter cannot be bundled. |
 | Pending rule reads `OriginalRawFileName` | A DNG renamed on import still claims its ARW, so a rerun never converts it twice. |
-| Not sandboxed | The app must start two external tools. |
+| Not sandboxed | The app must start external tools. |
 | Built for Dom's Mac first, shaped to ship later | Dom chose this. Section 3 lists what waits. |
 
 ## 12. Command line and MCP
@@ -467,7 +488,7 @@ desqueeze --help
 
 | Command | Does | Changes files |
 |---|---|---|
-| `scan` | Prints each DNG with its current scale, the pending ARW files, the orphan backups, whether the folder is writable, and where the two tools are. | No |
+| `scan` | Prints each DNG with its current scale, the pending ARW files, the orphan backups, whether the folder is writable, and where exiftool, dnglab and Adobe DNG Converter are. | No |
 | `run` | Section 4.3 at the given factor. `--no-convert` leaves ARW files alone. | Yes |
 | `remove` | Section 4.3 with factor 1 and no conversion. | Yes |
 | `--dry-run` | On `run` and `remove`: prints what the run would do, file by file, from `DesqueezeJob.plan(folder:)`. | No |
@@ -496,8 +517,8 @@ desqueeze --help
 - `--verbose`, on every command: prints each exiftool and converter command
   line, its exit code, and its raw output to standard error. For
   troubleshooting.
-- When Adobe DNG Converter is missing, `run` still tags the DNG files, says
-  how many ARW files it left, and exits 0.
+- When no converter is installed, `run` still tags the DNG files, says how
+  many ARW files it left, and exits 0.
 - Control-C stops the run after the current file, prints the result so far,
   and exits 1. A closed Terminal window (`SIGHUP`) and a plain `kill`
   (`SIGTERM`) do the same. `stopped` is true only when the run left work undone. A
@@ -518,14 +539,16 @@ JSON shapes. `scale` is the tag value as text, or `null` when it is unknown.
 
 ```json
 { "folder": "/path", "writable": true,
-  "exiftool": "/opt/homebrew/bin/exiftool", "dngConverter": "/Applications/…",
+  "exiftool": "/opt/homebrew/bin/exiftool", "dnglab": "/opt/homebrew/bin/dnglab",
+  "dngConverter": "/Applications/…",
   "dngs": [ { "name": "a.dng", "scale": "1.5 1", "originalRawFileName": "a.ARW", "hasBackup": false } ],
   "pendingARWs": ["b.ARW"], "orphanBackups": [] }
 ```
 
 ```json
 { "folder": "/path", "factor": "1.5", "dryRun": false,
-  "converted": 1, "set": 2, "skipped": 0, "blocked": 0, "failed": 0,
+  "converted": 1, "convertedByDnglab": 1, "convertedByAdobe": 0,
+  "set": 2, "skipped": 0, "blocked": 0, "failed": 0,
   "stopped": false, "unconvertedARWs": 0,
   "notes": [ { "name": "x.dng", "kind": "failed", "message": "…", "detail": null } ] }
 ```
@@ -533,10 +556,13 @@ JSON shapes. `scale` is the tag value as text, or `null` when it is unknown.
 A dry run prints the same object with `"dryRun": true`, the counts a real run
 would give if every step passed, and a `"steps"` list of
 `{ "name", "action" }`, where action is `convert`, `write`, `skip`, or
-`blocked`.
+`blocked`. A `convert` step also has `"converter"`: `dnglab` or `adobe`.
+`"dngConverter"` is the path of Adobe DNG Converter: the key keeps its first
+name.
 
 A note's `kind` is one of `orphanBackup`, `notConverted`, `failed`,
-`blockedByBackup`, `leftoverBackup`, `backupKept`, `folderReadOnly`. A front
+`blockedByBackup`, `leftoverBackup`, `backupKept`, `folderReadOnly`,
+`convertedUnmatched` (13.4). A front
 end reads the kind, never the English sentence. `unconvertedARWs` is the count
 of pending ARW files the run left, from the run's own scan.
 
@@ -597,10 +623,10 @@ Build and test: `swift build --package-path MCPServer`,
 ### 12.3 Install
 
 `desqueeze` builds with `swift build -c release`, and `desqueeze-mcp` with
-`swift build -c release --package-path MCPServer`. For Dom's Mac they are
-copied to `~/.local/bin/`. The MCP server is registered with Claude Code by its
-absolute path. Registering it is a change to Dom's Claude configuration, so it
-is done only on his yes.
+`swift build -c release --package-path MCPServer`. Copy both to a folder on
+the `PATH`, such as `~/.local/bin/`. Register the MCP server with Claude Code
+by its absolute path. Registering changes the user's Claude configuration, so
+an agent does it only when the user says so.
 
 ### 12.4 Testing
 
@@ -619,8 +645,7 @@ is done only on his yes.
 
 Added 2026-10-09 at Dom's request. dnglab converts. Adobe DNG Converter is an
 optional backup that the app uses when dnglab cannot give the same file.
-Where this section and an earlier one differ (2.1, 3, 4.3 step 1, 6, 8, 11,
-12), this section wins.
+Where this section and any earlier one differ, this section wins.
 
 ### 13.1 Why
 
@@ -856,8 +881,6 @@ condition.
   firmware update, run the drift check on a new frame.
 - A matched render is not bit-identical to Adobe's. The mean of each colour
   channel is within 0.7%.
-- The table's numbers come from Adobe DNG Converter's output. Before a public
-  release, decide if a shipped app may carry them.
 - dnglab 0.8.0 is the version tested. The drift check is the guard for a
   later one.
 - exiftool prints a control character in a file name (a tab, a line end) as
@@ -869,6 +892,19 @@ condition.
   is the one path left on which the app can replace a file it did not make.
 - A leftover work file is removed only when its ARW is converted again. If
   the ARW is gone, or a DNG now claims it, the hidden work file stays.
-- A base name longer than about 235 bytes makes the work-file name too long
-  for the file system, and the conversion fails with the tool's own words.
+- A base name longer than 235 bytes makes the work-file name longer than the
+  255 bytes a file name can have. The app does not start a converter for
+  such an ARW, and the note says that the name is too long.
+- **One run in a folder at a time.** A second run that starts while the
+  first works would remove the first run's work file as a leftover, and each
+  could then act on the other's half-written file. So a run takes an advisory
+  lock on the folder (`flock` on the folder itself: no lock file is made),
+  and a second run in any front end stops at once with "Another Desqueeze
+  run is working in this folder. Wait for it to end, then run again." A scan
+  and a dry run take no lock. On a volume that has no such lock, the run
+  goes on without one, and the rule is the user's to keep.
+- The match table's numbers were measured from files that Adobe DNG
+  Converter wrote. The repo publishes them as measurements, as open-source
+  raw tools publish values of the same origin. Dom decides this before the
+  first public commit, and `docs/decisions.md` records it.
 
