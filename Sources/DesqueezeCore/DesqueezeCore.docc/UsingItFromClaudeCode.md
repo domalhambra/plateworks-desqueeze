@@ -14,8 +14,12 @@ The server has three tools. They do the work of the three commands of
 
 One thing the server cannot do: it never moves an original ARW to the Trash.
 The window and the command line tool can, on your request. No tool of the
-server has an argument for that, so a model cannot remove your originals, by
-request or by mistake.
+server has an argument for that, so a model cannot remove your originals
+through the server, by request or by mistake.
+
+One limit: a model that can start programs on your Mac can start the command
+line tool itself, with the flag. The server cannot prevent that. Its text
+for the model does not say where the option is.
 
 | Tool | Arguments | Changes files |
 |---|---|---|
@@ -59,7 +63,7 @@ shows anamorphic photos at the correct shape. Call desqueeze_scan first. Use
 dry_run true before a run that changes files. desqueeze_remove reverses
 desqueeze_run. The server runs one tool call at a time. This server never
 moves an original ARW file to the Trash, and it has no argument for that.
-Only the user can ask for it, in the window or with the command line tool.
+Only the user can ask for it.
 ```
 
 Each tool also has a description that the model reads. Together, the
@@ -68,7 +72,7 @@ descriptions say:
 - What the tool changes, and what it never changes: an ARW, a pixel, a
   subfolder.
 - That the server never moves an original ARW to the Trash, and that only
-  you can ask for that, in the window or with the command line tool.
+  you can ask for that. The text does not say where the option is.
 - That the change is reversible: `desqueeze_remove` sets every DNG back to
   no stretch, and does not delete a DNG that a run converted.
 - Which converter converts, and what to tell you when none is installed.

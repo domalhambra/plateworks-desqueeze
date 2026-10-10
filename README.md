@@ -195,8 +195,9 @@ The server has three tools: `desqueeze_scan`, `desqueeze_run` and
 the same JSON. A person does not type to the server.
 
 The server never moves an original ARW to the Trash. It has no argument for
-that, so an agent cannot remove your originals. Only the window and the
-command line tool can, on your request.
+that, so an agent cannot remove your originals through the server. Only the
+window and the command line tool can, on your request. One limit: an agent
+that has a shell can start the command line tool with the flag.
 
 ### One run in a folder at a time
 
@@ -221,12 +222,22 @@ runs in one folder there.
   with the same base name.
 - An ARW moves only on your request for one run: the box in the window, or
   `--trash-originals`. Then the run moves each ARW that it converted to the
-  Trash. It first checks that the DNG is complete, that the DNG names that
-  ARW, and that the ARW did not change during the run. When a check does not
-  pass, or the Trash refuses the file, the ARW stays, and a note says why.
-  A sidecar file, such as an XMP file, stays too. Look at the DNG files in
-  Lightroom before you empty the Trash: the check does not decode the
-  picture.
+  Trash. It first checks that the DNG is complete, that the DNG is the file
+  that this run made and names that ARW, and that the ARW did not change
+  during the run. When a check does not pass, or the Trash refuses the file,
+  the ARW stays, and a note says why. A sidecar file, such as an XMP file,
+  stays too. The limits of the checks:
+  - The check does not decode the picture. Look at the DNG files in
+    Lightroom before you empty the Trash.
+  - The tool compares the size, the modification date and the file number of
+    the ARW and of the DNG. It does not compare the bytes.
+  - Another program can put a file at the name of the DNG in a short moment
+    that the tool cannot see: directly after a conversion, or while the tool
+    sets the stretch of that DNG.
+  - The box, the run button and a dry run count from the last scan. The run
+    scans again, so it can move more or fewer ARW files than they said.
+  - A dry run lists a `trash` step for each ARW that it expects to convert.
+    When a conversion then fails, that ARW stays.
 - A converter writes a hidden work file beside the ARW, and the DNG gets its
   name only when it is complete. When a run ends hard, the hidden file can
   stay. The next run moves it to the Trash before it converts that photo.

@@ -127,8 +127,9 @@ is a ``RunSummary``: the counts, and the notes.
 ``DesqueezeJob/plan(folder:factor:convert:trashOriginals:remove:)`` is the
 dry run. It makes the same scan and asks the same three functions,
 ``ConverterChoice``, ``TagDecision`` and ``OriginalDecision``, and it
-changes no file. So a dry run and the run that follows cannot disagree. It
-takes no lock, so it never has the `noFolderLock` note of a run.
+changes no file. So a dry run shows what the run that follows does when
+every step passes. The two differ only where a step of the real run fails.
+It takes no lock, so it never has the `noFolderLock` note of a run.
 
 `trashOriginals` has no default value, in the job and in
 ``DesqueezeOperations``. So each front end states it: the window gives the

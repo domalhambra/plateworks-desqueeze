@@ -13,9 +13,11 @@ can damage, lose or expose a person's files is a security problem here.
 - **Your originals, on request.** With the box of the window ticked, or
   with `--trash-originals`, a run moves each ARW that it converted to the
   Trash. It does so only after the DNG passed a check, and only when the
-  ARW is the file that was converted. The option is off unless you turn it
-  on for that run, and nothing saves it. The MCP server has no such option,
-  so an agent cannot remove your originals.
+  ARW is the file that was converted and the DNG is the file that this run
+  made. The option is off unless you turn it on for that run, and nothing
+  saves it. The MCP server has no such option, so an agent cannot remove
+  your originals through the server. An agent that has a shell can start
+  the command line tool with the flag.
 - **The Trash.** Besides an original on request, it moves three kinds of
   file to the Trash. The first is the
   backup of a DNG, after the new tag reads back correctly. The second is its

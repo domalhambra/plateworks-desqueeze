@@ -107,7 +107,7 @@ Test files are in `Tests/DesqueezeCoreTests/`.
 | `AdobeMatch.swift` | The match table, the five rules of a full match, the tags to write, and the compare of numbers at the read-back | `AdobeMatchTests.swift`. Against the real Adobe DNG Converter: the drift check in `DnglabIntegrationTests.swift` |
 | `ConverterChoice.swift` | Which converter gets an ARW, in which order. The names of the converters and the sentences about who converts. | `ConverterChoiceTests.swift` |
 | `RunPlan.swift` | The one decision for a DNG: skip, blocked, or write. The plan of a dry run, with its step for an original that would move. | `PlanTests.swift`, `OriginalsPlanTests.swift` |
-| `Originals.swift` | The rule for one original (design 14.2): the function that decides "move" or "keep", the six sentences of an original that stays, the record of a file (size, modification date, file number) and its compare, and the check of the DNG | `OriginalsTests.swift` |
+| `Originals.swift` | The rule for one original (design 14.2): the function that decides "move" or "keep", the eight sentences of an original that the run did not move, the record of a file (size, modification date, file number) and its compare, for the ARW and for its DNG, and the check of the DNG | `OriginalsTests.swift`. On real files: `OriginalsDiskTests.swift` |
 | `RunSummary.swift` | The counts of a run, the note for each file with its `kind`, the note of a volume that gives no folder lock, the counts line, the line about the two converters, the rule of the Lightroom line, the line about the originals, the progress value, and the cancel flag | `RunSummaryTests.swift`, `OriginalsTests.swift` |
 | `FolderLock.swift` | One run in a folder at a time: the advisory lock on the folder, what each answer of the system means, the sentence of a run that did not start, the error of a lock call that failed, and the line of `--verbose` for a volume with no lock | `FolderLockTests.swift`. Its test on an ExFAT volume is a part of `ExclusiveRenameVolumeTests`, and `ExclusiveRenameTests.swift` makes and detaches the disk image. With two processes of the built tool: `TwoRunsTests.swift` in `Tests/DesqueezeCLITests/` |
 | `DesqueezeJob.swift` | The run and the dry run, in order, on a fresh scan. The run holds the folder lock. The fifth step of a run that was asked to move the originals. | `DesqueezeJobTests.swift`, `PlanTests.swift`, `FolderLockTests.swift`, `OriginalsJobTests.swift`, `OriginalsPlanTests.swift`. With the real programs: `IntegrationTests.swift`, `DnglabIntegrationTests.swift` |
@@ -158,7 +158,7 @@ tests check the bytes on the wire.
 
 | File | Owns | Tests |
 |---|---|---|
-| `AppModel.swift` | The window's state: the folder, the factor, the box for the originals, the one job in flight, Cancel, a run that another run kept out, the quit during a run, the launch arguments | `AppModelTests.swift` and `OriginalsModelTests.swift` in `App/PlateworksDesqueezeTests/`. `Fakes.swift` beside them holds their fakes. |
+| `AppModel.swift` | The window's state: the folder, the factor, the box for the originals, the one job in flight, Cancel, a run that another run kept out, the detail line of a lock call that failed, the quit during a run, the launch arguments | `AppModelTests.swift` and `OriginalsModelTests.swift` in `App/PlateworksDesqueezeTests/`. `Fakes.swift` beside them holds their fakes. |
 | `ContentView.swift` | The one view: the drop zone, the factor row, the box for the originals, the buttons, the progress bar, the result list | - |
 | `DesqueezeApp.swift` | The app and its delegate: one window, and the reply to a quit | - |
 | `Info.plist` | Written by XcodeGen from `project.yml`. A hand edit is lost. | - |
@@ -246,26 +246,34 @@ Each step has the rule that keeps the user's files safe. Design 4.3, 13.3,
 12. **Move the originals, only on request.** The step exists only when the
     caller gave `trashOriginals: true`, and never for Remove. It starts
     after the tag of the last DNG, and not after a cancel. For each ARW that
-    this run converted, `OriginalDecision.decide` asks four things: the DNG
-    has a full match, its tag step ended at the factor, the DNG passes its
-    check, and the ARW is the file that was converted. The check of the DNG
-    is one exiftool read: the DNG is a regular file with bytes, it names
-    the ARW in `OriginalRawFileName`, and its `DefaultScale` is the factor.
-    The run recorded the size, the modification date and the file number of
-    the ARW before the conversion, and it reads them again as the last
-    thing before the move. Then `BackupHandling.trashFile` moves the ARW.
-    *Safety:* an ARW that fails one check stays, with an `originalKept`
-    note. A link or a folder never goes. When the Trash refuses the file,
-    the ARW stays: the job deletes nothing and tries no second way. A file
-    beside the ARW, such as `<base>.xmp`, is not touched.
+    this run converted, `OriginalDecision.decide` asks five things, in
+    this order: the DNG has a full match, its tag step ended at the factor,
+    the DNG is the file that this run made, the DNG passes its check, and
+    the ARW is the file that was converted. For the third one, the run
+    recorded the size, the modification date and the file number of the DNG
+    directly after the conversion, and again directly after the tag step.
+    The first record must hold directly before the tag step, and the second
+    one here. The name in a DNG cannot prove whose DNG it is. The check of
+    the DNG is one exiftool read: the DNG is a regular file with bytes, it
+    names the ARW in `OriginalRawFileName`, and its `DefaultScale` is the
+    factor. The run recorded the same three facts of the ARW before the
+    conversion, and it reads them again as the last thing before the move.
+    Then `BackupHandling.trashFile` moves the ARW. *Safety:* an ARW that
+    fails one check stays, with an `originalKept` note. A DNG that is not
+    the run's own is still tagged, and only its ARW stays. A link or a
+    folder never goes. An ARW that is not there gets a note that says so.
+    When the Trash refuses the file, the ARW stays: the job deletes nothing
+    and tries no second way. A file beside the ARW, such as `<base>.xmp`,
+    is not touched.
 
 A cancel is honored between files, never in the middle of one. The result
 has the counts and one note for each file that has something to say.
 
 `DesqueezeJob.plan(folder:)` is the dry run. It makes the same scan, asks the
 same three functions (`ConverterChoice`, `TagDecision` and
-`OriginalDecision`), and changes no file. So a dry run and the run that
-follows cannot disagree. It takes no lock, so it can read a folder in which
+`OriginalDecision`), and changes no file. So a dry run shows what the run
+that follows does when every step passes. The two differ only where a step
+of the real run fails. It takes no lock, so it can read a folder in which
 a run works, and it never has the `noFolderLock` note of a run. It can then
 show a file in change, for example a DNG as blocked by a backup that the
 run is about to clear. For the originals it reads no ARW and no DNG: it plans a run in
@@ -319,6 +327,13 @@ states it. The window gives the state of its box. The tool gives its flag,
   loads, and when a scan of the folder fails. A folder that could not be
   read is the newer event, so the window shows that alone, and VoiceOver
   hears the same.
+- **A lock call that failed has a detail line in the window.** The run did
+  not start, and the window shows "This folder could not be read." with the
+  system's words below it, as the tool and the server do (design 13.9). The
+  words are the core's, from `FolderLock.Failed`. The line goes when a scan
+  of the folder lands, and when another folder loads. A scan that failed
+  has no such line. The model gets its lock from outside, so a test gives
+  one whose call fails.
 - **The window never remembers the box for the originals.** It is off at
   every launch, when a folder loads, and after every run, also a run that
   was cancelled or that failed. No launch argument turns it on. A scan of

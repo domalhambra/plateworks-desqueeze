@@ -94,7 +94,8 @@ and only for one run:
 - **With the command line tool,** add `--trash-originals` to `desqueeze run`.
   <doc:UsingTheCommandLineTool> has the rules of the flag.
 - **The MCP server cannot do it.** No tool of the server has such an
-  argument, so an agent cannot remove your originals.
+  argument, so an agent cannot remove your originals through the server.
+  The limits below say what the server cannot prevent.
 
 The option is off each time. The window does not save the box: it is off
 when the app opens, when a folder loads, and after every run. The command
@@ -117,11 +118,23 @@ to the Trash only when all of these are true:
 5. Directly before the move, the DNG is a regular file with bytes, it names
    the ARW in its `OriginalRawFileName` tag, and its `DefaultScale` tag is
    the stretch of this run. The tool reads both tags with one exiftool call.
+6. The DNG is the file that this run made. The name in the DNG cannot prove
+   that: the DNG of another photo can hold the same name. So the tool
+   records the size, the modification date and the file number of the DNG
+   two times: directly after the conversion, and directly after it set the
+   stretch. The first record must still be true directly before the tool
+   sets the stretch. The second record must still be true at the move. A
+   DNG that fails one of the two still gets the stretch, as each DNG in the
+   folder does. Only its ARW stays.
+
+The tool asks them in the order 1, 2, 3, 6, 5, 4. So the second read of the
+ARW is the last thing before the move.
 
 When one of them is not true, the ARW stays, and the result has a note that
-says why. <doc:Troubleshooting> lists the six sentences. When the Trash
+says why. <doc:Troubleshooting> lists the eight sentences. When the Trash
 refuses the file, the ARW stays too. The tool never deletes an ARW, and it
-tries no second way to remove one.
+tries no second way to remove one. When the ARW is not in the folder at the
+move, the tool moves nothing, and the note says that.
 
 The tool moves the ARW only. A file beside it, such as `frame.xmp`, is not
 the tool's file and stays.
@@ -146,6 +159,29 @@ Know these limits before you turn the option on:
 - **A volume with no Trash.** The move is refused, and every ARW stays.
 - **An external volume.** The ARW goes to the Trash of that volume. Its
   space is free only after you empty the Trash with the volume connected.
+- **The tool compares three facts, and not the bytes.** Checks 4 and 6
+  compare the size, the modification date and the file number of a file. A
+  program that writes an ARW in place, keeps its size, and puts the date
+  back is not seen. On a FAT32 volume, a file that is deleted and made
+  again with the same name, size and date gets the same file number. That
+  was measured on a disk image. APFS, HFS+ and ExFAT gave another number.
+- **Short moments that the tool cannot see.** The tool records the DNG
+  directly after its conversion. It compares that record directly before
+  it sets the stretch, and it records the DNG again directly after.
+  Another program can put a file at `<base>.dng` in two moments: before the
+  first record, and between that compare and the second record. The tool
+  takes such a file as its own DNG.
+- **The counts come from the last scan.** The line under the box, the run
+  button and a dry run count the ARW files of the last scan. The run scans
+  the folder again. When the folder changed in between, the run can convert
+  and move more or fewer ARW files than they said.
+- **A dry run plans a run in which each step passes.** It lists a `trash`
+  step for each ARW that it expects to convert. When a conversion then
+  fails in the real run, that ARW stays.
+- **An agent that has a shell.** The MCP server has no argument for the
+  option. An agent that can start programs on your Mac can still start the
+  command line tool with the flag. The text that the server gives a model
+  does not say where the option is.
 
 ## What goes to the Trash, and when
 
@@ -154,7 +190,7 @@ Know these limits before you turn the option on:
 | `<name>.dng_original`, the backup of a DNG | After the new tag of that DNG read back correctly. Never before. |
 | `.<base>.desqueeze-work.dng`, a hidden work file of the tool | After a conversion that failed. Also when a later run finds one that an earlier run left, at the moment that it converts the same ARW again. |
 | `.<base>.desqueeze-work.dng_exiftool_tmp` | When a later run finds it, at the moment that it converts the same ARW again. exiftool can leave this file when it is ended in the middle of the match. |
-| `<base>.ARW`, an original | Only in a run that you asked to move the originals, and only after the five checks of the section before this one. |
+| `<base>.ARW`, an original | Only in a run that you asked to move the originals, and only after the six checks of the section before this one. |
 
 Nothing else goes to the Trash, and the tool never empties the Trash. When
 the Trash refuses a work file, the result names the hidden file, so that you

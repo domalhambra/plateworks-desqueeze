@@ -123,7 +123,8 @@ exiftool on a folder of photos that you care about. Copy the folder first.
   be an absolute path to a folder that exists. With any other value, the
   tool stops before it reads a photo folder.
 - When the variable is set, the tool says so on standard error: "Test mode:
-  backups go to …, not to the Trash."
+  every file that would go to the Trash goes to …." That is each backup,
+  each work file, and each original that a run moves on request.
 
 The variable is for tests only. No help text names it.
 
@@ -132,20 +133,32 @@ the same function as a backup, ``BackupHandling/trashFile(_:)``, so the two
 rules above hold for it too. The tests of the option are in
 `Tests/DesqueezeCoreTests/OriginalsTests.swift`,
 `Tests/DesqueezeCoreTests/OriginalsJobTests.swift` and
-`Tests/DesqueezeCoreTests/OriginalsPlanTests.swift`, on fakes. With the real
-programs, `testARealRunWithTheOptionOnLeavesTheDNGAndMovesItsARWToTheInjectedTrash`
+`Tests/DesqueezeCoreTests/OriginalsPlanTests.swift`, on fakes.
+`Tests/DesqueezeCoreTests/OriginalsDiskTests.swift` has real files in a
+temporary folder, with a fake converter and a fake tag, so it never skips.
+A test on fakes gives the job paths that do not exist, and it cannot see a
+delete. With the real programs,
+`testARealRunWithTheOptionOnLeavesTheDNGAndMovesItsARWToTheInjectedTrash`
 moves a copy of the fixture into a folder of the test. The tests of the
 built tool are in `Tests/DesqueezeCLITests/EndToEndOriginalsTests.swift`.
 They skip when dnglab does not get the fixture frame, so they never start
 Adobe DNG Converter.
 
 For this option, a test that passes is not enough. Break the rule in the
-code, see the test fail, and restore the code. Three breaks to try first:
-the option is treated as on when it is off, the compare of the ARW with its
-record is left out, and the step runs after a cancel.
-`testWithTheOptionOffAConversionThatPassedMovesNoARWAndAsksTheDiskNothing`,
-`testLine4AnARWThatChangedDuringTheRunStays` and
-`testACancelBeforeTheFifthStepMovesNoARWAndTheRunIsStopped` catch them.
+code, see the test fail, and restore the code. Five breaks to try first:
+
+| Break | The test that catches it |
+|---|---|
+| The option is treated as on when it is off. | `testWithTheOptionOffAConversionThatPassedMovesNoARWAndAsksTheDiskNothing` |
+| The compare of the ARW with its record is left out. | `testLine4AnARWThatChangedDuringTheRunStays` |
+| The step runs after a cancel. | `testACancelBeforeTheFifthStepMovesNoARWAndTheRunIsStopped` |
+| The compare of the DNG with its two records is left out. | `testLine6ADNGThatWasReplacedBetweenItsConversionAndItsTagStepKeepsItsOriginalAndIsStillTagged`, `testARealDNGOfAnotherFrameThatTakesTheNameAfterTheConversionKeepsTheARW` |
+| A delete follows a refusal of the Trash. | `testATrashThatRefusesLeavesTheRealARWInTheFolderWithItsBytes` |
+
+One rule has no behavioral test: the option has no default value. Every
+caller in the code states the value, so a default changes no result.
+`Tests/DesqueezeCoreTests/NoDefaultForTheOptionTests.swift` reads the Swift
+files of the product, and fails for a default.
 
 **No test reads or writes the saved settings of the app.** The tests of the
 window give the model its own functions for the saved factor. The box for

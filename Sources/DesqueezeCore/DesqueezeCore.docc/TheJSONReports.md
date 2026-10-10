@@ -147,7 +147,7 @@ Each note:
 | `backupKept` | A DNG | The tag is set. The Trash refused the backup, and it stayed beside the file. | `set` |
 | `folderReadOnly` | The folder | The folder is read-only. No file was tried, and no file has a note. | Nothing |
 | `convertedUnmatched` | A DNG | dnglab converted the photo with no full match, because Adobe DNG Converter is not installed. This is not an error. `detail` has the reason. | `converted` |
-| `originalKept` | An ARW | The run was asked to move the originals, it converted this ARW, and the ARW stays in the folder. `message` says why. This is not an error. For a DNG that did not pass its check, and for a Trash that refused the file, `detail` has the reason. | Nothing. The ARW is in `converted`, and not in `originalsInTrash`. |
+| `originalKept` | An ARW | The run was asked to move the originals, it converted this ARW, and it did not move it. `message` says why. The ARW stays in the folder, but for one message: the ARW was not in the folder when the run came to move it. This is not an error. For a DNG that did not pass its check, and for a Trash that refused the file, `detail` has the reason. | Nothing. The ARW is in `converted`, and not in `originalsInTrash`. |
 | `noFolderLock` | The folder | The volume gives no lock for a folder, so the run worked without the lock that keeps a second run out. This is not an error. It is the first note. A dry run takes no lock, and never has this note. | Nothing |
 
 <doc:Troubleshooting> has the sentence of each kind, and what a person can

@@ -133,7 +133,7 @@ desqueeze run "/Volumes/Card/Shoot 1" --factor 1.5 --trash-originals
 
 With `--trash-originals`, the run moves each ARW that it converted to the
 Trash, after the tag of the last DNG is set. An ARW moves only when its DNG
-passes the check. <doc:WhatHappensToYourFiles> has the five conditions and
+passes the check. <doc:WhatHappensToYourFiles> has the six conditions and
 the limits. The result has one more line:
 
 ```
@@ -169,7 +169,9 @@ A run would give: 1 converted · 2 set · 0 skipped · 0 failed
 ```
 
 A `trash` step names an ARW that the run would move. An ARW whose DNG would
-have no full match has no such step, and a note says why.
+have no full match has no such step, and a note says why. A dry run plans a
+run in which each step passes: when a conversion then fails in the real run,
+that ARW stays. A dry run counts from its own scan, and the run scans again.
 
 The rules of the flag:
 

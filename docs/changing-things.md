@@ -71,7 +71,7 @@ tool's own words on a detail line below it.
    | A folder: the counts, the run button, read-only, the advice about the converters | `Sources/DesqueezeCore/FolderText.swift` | `Tests/DesqueezeCoreTests/FolderTextTests.swift` |
    | The box for the originals in the window: its label, the line under it, the run button with the originals | `Sources/DesqueezeCore/FolderText.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
    | One file of a run: most notes, the counts line, the Lightroom line and when it shows, the line about the two converters, the line about the originals | `Sources/DesqueezeCore/RunSummary.swift` | `Tests/DesqueezeCoreTests/RunSummaryTests.swift`, `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
-   | An original that stays: the six sentences, and the detail line of a DNG that did not pass its check | `Sources/DesqueezeCore/Originals.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
+   | An original that the run did not move: the eight sentences, and the detail line of a DNG that did not pass its check | `Sources/DesqueezeCore/Originals.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
    | A run that did not start, because another run works in the folder. The line of `--verbose` for a volume that gave no folder lock. | `Sources/DesqueezeCore/FolderLock.swift` | `Tests/DesqueezeCoreTests/FolderLockTests.swift` |
    | The note of a run on a volume that gives no folder lock | `Sources/DesqueezeCore/RunSummary.swift` | `Tests/DesqueezeCoreTests/FolderLockTests.swift` |
    | A write that failed, a backup that was restored, a partial DNG | `Sources/DesqueezeCore/DesqueezeJob.swift` | `Tests/DesqueezeCoreTests/DesqueezeJobTests.swift` |
@@ -262,18 +262,22 @@ of the user from the folder. Change the design first: it is the contract.
 |---|---|---|
 | When an ARW moves: the function that decides, and the order of its questions | `OriginalDecision` in `Sources/DesqueezeCore/Originals.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
 | The record of an ARW and its compare (size, modification date, file number, regular file) | `FileRecord` and `OriginalState` in `Sources/DesqueezeCore/Originals.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
+| The two records of a DNG and when each one must hold: the DNG is the file that this run made | `FileRecord.isTheSameFile` in `Sources/DesqueezeCore/Originals.swift`, and the conversion loop, the tag loop and `moveOne` in `Sources/DesqueezeCore/DesqueezeJob.swift` | `Tests/DesqueezeCoreTests/OriginalsJobTests.swift`. On real files: `Tests/DesqueezeCoreTests/OriginalsDiskTests.swift`. With the real programs: `Tests/DesqueezeCoreTests/DnglabIntegrationTests.swift` |
 | The check of the DNG, and its one exiftool read | `DNGCheck` in `Sources/DesqueezeCore/Originals.swift`, `readOriginalCheck` in `Sources/DesqueezeCore/ScaleTag.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
-| The fifth step of the run: after every tag step, not after a cancel, one try of the Trash | `Sources/DesqueezeCore/DesqueezeJob.swift` | `Tests/DesqueezeCoreTests/OriginalsJobTests.swift`. With the real programs: `Tests/DesqueezeCoreTests/DnglabIntegrationTests.swift` |
+| The fifth step of the run: after every tag step, not after a cancel, one try of the Trash, and no delete after a refusal | `Sources/DesqueezeCore/DesqueezeJob.swift` | `Tests/DesqueezeCoreTests/OriginalsJobTests.swift`. On real files, where a delete shows: `Tests/DesqueezeCoreTests/OriginalsDiskTests.swift`. With the real programs: `Tests/DesqueezeCoreTests/DnglabIntegrationTests.swift` |
 | The steps of the dry run | `Sources/DesqueezeCore/DesqueezeJob.swift` | `Tests/DesqueezeCoreTests/OriginalsPlanTests.swift`, `Tests/DesqueezeCoreTests/PlanTests.swift` |
 | The flag of the tool and its two usage errors | `Sources/DesqueezeCLI/Arguments.swift` | `Tests/DesqueezeCLITests/OriginalsToolTests.swift`, `Tests/DesqueezeCLITests/EndToEndOriginalsTests.swift` |
 | The box of the window: when it shows, and when it is off | `App/PlateworksDesqueeze/AppModel.swift` | `App/PlateworksDesqueezeTests/OriginalsModelTests.swift` |
+| The count of the originals that a run can move, for the box and its line | `FolderSnapshot.convertibleARWs` in `Sources/DesqueezeCore/FolderText.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift`, `App/PlateworksDesqueezeTests/OriginalsModelTests.swift` |
+| The option has no default value | Each declaration of `trashOriginals` | `Tests/DesqueezeCoreTests/NoDefaultForTheOptionTests.swift`, which reads the Swift files |
 
 1. Write the test on fakes, and see it fail. For a rule that keeps an ARW in
    the folder, also break the rule in the code and see the test fail. The
    first break to try: the option is treated as on when it is off.
 2. Change the code. Keep these four rules:
    - The option has no default value in `DesqueezeJob.run`,
-     `DesqueezeJob.plan` and `DesqueezeOperations.run`.
+     `DesqueezeJob.plan` and `DesqueezeOperations.run`. No behavioral test
+     can hold this, so one test reads the source.
    - The ARW moves through `BackupHandling.trashFile`, once. Never add a
      delete, and never add a second way to the Trash.
    - Nothing saves the option, and nothing but the box of the window and

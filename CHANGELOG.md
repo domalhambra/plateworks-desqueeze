@@ -46,11 +46,14 @@ The first version. It is built from source, and there is no download.
 - An ARW is never changed and never deleted. It moves only to the Trash,
   and only when the user asks for it for one run.
 - An original moves only when the run converted it, its DNG has a full
-  match and the chosen factor, the DNG names that ARW, and the ARW did not
-  change during the run. When a check does not pass, or the Trash refuses
-  the file, the ARW stays, and a note of the kind `originalKept` says why.
+  match and the chosen factor, the DNG is the file that this run made and
+  names that ARW, and the ARW did not change during the run. When a check
+  does not pass, or the Trash refuses the file, the ARW stays, and a note of
+  the kind `originalKept` says why. An ARW that is not in the folder when
+  the run comes to move it gets a note that says so.
 - The MCP server never moves an original. A tool call that asks for it is
-  refused.
+  refused. The text that the server gives a model does not say where the
+  option is.
 - A DNG keeps its backup until the new tag reads back correctly. Then the
   backup goes to the Trash. A write that fails restores the backup.
 - A DNG that has an older backup beside it is blocked, and the backup is not
@@ -104,4 +107,18 @@ The first version. It is built from source, and there is no download.
 - A Lightroom catalog that holds the ARW files already shows them as
   missing after the move.
 - On a volume that has no Trash, the move is refused and every ARW stays.
+- The checks before an original moves compare the size, the modification
+  date and the file number of the ARW and of its DNG. They do not compare
+  the bytes.
+- Another program can put a file at the name of a DNG in a moment that the
+  run cannot see: before the first record of the DNG, or between the
+  compare before its tag step and the record after it. The run takes such a
+  file as its own.
+- The box of the window, the run button and a dry run count from the last
+  scan. The run scans again, so it can convert and move more or fewer ARW
+  files than they said.
+- A dry run lists a move for each ARW that it expects to convert. When a
+  conversion then fails in the real run, that ARW stays.
+- The MCP server has no argument that moves an original, but an agent that
+  has a shell can start the command line tool with the flag.
 - The app is not signed with a Developer ID and not notarized.

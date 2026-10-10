@@ -42,7 +42,7 @@ warning symbol:
 |---|---|
 | This folder is read-only. Desqueeze cannot change its files. | Both buttons are off. |
 | `<name>.dng_original`: A backup with no DNG beside it. Rename it to `<name>.dng` to get the photo back. | An earlier write did not complete. <doc:Troubleshooting> says what to do. The window names up to five such files, then gives a count of the others. |
-| This folder could not be read. | The scan failed. No file is tried. |
+| This folder could not be read. | The scan failed. No file is tried. When a click on a button started no run because the lock call of the system failed, a small line below the message has the words of the system, for example "Input/output error". The line goes when the window reads the folder again. |
 | Another Desqueeze run is working in this folder. Wait for it to end, then run again. | A click on a button started no run, and no file was changed. Another run works in this folder: in the command line tool, in the MCP server, or in a second copy of the app. The message goes at the next click that starts a run, or when another folder loads. It also goes when the window cannot read the folder: the window then shows "This folder could not be read." alone, and VoiceOver says the same. |
 
 ## Select the squeeze factor
@@ -85,7 +85,13 @@ to the Trash, after the DNG of that ARW passed a check.
   run, also a run that you cancelled or that failed. The window never saves
   it. Tick it again for each run that must move the originals.
 - The box does not show for a folder with no ARW to convert, for a
-  read-only folder, and when no converter is installed.
+  read-only folder, and when no converter is installed. An ARW whose name
+  is too long cannot convert, so the box and its count leave it out. The
+  run button still counts that ARW, and the result of the run says what to
+  do with it.
+- The line and the run button count from the last time that the window
+  read the folder. The run reads the folder again, so it can move more or
+  fewer ARW files than they said.
 - The box cannot change while a run works, or while the window reads the
   folder.
 - "Remove" never moves an original, also with the box on.
