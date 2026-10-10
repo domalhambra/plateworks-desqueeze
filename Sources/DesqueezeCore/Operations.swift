@@ -21,8 +21,11 @@ public struct DesqueezeOperations: Sendable {
     private let backups: BackupHandling
 
     /// - Parameters:
+    ///   - exiftool: reads and writes the tags.
     ///   - dnglab: there is no default, so no caller leaves dnglab out by
     ///     mistake and converts with Adobe alone.
+    ///   - dngConverter: Adobe DNG Converter, or nil when it is not
+    ///     installed.
     ///   - runner: starts exiftool and both converters. Wrap it in a
     ///     `LoggingProcessRunner` to see each command.
     ///   - backups: where a backup goes after a write that passed its check,
@@ -74,9 +77,15 @@ public struct DesqueezeOperations: Sendable {
     /// Design 4.3 at `factor`. With `dryRun`, the report of
     /// `DesqueezeJob.plan`, and no file changes.
     ///
-    /// - Parameter convert: false leaves the ARW files alone. The report
-    ///   still counts them in `unconvertedARWs`, also at factor 1. Only
-    ///   `remove` leaves that count out.
+    /// - Parameters:
+    ///   - folder: the folder to scan and to run on. Its top level only.
+    ///   - factor: the stretch to set.
+    ///   - convert: false leaves the ARW files alone. The report still
+    ///     counts them in `unconvertedARWs`, also at factor 1. Only `remove`
+    ///     leaves that count out.
+    ///   - dryRun: true changes no file, and the report has the steps.
+    ///   - cancel: stops the run after its current file, when it is set.
+    ///   - progress: called after each step of a real run.
     /// - Throws: only when the folder cannot be scanned. No file is changed
     ///   then. A file that fails is a note in the report.
     public func run(

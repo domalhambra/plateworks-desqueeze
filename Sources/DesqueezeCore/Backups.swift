@@ -16,6 +16,8 @@ public protocol BackupHandling: Sendable {
     func trashFile(_ file: URL) throws
 }
 
+/// The real `BackupHandling`. It discards a file with the function that its
+/// caller gives: the Trash for the app, and a folder of its own for a test.
 public struct FileBackups: BackupHandling {
     private let trash: @Sendable (URL) throws -> Void
 

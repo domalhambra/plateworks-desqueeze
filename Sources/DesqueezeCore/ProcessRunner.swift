@@ -1,5 +1,6 @@
 import Foundation
 
+/// What a program that ran and exited gave: its exit code and its output.
 public struct ProcessResult: Equatable, Sendable {
     public let exitCode: Int32
     public let stdout: String
@@ -45,6 +46,7 @@ public protocol ProcessRunner: Sendable {
     func run(_ executable: URL, _ arguments: [String]) throws -> ProcessResult
 }
 
+/// The real runner. It starts each program with `Process`.
 public struct SystemProcessRunner: ProcessRunner {
     public init() {}
 

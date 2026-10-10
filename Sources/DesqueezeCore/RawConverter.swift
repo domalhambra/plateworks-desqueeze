@@ -1,5 +1,6 @@
 import Foundation
 
+/// Why a conversion failed, and the file that it left behind.
 public enum ConvertError: Error, Equatable {
     /// The conversion failed. The caller may give the ARW to the next
     /// converter.
@@ -64,9 +65,11 @@ public struct Conversion: Equatable, Sendable {
 /// gets an ARW. Both follow `ConverterRules`: each writes the hidden work
 /// file of the ARW, and the DNG gets its name only when it is complete.
 public protocol RawConverter: Sendable {
-    /// - Parameter facts: what the ARW says about itself, from the one read
-    ///   that the run makes for all pending files. `ARWFacts.none` when
-    ///   nothing is known. A converter reads no facts itself.
+    /// - Parameters:
+    ///   - arw: the raw file. It is read, and never changed.
+    ///   - facts: what the ARW says about itself, from the one read that
+    ///     the run makes for all pending files. `ARWFacts.none` when nothing
+    ///     is known. A converter reads no facts itself.
     /// - Throws: `ConvertError.failed` when the conversion failed, and
     ///   `ConvertError.failedForAll` when it failed for a reason that holds
     ///   for every converter, so the caller does not try the next one. The
@@ -101,6 +104,12 @@ public struct RawConverters: Sendable {
     /// The real converters, for the tools that are installed. One runner
     /// starts every program, so a `LoggingProcessRunner` shows them all.
     ///
+    /// - Parameter exiftool: reads the facts of each ARW, and writes
+    ///   dnglab's match.
+    /// - Parameter dnglab: nil when dnglab is not installed.
+    /// - Parameter adobe: Adobe DNG Converter, or nil when it is not
+    ///   installed.
+    /// - Parameter runner: starts every program.
     /// - Parameter backups: where each converter sends the work file that
     ///   an earlier run left, and exiftool's leftover beside it (design
     ///   13.3, step 1). Give the backups of the job, so every discarded file
@@ -461,6 +470,8 @@ public struct AdobeConverter: RawConverter {
     private let rules: ConverterRules
 
     /// - Parameters:
+    ///   - executable: Adobe DNG Converter, the program inside the app.
+    ///   - runner: starts the converter.
     ///   - discardLeftover: takes away what an earlier run left. It gets
     ///     only `ConverterOutput.workURL` of the ARW in work, and
     ///     `<work file>_exiftool_tmp`. The app gives

@@ -207,6 +207,7 @@ public struct ErrorReport: Codable, Equatable, Sendable {
     }
 }
 
+/// Turns a report into JSON text.
 public enum ReportJSON {
     /// The one way to turn a report into text, so every front end prints the
     /// same bytes for the same report: one JSON object, one key on each line,

@@ -65,6 +65,7 @@ public struct DnglabConverter: RawConverter {
     /// - Parameters:
     ///   - executable: dnglab.
     ///   - exiftool: writes the tags and reads them back.
+    ///   - runner: starts dnglab and exiftool.
     ///   - discardLeftover: takes away what an earlier run left. It gets
     ///     only `ConverterOutput.workURL` of the ARW in work, and
     ///     `<work file>_exiftool_tmp`. The app gives
