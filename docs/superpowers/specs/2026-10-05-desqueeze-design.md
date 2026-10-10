@@ -1140,9 +1140,18 @@ One unit records and compares the ARW's three facts of line 4.
   file number (measured on a disk image; APFS, HFS+ and ExFAT gave another
   number).
 - A moment lies between the end of a conversion and the first record of its
-  DNG, and between the end of a tag step and the second record. A file that
-  another program puts at `<base>.dng` in one of those moments is taken as
-  the run's own.
+  DNG. A second, longer one lies between the check before a tag step and
+  the record after it: exiftool works on the DNG in that time, about a
+  tenth of a second, and its write gives the file a new record, so the run
+  cannot tell exiftool's new file from another one. A file that another
+  program puts at `<base>.dng` in one of those moments is taken as the
+  run's own. Line 5 still holds for it: it must name the ARW and carry the
+  factor.
+- An ARW that cannot be read at step 5, for any reason, gets the sentence
+  of a gone ARW. No file moves.
+- The Run button's count N includes a pending ARW whose name is too long,
+  so the run starts and its note says why that ARW did not convert. The
+  box, its line, and M leave it out.
 - The line under the box, the Run button and a dry run count from the last
   scan. The run scans again (4.3), so it can convert and move more or fewer
   ARW files than they said, when the folder changed in between.
