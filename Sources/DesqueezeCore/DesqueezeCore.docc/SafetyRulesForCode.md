@@ -19,10 +19,33 @@ row says another folder.
 
 | Rule | Why | Guard |
 |---|---|---|
-| The tool never changes, moves or deletes an ARW. | The ARW is the original. | The tests on the real programs compare the bytes of the ARW before and after: `testARealRunConvertsTagsChecksAndClearsTheBackups`, `testARealPlanAndRunWithDnglabFirstConvertMatchTagAndClearTheBackups`. |
+| The tool never changes or deletes an ARW. It moves one only on the request of the next section. | The ARW is the original. | The tests on the real programs compare the bytes of the ARW before and after: `testARealRunConvertsTagsChecksAndClearsTheBackups`, `testARealPlanAndRunWithDnglabFirstConvertMatchTagAndClearTheBackups`. With the request, the ARW in the trash of the test has the bytes of the source: `testARealRunWithTheOptionOnLeavesTheDNGAndMovesItsARWToTheInjectedTrash`. |
 | A DNG keeps its `_original` backup until the tag reads back correctly. Then the backup goes to the Trash. Nothing is deleted. | In a folder with no ARW files, the DNG is the only copy of the photo. | `testAFailedCheckRestoresTheBackup`, `testAReadBackWithNoTagAfterAGoodWriteCountsAsFailedAndRestores`, `testARefusedTrashCountsAsSetAndKeepsTheBackup` |
 | A failed write restores only when a backup exists. | A write that fails makes no backup, and the file is unchanged. | `testAFailedWriteWithNoBackupDoesNotRestore` |
 | The tool sets tags. It never resamples or exports an image. | The tag is reversible, and the pixels are the photographer's. | No test can prove an absence. The tests pin the exact arguments of every exiftool call, for example `testWritePassesTheFactorAsOneArgument`. |
+
+## An original moves only on request
+
+A run can move each original ARW to the Trash (design 14). This is the one
+feature that takes a file of the user out of the folder, so every rule here
+has a test that was seen to fail against a break.
+
+| Rule | Why | Guard |
+|---|---|---|
+| The option is off unless the caller turns it on. It has no default value in ``DesqueezeJob`` and in ``DesqueezeOperations``. | No caller moves an original by leaving an argument out, and none forgets to say that it does not. | A call with no `trashOriginals` does not compile. `testWithTheOptionOffAConversionThatPassedMovesNoARWAndAsksTheDiskNothing`, `testWithTheOptionOffAFailedConversionMovesNoARW`, `testWithTheOptionOffACancelledRunMovesNoARW`, `testWithTheOptionOffABlockedDNGMovesNoARW`, `testARealRunWithTheOptionOffLeavesTheARW` |
+| Only an ARW that this run converted can go, and only when every check holds. One function decides. | The run watched that conversion. For an ARW that an earlier run converted, the only link to its DNG is a name. | `testAnOriginalMovesOnlyWhenEveryLineHolds`, `testNoSingleLineMovesAnOriginal`, `testOnlyTheARWFilesOfThisRunsConversionsReachTheTrash`, `testLine1AnARWWhoseConversionFailedStaysAndGetsNoSecondNote` |
+| A DNG with no full match keeps its original. | That DNG is not complete, and the ARW is the way to convert the photo again. | `testLine2ADNGWithNoFullMatchKeepsItsOriginalAndCostsNoRead` |
+| A DNG whose tag step did not end at the factor keeps its original. | A blocked DNG and a failed write are not a complete result. | `testLine3ADNGWhoseWriteFailedKeepsItsOriginal`, `testLine3ABlockedDNGKeepsItsOriginal` |
+| The ARW must be the file that was converted: the same size, modification date and file number, read without following a link, and a regular file. The second read is the last thing before the move. | Another program can replace or write the ARW while the run works. A link or a folder is never the tool's to move. | `testLine4AnARWThatChangedDuringTheRunStays`, `testLine4ALinkOrAFolderAtTheNameOfTheARWNeverGoes`, `testTheDNGIsCheckedFirstAndTheOriginalIsReadLast`, `testTheRecordOfARealFileAFolderALinkAndNothing`, `testARealARWThatChangesAfterItsConversionStays` |
+| Directly before the move, the DNG is a regular file with bytes, names the ARW, and holds the factor. One exiftool read, with `SubIFD` named. | The DNG is the only copy that stays in the folder. | `testTheReadHasExactlyTheArgumentsOfTheDesign`, `testTheParserReadsRealExiftoolOutput`, `testLine5ADNGThatIsNotARegularFileWithBytesKeepsItsOriginal`, `testLine5ADNGThatNamesAnotherARWOrHasAnotherScaleKeepsItsOriginal` |
+| The originals move after the tag of the last DNG, and not after a cancel. | No ARW may go while its DNG still waits for its tag. A person who cancels wants the run to stop. | `testNoARWMovesBeforeTheTagOfTheLastDNG`, `testACancelBeforeTheFifthStepMovesNoARWAndTheRunIsStopped`, `testACancelDuringTheFifthStepLetsTheARWInWorkCompleteAndStartsNoOther` |
+| The move is ``BackupHandling/trashFile(_:)``, once. A refusal keeps the ARW. There is no delete and no second way. | "Nothing is deleted" must hold for the original most of all. | `testATrashThatRefusesKeepsTheARWWithTheSystemsWordsAndTriesNothingElse` |
+| Remove never moves an original. | Remove converts nothing, so it has no original of its own. | `testRemoveMovesNothingWhateverItIsGiven`, `testAPlanForRemoveHasNoSuchStepWhateverItIsGiven` |
+| The step runs inside the lock of the folder. | A second run must not work in the folder while an original moves. | `testTheFifthStepRunsWhileTheRunHoldsTheLockOfTheFolder` |
+| The dry run asks the same function, and reads no ARW and no DNG. | A dry run that lists a move that no run makes is worse than no dry run. | `testAPlanHasOneStepForEachOriginalAfterTheWriteSteps`, `testAConversionWithNoFullMatchGetsNoStepAndTheNoteOfTheRun`, `testAPlanReadsNoRecordStartsNoCheckAndMovesNothing`, `testThePlanSummaryIsTheSummaryOfARunWhereEveryStepPasses` |
+| In the command line tool, only the flag `--trash-originals` turns the option on. No environment variable and no saved setting does. | A setting that stays on is a way to remove files that the person wants. | In `Tests/DesqueezeCLITests/`: `testTheFlagTurnsTheOptionOnAndNothingElseDoes`, `testWithoutTheFlagNoARWReachesTheTrashAndTheTextHasNoLineAboutOriginals`, `testWithoutTheFlagTheKeysSayOffAlsoWithAVariableThatLooksLikeTheFlag` |
+| In the window, the box is off at every launch, for every folder and after every run. It is never saved, and no launch argument turns it on. | A box that stays on from an earlier day is the main way this option can remove files that the person wants. | In `App/PlateworksDesqueezeTests/`: `testTheBoxIsOffAtTheStartAndDoesNotShowWithNoFolder`, `testWithTheBoxOnARunMovesTheOriginalAndTheBoxIsOffAfterIt`, `testTheBoxIsOffAfterACancelledRun`, `testTheBoxIsOffWhenAnotherFolderLoadsAndWhenTheSameFolderLoadsAgain`, `testTheBoxIsNeverSavedAndTheNextModelStartsWithItOff`, `testNoLaunchArgumentTurnsTheBoxOn` |
+| The MCP server never moves an original. It gives the core false, and it has no argument for the option. | An agent must never be able to remove a person's originals, by request or by mistake. | In `MCPServer/Tests/DesqueezeMCPTests/`: `testACallThatAsksToMoveTheOriginalsIsRefusedAndMovesNoARW`, `testToolsListHasThreeToolsWithTheirSchemasAndAnnotations` |
 
 ## The tool does not touch a backup that it did not make
 
@@ -54,6 +77,9 @@ row says another folder.
 | A program that a signal ended has no exit code. | The signal number must not read as an exit code, and half a file must not pass as a whole one. | `testAProgramThatASignalEndedIsAnErrorThatNamesTheSignal` |
 
 ## Only the tool's own files go to the Trash
+
+An original that the person asked the run to move is the one exception. The
+section "An original moves only on request" has its rules.
 
 | Rule | Why | Guard |
 |---|---|---|

@@ -31,7 +31,9 @@ arguments that `docs/changing-things.md` in the repo lists.
 ``ProcessRunner``. A unit test gives the code a fake for each one. So it
 needs no exiftool, no converter and no photo, and it can make each failure
 happen: a write that fails, a Trash that refuses, a converter that a signal
-ends. The fakes are in `Tests/DesqueezeCoreTests/Fakes.swift`.
+ends. The job also takes the function that reads the ``FileRecord`` of a
+file, so a test can make an ARW change during a run with no disk. The fakes
+are in `Tests/DesqueezeCoreTests/Fakes.swift`.
 
 Many unit tests pin the exact arguments of a call to exiftool or to a
 converter. A change to a command line fails a test first.
@@ -125,8 +127,30 @@ exiftool on a folder of photos that you care about. Copy the folder first.
 
 The variable is for tests only. No help text names it.
 
+**No test moves an original to the real Trash.** An original goes through
+the same function as a backup, ``BackupHandling/trashFile(_:)``, so the two
+rules above hold for it too. The tests of the option are in
+`Tests/DesqueezeCoreTests/OriginalsTests.swift`,
+`Tests/DesqueezeCoreTests/OriginalsJobTests.swift` and
+`Tests/DesqueezeCoreTests/OriginalsPlanTests.swift`, on fakes. With the real
+programs, `testARealRunWithTheOptionOnLeavesTheDNGAndMovesItsARWToTheInjectedTrash`
+moves a copy of the fixture into a folder of the test. The tests of the
+built tool are in `Tests/DesqueezeCLITests/EndToEndOriginalsTests.swift`.
+They skip when dnglab does not get the fixture frame, so they never start
+Adobe DNG Converter.
+
+For this option, a test that passes is not enough. Break the rule in the
+code, see the test fail, and restore the code. Three breaks to try first:
+the option is treated as on when it is off, the compare of the ARW with its
+record is left out, and the step runs after a cancel.
+`testWithTheOptionOffAConversionThatPassedMovesNoARWAndAsksTheDiskNothing`,
+`testLine4AnARWThatChangedDuringTheRunStays` and
+`testACancelBeforeTheFifthStepMovesNoARWAndTheRunIsStopped` catch them.
+
 **No test reads or writes the saved settings of the app.** The tests of the
-window give the model its own functions for the saved factor.
+window give the model its own functions for the saved factor. The box for
+the originals is never saved: `testTheBoxIsNeverSavedAndTheNextModelStartsWithItOff`
+holds that.
 
 **The tests of the window start no app.** They compile the model of the
 window into a test bundle with no app host. A test run opens no window.
@@ -182,4 +206,5 @@ in one process as it does between two processes.
 The acceptance pass is by hand: a copy of a real shoot folder in the window,
 each factor, a second run, Remove, and one photo opened in Lightroom at each
 factor. The design lists the steps, in its section 9. The real Trash is also
-checked by hand.
+checked by hand, and so is the box for the originals in the window: tick it
+only on a copy of a folder, because the window uses the real Trash.

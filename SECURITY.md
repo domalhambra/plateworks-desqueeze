@@ -7,9 +7,17 @@ can damage, lose or expose a person's files is a security problem here.
 
 - **Files.** It reads the top level of the one folder that you give it. It
   writes DNG files in that folder: a tag in a DNG that exists, and a new DNG
-  beside each ARW that it converts. It never changes, moves or deletes an
-  ARW. It does not read subfolders.
-- **The Trash.** It moves three kinds of file to the Trash. The first is the
+  beside each ARW that it converts. It never changes an ARW and never
+  deletes one. It moves an ARW only to the Trash, and only on your request
+  for one run. It does not read subfolders.
+- **Your originals, on request.** With the box of the window ticked, or
+  with `--trash-originals`, a run moves each ARW that it converted to the
+  Trash. It does so only after the DNG passed a check, and only when the
+  ARW is the file that was converted. The option is off unless you turn it
+  on for that run, and nothing saves it. The MCP server has no such option,
+  so an agent cannot remove your originals.
+- **The Trash.** Besides an original on request, it moves three kinds of
+  file to the Trash. The first is the
   backup of a DNG, after the new tag reads back correctly. The second is its
   own hidden work file: after a conversion that failed, and when it finds
   one that an earlier run left. The third is the temporary file that
@@ -32,7 +40,7 @@ can damage, lose or expose a person's files is a security problem here.
   looks for Adobe DNG Converter in the Applications folder. The window
   first asks macOS where the app with Adobe's bundle identifier is.
 - **Saved settings.** The window saves one value of its own: the factor of
-  the last run.
+  the last run. It never saves the box that moves the originals.
 - **No network.** The window and the command line tool make no network
   request. The MCP server speaks to its client on standard input and
   standard output only. The build of the server fetches its libraries from
@@ -45,8 +53,9 @@ asks for more.
 
 The MCP server changes files when a client calls `desqueeze_run` or
 `desqueeze_remove`. It takes one absolute folder path for each call, and it
-runs one call at a time. Give it only to a client that you trust with your
-photo folders.
+runs one call at a time. It never moves an original ARW: no tool has an
+argument for that, and a call that carries one is refused. Give the server
+only to a client that you trust with your photo folders.
 
 ## Report a problem
 

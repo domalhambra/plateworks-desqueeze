@@ -98,9 +98,11 @@ that met one DNG with an older backup beside it, and left one ARW:
       "name" : "sample.dng"
     }
   ],
+  "originalsInTrash" : 0,
   "set" : 0,
   "skipped" : 0,
   "stopped" : false,
+  "trashOriginals" : false,
   "unconvertedARWs" : 1
 }
 ```
@@ -119,6 +121,8 @@ that met one DNG with an older backup beside it, and left one ARW:
 | `failed` | Number | The files with an error: each ARW that no converter converted, and each DNG whose write or check failed. |
 | `stopped` | Boolean | True when the run was cancelled and left work undone. A cancel during the last file leaves nothing undone, and gives false. |
 | `unconvertedARWs` | Number | The pending ARW files of the run's own scan that have no DNG when the run returns. It counts an ARW whose conversion failed, the ARW files that a stopped run did not reach, and every pending ARW when no converter is installed or when the run was told not to convert. Remove gives 0. |
+| `trashOriginals` | Boolean | True when the run was asked to move the originals to the Trash: the box of the window, or `--trash-originals`. The key is always there. From the MCP server, and for Remove, it is always false. |
+| `originalsInTrash` | Number | The ARW files that the run moved to the Trash. In a dry run, the count that a run gives when every step passes. The key is always there. It is 0 when `trashOriginals` is false. |
 | `notes` | List of objects | One note for each file that has something to say. |
 | `steps` | List of objects | Only in a dry run. |
 
@@ -143,6 +147,7 @@ Each note:
 | `backupKept` | A DNG | The tag is set. The Trash refused the backup, and it stayed beside the file. | `set` |
 | `folderReadOnly` | The folder | The folder is read-only. No file was tried, and this is the only note. | Nothing |
 | `convertedUnmatched` | A DNG | dnglab converted the photo with no full match, because Adobe DNG Converter is not installed. This is not an error. `detail` has the reason. | `converted` |
+| `originalKept` | An ARW | The run was asked to move the originals, it converted this ARW, and the ARW stays in the folder. `message` says why. This is not an error. For a DNG that did not pass its check, and for a Trash that refused the file, `detail` has the reason. | Nothing. The ARW is in `converted`, and not in `originalsInTrash`. |
 
 <doc:Troubleshooting> has the sentence of each kind, and what a person can
 do.
@@ -164,6 +169,7 @@ conversion passes with the first converter that the ARW would get.
   "failed" : 0,
   "folder" : "/Volumes/Card/Shoot 1",
   "notes" : [],
+  "originalsInTrash" : 0,
   "set" : 2,
   "skipped" : 0,
   "steps" : [
@@ -182,18 +188,38 @@ conversion passes with the first converter that the ARW would get.
     }
   ],
   "stopped" : false,
+  "trashOriginals" : false,
   "unconvertedARWs" : 0
 }
 ```
 
 | Key | Type | Meaning |
 |---|---|---|
-| `name` | Text | The file of the step. For a `convert` step, the ARW. |
-| `action` | Text | `convert`, `write`, `skip` or `blocked`. |
+| `name` | Text | The file of the step. For a `convert` step and for a `trashOriginal` step, the ARW. |
+| `action` | Text | `convert`, `write`, `skip`, `blocked` or `trashOriginal`. |
 | `converter` | Text | Only in a `convert` step: `dnglab` or `adobe`, the converter that gets the ARW first. |
 
 The steps are in the order of the run: each conversion, then each DNG, with
 the new DNG files last. A dry run with nothing to do has `"steps" : []`.
+
+A dry run that was asked to move the originals has one more step for each
+ARW that a run would move, after the steps of the DNG files:
+
+```json
+{
+  "action" : "trashOriginal",
+  "name" : "frame.ARW"
+}
+```
+
+`originalsInTrash` is then the count of those steps. An ARW that would stay
+has no such step, and has an `originalKept` note in `notes`: an ARW whose
+DNG would have no full match, and an ARW whose new DNG would be blocked. A
+dry run reads no ARW and no DNG for these steps. It plans a run in which
+every check passes.
+
+An ARW whose name is too long for the hidden work file has no `convert`
+step. It counts in `failed`, with the `notConverted` note of the run.
 
 ## When there is no report
 
@@ -220,8 +246,8 @@ The exit code of `desqueeze` follows from the report of a run:
 
 - 1 when `failed` or `blocked` is above 0, when `stopped` is true, or when a
   note has the kind `folderReadOnly`.
-- 0 in every other case. A note of the kind `convertedUnmatched` does not
-  change the exit code.
+- 0 in every other case. A note of the kind `convertedUnmatched` or
+  `originalKept` does not change the exit code.
 
 A dry run has the exit code of the run that it plans. A scan that completed
 gives 0, also when `writable` is false.
@@ -234,6 +260,7 @@ gives 0, also when `writable` is false.
 | The run report | ``RunReport`` |
 | A note, and its kind | ``FileNote``, ``FileNote/Kind`` |
 | A step, and its action | ``RunPlan/Step``, ``RunPlan/Action`` |
+| Why an original stays | ``OriginalDecision/KeepReason`` |
 | The name of a converter | ``ConverterKind`` |
 | The object with `error` and `detail` | ``ErrorReport`` |
 

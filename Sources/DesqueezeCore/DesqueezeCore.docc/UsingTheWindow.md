@@ -5,8 +5,9 @@ Drop a folder, select the squeeze factor of the lens, and run.
 ## Overview
 
 The app is named Desqueeze. It has one window with a fixed width. From top
-to bottom, the window has a drop zone, a row of squeeze factors, two
-buttons, and, after a run, the result.
+to bottom, the window has a drop zone, a row of squeeze factors, a box for
+the originals when the folder has ARW files to convert, two buttons, and,
+after a run, the result.
 
 @Comment {
     A screenshot belongs here: the window with a folder loaded, before a run.
@@ -59,6 +60,33 @@ When the text in the field is not a factor, a click on the run button shows
 nothing. For text with a comma, such as "1,5", the window adds: "Use a
 period for the decimal point."
 
+## Move the originals to the Trash
+
+When the folder has an ARW that can convert, a box shows between the factors
+and the buttons:
+
+```
+Move the original ARW files to the Trash
+```
+
+The box is off. Tick it, and the next run moves each ARW that it converted
+to the Trash, after the DNG of that ARW passed a check.
+<doc:WhatHappensToYourFiles> has the rule and its limits.
+
+- While the box is on, a line under it says what the run will do, for
+  example "12 original ARW files go to the Trash after their DNG files pass
+  the check." The run button then names the count of the originals too.
+- The window asks nothing more. The box is the request, and you can put a
+  file back from the Trash.
+- The box is off when the app opens, when a folder loads, and after every
+  run, also a run that you cancelled or that failed. The window never saves
+  it. Tick it again for each run that must move the originals.
+- The box does not show for a folder with no ARW to convert, for a
+  read-only folder, and when no converter is installed.
+- The box cannot change while a run works, or while the window reads the
+  folder.
+- "Remove" never moves an original, also with the box on.
+
 ## Run
 
 The run button shows how many photos a run works on: "Desqueeze 228 photos",
@@ -70,7 +98,9 @@ A run converts each ARW that has no DNG, then sets the tag in every DNG, one
 file at a time. During a run:
 
 - A bar shows the progress, with one step for each conversion and one for
-  each DNG. The line below it names the last file that is complete.
+  each DNG. With the box for the originals on, each converted ARW has one
+  more step, at the end. The line below the bar names the last file that is
+  complete.
 - The run button becomes "Cancel", and the Escape key presses it. A cancel
   stops the run after the current file. The files that are complete stay as
   the run left them. After the click the button reads "Finishing…" until the
@@ -107,13 +137,21 @@ The symbol is a check mark when the run is complete, a warning triangle when
 a file failed or was blocked, and a stop symbol when the run was cancelled. The
 meaning is never in a colour alone.
 
-Below the counts, the window can show three more lines.
+Below the counts, the window can show four more lines.
 
 When both converters did work in the run, one line says how many photos
 each converted:
 
 ```
 Converted with dnglab: 11. With Adobe DNG Converter: 1.
+```
+
+After a run with the box for the originals on, one line says how many
+originals moved, of the ARW files that the run converted. VoiceOver speaks
+it with the counts.
+
+```
+Originals moved to the Trash: 11 of 12.
 ```
 
 When the run left ARW files, one line says how many.
@@ -162,5 +200,5 @@ waits for a conversion.
   system does not cancel the run that the first click started.
 - If exiftool or a converter never returns, the run does not end. Use Force
   Quit. A write that did not complete leaves the DNG as it was.
-- The window sends each backup to the Trash of the Mac.
-  <doc:WhatHappensToYourFiles> says when.
+- The window sends each backup to the Trash of the Mac, and each original
+  when the box is on. <doc:WhatHappensToYourFiles> says when.

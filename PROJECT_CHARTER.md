@@ -72,7 +72,7 @@ None yet. A register belongs to a published property. If Desqueeze ships as a Pl
 
 ## Guardrails / principles
 
-- **The original is never at risk.** The app never changes, moves, or deletes an ARW. A DNG keeps its backup until the tag reads back correctly.
+- **The original is never at risk.** The app never changes or deletes an ARW. It moves one to the Trash only on the user's request for one run, after the DNG passed its check (design 14, added 2026-10-10). A DNG keeps its backup until the tag reads back correctly.
 - **No pixels change.** The app sets a tag. It never resamples or exports an image.
 - **Top level only.** The app does not enter subfolders.
 - **The app does not touch a backup it did not make.**

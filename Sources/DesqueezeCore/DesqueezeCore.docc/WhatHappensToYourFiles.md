@@ -7,13 +7,16 @@ What the tool does to each file, what it sends to the Trash, and how to undo a r
 The window, the command line tool and the MCP server follow the same rules,
 because one piece of code does the file work for all three.
 
-- **An ARW is never changed, moved or deleted.** The tool only reads it.
+- **An ARW is never changed and never deleted.** The tool only reads it.
+- **An ARW moves only when you ask for it.** For one run, you can tell the
+  tool to move each ARW that it converted to the Trash. The option is off
+  unless you turn it on for that run.
 - **No pixel changes.** The tool sets a tag. It never resamples a photo and
   never exports one.
 - **A DNG keeps a backup until the new tag reads back correctly.**
-- **Nothing is deleted.** The tool moves two kinds of file to the Trash, and
-  no other: the backup of a DNG after a good write, and its own hidden work
-  files.
+- **Nothing is deleted.** The tool moves two kinds of file to the Trash on
+  its own: the backup of a DNG after a good write, and its own hidden work
+  files. It moves a third kind, an original ARW, only on your request.
 - **A conversion never replaces a DNG that is there already.**
 - **One run works in a folder at a time.** A second run does not start.
 - **The tool works on the top level of one folder.** It does not read a
@@ -79,6 +82,71 @@ one of three things.
 
 Remove is the same write, with the value for no stretch.
 
+## Move the originals to the Trash, on request
+
+After a conversion you have two files of one photo: the ARW and its DNG. The
+tool can move the ARW to the Trash for you. It does so only when you ask,
+and only for one run:
+
+- **In the window,** tick the box "Move the original ARW files to the
+  Trash" before you click the run button. <doc:UsingTheWindow> says when
+  the box shows.
+- **With the command line tool,** add `--trash-originals` to `desqueeze run`.
+  <doc:UsingTheCommandLineTool> has the rules of the flag.
+- **The MCP server cannot do it.** No tool of the server has such an
+  argument, so an agent cannot remove your originals.
+
+The option is off each time. The window does not save the box: it is off
+when the app opens, when a folder loads, and after every run. The command
+line tool needs the flag on each command.
+
+The originals move last, after the tag of the last DNG is set. An ARW goes
+to the Trash only when all of these are true:
+
+1. This run converted the ARW, and the conversion passed. An ARW that an
+   earlier run converted stays.
+2. The DNG has a full match. A DNG with the note "Converted. … Install
+   Adobe DNG Converter for the same file that Lightroom makes." is not
+   complete, and you need the ARW to convert the photo again.
+3. The DNG has the stretch of this run: the tag was set and read back, or
+   the DNG had the value already.
+4. The ARW is the file that was converted. Before the conversion, the tool
+   records the size, the modification date and the file number of the ARW.
+   Directly before the move it reads them again. All three must be the
+   same, and the ARW must be a regular file. A link or a folder never goes.
+5. Directly before the move, the DNG is a regular file with bytes, it names
+   the ARW in its `OriginalRawFileName` tag, and its `DefaultScale` tag is
+   the stretch of this run. The tool reads both tags with one exiftool call.
+
+When one of them is not true, the ARW stays, and the result has a note that
+says why. <doc:Troubleshooting> lists the six sentences. When the Trash
+refuses the file, the ARW stays too. The tool never deletes an ARW, and it
+tries no second way to remove one.
+
+The tool moves the ARW only. A file beside it, such as `frame.xmp`, is not
+the tool's file and stays.
+
+The result then has one more line, with the count of the originals that
+moved and the count of the ARW files that the run converted:
+
+```
+Originals moved to the Trash: 11 of 12.
+```
+
+Know these limits before you turn the option on:
+
+- **The check does not look at the picture.** It reads the structure and
+  the two tags of the DNG. Look at the DNG files in Lightroom before you
+  empty the Trash.
+- **Without the ARW, the photo cannot be converted again** with a later
+  converter or a later match table.
+- **A Lightroom catalog that holds the ARW files already** shows them as
+  missing after the move. Turn the option on before the import, or import
+  the DNG files.
+- **A volume with no Trash.** The move is refused, and every ARW stays.
+- **An external volume.** The ARW goes to the Trash of that volume. Its
+  space is free only after you empty the Trash with the volume connected.
+
 ## What goes to the Trash, and when
 
 | File | When |
@@ -86,6 +154,7 @@ Remove is the same write, with the value for no stretch.
 | `<name>.dng_original`, the backup of a DNG | After the new tag of that DNG read back correctly. Never before. |
 | `.<base>.desqueeze-work.dng`, a hidden work file of the tool | After a conversion that failed. Also when a later run finds one that an earlier run left, at the moment that it converts the same ARW again. |
 | `.<base>.desqueeze-work.dng_exiftool_tmp` | When a later run finds it, at the moment that it converts the same ARW again. exiftool can leave this file when it is ended in the middle of the match. |
+| `<base>.ARW`, an original | Only in a run that you asked to move the originals, and only after the five checks of the section before this one. |
 
 Nothing else goes to the Trash, and the tool never empties the Trash. When
 the Trash refuses a work file, the result names the hidden file, so that you
@@ -135,7 +204,8 @@ first run for a leftover, and send it to the Trash.
 **You cancel.** Cancel in the window, and Control-C in the terminal, stop
 the run after the current file. The file in work completes with its check.
 The files before it stay as the run left them, and the files after it are
-not touched.
+not touched. After a cancel, no original that the run did not reach moves:
+each such ARW stays in the folder.
 
 **The run ends hard.** A Force Quit, a crash or a loss of power can end a
 run in the middle of a file. The next scan or run reports what it finds:
@@ -161,6 +231,8 @@ run in the middle of a file. The next scan or run reports what it finds:
   the Trash.
 - **To undo a conversion,** move the new DNG to the Trash yourself. The tool
   never deletes a DNG, and the ARW is as it was.
+- **To get an original back,** find the ARW in the Trash and use Put Back.
+  This is possible until you empty the Trash.
 
 ## What Finder and Lightroom show
 

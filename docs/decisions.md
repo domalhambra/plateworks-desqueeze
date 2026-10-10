@@ -6,8 +6,8 @@ is reversed, mark the old row superseded and add the new one under its own
 date.
 
 "Design" is `docs/superpowers/specs/2026-10-05-desqueeze-design.md`. "Design
-13.3" is its section 13.3. Sections 12 and 13 are the newest, and they win
-where they differ from an earlier section. Dom is the maintainer.
+13.3" is its section 13.3. Sections 12, 13 and 14 are the newest, and they
+win where they differ from an earlier section. Dom is the maintainer.
 
 ## 2026-10-05
 
@@ -16,7 +16,7 @@ where they differ from an earlier section. Dom is the maintainer.
 | The app sets the DNG `DefaultScale` tag. It never resamples or exports an image. | The tag is reversible and changes no pixels. Lightroom and Camera Raw stretch the image when they render it. | Design 1 |
 | An ARW is converted to DNG first. | Adobe discards `DefaultScale` in an ARW. Tested: a tagged ARW converted to a DNG with `1 1`. | Design 2 |
 | The first front end is a native SwiftUI window. | A droplet has no window for progress and errors. A web shell is heavy for one window. | Design 11 |
-| The DNG goes beside the ARW with the same base name. The app never renames, moves, or deletes an ARW. | A second run can skip converted files. Dom chose this. | Design 11 |
+| **Changed 2026-10-10: the app moves an ARW to the Trash when the user asks for it for one run. It still never renames an ARW and never deletes one. The rows of that date have the rule.** The DNG goes beside the ARW with the same base name. The app never renames, moves, or deletes an ARW. | A second run can skip converted files. Dom chose this. | Design 11 |
 | The scan reads the top level of the folder only. | Subfolders of a shoot folder hold exports and the data of other programs. They must stay untouched. | Design 4.1 |
 | A DNG keeps its `_original` backup until the tag reads back correctly. Then the backup goes to the Trash. | In a folder with no ARW files, the DNG is the only copy of the photo. | Design 4.3 |
 | **Superseded 2026-10-09: such a DNG is blocked, not skipped.** A DNG that already has a backup is skipped and reported. | exiftool never replaces an existing `_original`, so a write would leave a backup of the wrong state. The app must not discard a backup it did not make. | Design 2.1 |
@@ -73,6 +73,12 @@ where they differ from an earlier section. Dom is the maintainer.
 | An ARW whose work-file name would be longer than 255 bytes gets no converter, and its note says that the name is too long. | dnglab failed on such a name with the system's words, and Adobe DNG Converter then said that it may not support the file. Neither sentence told the person what to do. | Design 13.9, `Sources/DesqueezeCore/RawConverter.swift` |
 | The fixtures script makes the DNG with Adobe DNG Converter, or, when that is not installed, with dnglab, and exiftool then writes `OriginalRawFileName` into it. | The script failed late on a Mac with no Adobe DNG Converter. Every test passed on a DNG that dnglab made, once it named its ARW. Without that name, three tests failed. | `scripts/make_fixtures.sh` |
 | The launch argument `-simulateMissingConverter` is removed. | `-simulateMissingDnglab` and `-simulateMissingAdobe` together give the same window, and the acceptance list of design 9 does not name it. | Design 9, `App/PlateworksDesqueeze/AppModel.swift` |
+| A run can move each original ARW to the Trash, on the user's request. The option is off by default, and it is never saved: the box of the window is off at every launch, for every folder and after every run, and the tool needs its flag each time. | Dom asked for it after his first run in Lightroom. A box that stays on from an earlier day is the main way this option can remove files that the user wants. | Design 14.1, `App/PlateworksDesqueeze/AppModel.swift`, `Sources/DesqueezeCLI/Arguments.swift` |
+| "Deleted" means moved to the Trash. The app never deletes an ARW. The move goes through the function that takes a backup to the Trash, once. When the Trash refuses the file, the ARW stays, and a note says so. | The rule of the app is that nothing is deleted. The user can put a file back until the Trash is emptied. A second way to remove a file would be a way around that rule. | Design 14.1, 14.2, `Sources/DesqueezeCore/DesqueezeJob.swift`, `Sources/DesqueezeCore/Backups.swift` |
+| Only an ARW that this run converted can go, and only when every check holds: the DNG has a full match, its tag step ended at the factor, the ARW is the file that was converted, and the DNG names that ARW and holds the factor. One function decides, for the run and for the dry run. | The run watched that conversion and checked its DNG. For an ARW that an earlier run converted, the only link to its DNG is a name. A DNG with no full match is not complete, and the ARW is the way to convert the photo again. | Design 14.1, 14.2, `Sources/DesqueezeCore/Originals.swift` |
+| The window and the command line tool have the option. The MCP server does not: no tool has an argument for it, and a call that carries one is refused. | An agent must never be able to remove a user's originals, by request or by mistake. | Design 14.1, `MCPServer/Sources/desqueeze-mcp/ToolEnvironment.swift`, `MCPServer/Sources/desqueeze-mcp/Tools.swift` |
+| `DesqueezeJob.run`, `DesqueezeJob.plan` and `DesqueezeOperations.run` take the option as a parameter with no default value. | Every caller states whether the originals move. No caller moves one by leaving an argument out, and none forgets to say that it does not. | Design 14.6, `Sources/DesqueezeCore/DesqueezeJob.swift`, `Sources/DesqueezeCore/Operations.swift` |
+| A dry run gives an ARW whose work-file name is too long no `convert` step, and the note of the run. | The run starts no converter for such an ARW. A plan that listed a conversion for it, and then a move of its original, said what no run does. | Design 13.9, `Sources/DesqueezeCore/DesqueezeJob.swift` |
 
 ## Rejected and deferred
 

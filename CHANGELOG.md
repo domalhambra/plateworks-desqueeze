@@ -30,6 +30,11 @@ The first version. It is built from source, and there is no download.
   (`scan`, `run`, `remove`), and the MCP server `desqueeze-mcp`
   (`desqueeze_scan`, `desqueeze_run`, `desqueeze_remove`).
 - A dry run that lists what each file would get and changes no file.
+- On request, a run moves each original ARW that it converted to the Trash,
+  after its DNG passes a check. The window has a box for it, "Move the
+  original ARW files to the Trash", and the tool has `--trash-originals`.
+  The option is off unless the user turns it on for that run, and it is
+  never saved. The MCP server does not have it.
 - JSON output, the same from the tool and from the server.
 - `--verbose`, which shows each command that the tool starts.
 - A documentation site: guides for a photographer and for a contributor,
@@ -38,7 +43,14 @@ The first version. It is built from source, and there is no download.
 
 ### Safety
 
-- An ARW is never changed, moved or deleted.
+- An ARW is never changed and never deleted. It moves only to the Trash,
+  and only when the user asks for it for one run.
+- An original moves only when the run converted it, its DNG has a full
+  match and the chosen factor, the DNG names that ARW, and the ARW did not
+  change during the run. When a check does not pass, or the Trash refuses
+  the file, the ARW stays, and a note of the kind `originalKept` says why.
+- The MCP server never moves an original. A tool call that asks for it is
+  refused.
 - A DNG keeps its backup until the new tag reads back correctly. Then the
   backup goes to the Trash. A write that fails restores the backup.
 - A DNG that has an older backup beside it is blocked, and the backup is not
@@ -72,4 +84,12 @@ The first version. It is built from source, and there is no download.
   name and then renames. A moment lies between the two calls.
 - On a volume that gives no lock for a folder, a run goes on without one.
   Two runs at once in one folder are then the user's to prevent.
+- The check before an original moves reads the structure and the tags of
+  the DNG. It does not decode the picture. Look at the DNG files in
+  Lightroom before the Trash is emptied.
+- With the ARW gone, a photo cannot be converted again with a later
+  converter or a later match table.
+- A Lightroom catalog that holds the ARW files already shows them as
+  missing after the move.
+- On a volume that has no Trash, the move is refused and every ARW stays.
 - The app is not signed with a Developer ID and not notarized.

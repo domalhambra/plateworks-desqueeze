@@ -12,6 +12,11 @@ does not type to the server.
 The server has three tools. They do the work of the three commands of
 `desqueeze`, and they return the same JSON.
 
+One thing the server cannot do: it never moves an original ARW to the Trash.
+The window and the command line tool can, on your request. No tool of the
+server has an argument for that, so a model cannot remove your originals, by
+request or by mistake.
+
 | Tool | Arguments | Changes files |
 |---|---|---|
 | `desqueeze_scan` | `folder` | No. It is marked read-only. |
@@ -52,7 +57,9 @@ the model:
 Plateworks Desqueeze sets the DefaultScale tag of DNG photos, so Lightroom
 shows anamorphic photos at the correct shape. Call desqueeze_scan first. Use
 dry_run true before a run that changes files. desqueeze_remove reverses
-desqueeze_run. The server runs one tool call at a time.
+desqueeze_run. The server runs one tool call at a time. This server never
+moves an original ARW file to the Trash, and it has no argument for that.
+Only the user can ask for it, in the window or with the command line tool.
 ```
 
 Each tool also has a description that the model reads. Together, the
@@ -60,6 +67,8 @@ descriptions say:
 
 - What the tool changes, and what it never changes: an ARW, a pixel, a
   subfolder.
+- That the server never moves an original ARW to the Trash, and that only
+  you can ask for that, in the window or with the command line tool.
 - That the change is reversible: `desqueeze_remove` sets every DNG back to
   no stretch, and does not delete a DNG that a run converted.
 - Which converter converts, and what to tell you when none is installed.
@@ -103,12 +112,22 @@ The folder must be an absolute path, which starts with /. A relative path and ~ 
 desqueeze_run needs the argument "factor": the squeeze factor of the lens, a number from 1 to 4, with at most four decimal places. There is no default.
 ```
 
+A call with an argument that the tool does not have is refused in the same
+way. So a call that asks the server to move the originals changes nothing:
+
+```
+desqueeze_run has no argument "trash_originals". Its arguments are: folder, factor, convert, dry_run.
+```
+
 ## What the server returns
 
 A tool result is one JSON object: the scan report, or the run report.
 <doc:TheJSONReports> describes every key. A result that holds a failed or a
 blocked file is still a successful tool call. The failure is in the counts
 and in the notes of the report.
+
+In every result of the server, `trashOriginals` is false and
+`originalsInTrash` is 0.
 
 A tool error means that the server could give no report: the call broke a
 rule, the folder could not be read, another run works in the folder, or
@@ -143,4 +162,4 @@ The server changes files when the client calls `desqueeze_run` or
 `desqueeze_remove`. Give it only to a client that you trust with your photo
 folders. The rules of <doc:WhatHappensToYourFiles> hold for the server as
 they hold for the window: an ARW is never changed, and each DNG keeps a
-backup until the new tag reads back.
+backup until the new tag reads back. The server never moves an ARW.

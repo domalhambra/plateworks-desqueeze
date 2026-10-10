@@ -8,7 +8,8 @@ Scan a folder, see what a run would do, run, and remove, with `desqueeze`.
 
 ```
 desqueeze scan <folder> [--json]
-desqueeze run <folder> --factor <number> [--no-convert] [--dry-run] [--json]
+desqueeze run <folder> --factor <number> [--no-convert] [--trash-originals]
+              [--dry-run] [--json]
 desqueeze remove <folder> [--dry-run] [--json]
 desqueeze --version
 desqueeze --help
@@ -24,6 +25,7 @@ desqueeze --help
 |---|---|
 | `--factor <number>` | The squeeze factor of the lens: a number from 1 to 4, with at most four decimal places. For `run` only, and `run` needs it. There is no default. `--factor=1.5` is the same as `--factor 1.5`. Use a period for the decimal point: the tool refuses `1,5`, and says so. |
 | `--no-convert` | For `run`: leaves the ARW files alone. |
+| `--trash-originals` | For `run`: moves each original ARW to the Trash after its DNG passes the check. Off unless given. The section "Move the originals to the Trash" has its rules. |
 | `--dry-run` | For `run` and `remove`: shows what the run would do, file by file, and which converter gets each ARW. Changes no file. |
 | `--json` | Prints one JSON object on standard output, and nothing else there. |
 | `--verbose` | Prints each exiftool and converter command, its exit code, and its output on standard error. Also says when it removed a leftover work file. |
@@ -82,9 +84,10 @@ A run would give: 1 converted · 2 set · 0 skipped · 0 failed
 ```
 
 Each line is one step, in the order of the run. The action is `convert`,
-`write`, `skip` or `blocked`. A dry run reads the folder and the ARW files.
-It starts no converter and writes nothing. The counts are those of a run in
-which every step passes.
+`write`, `skip` or `blocked`, and `trash` in a dry run with
+`--trash-originals`. A dry run reads the folder and the ARW files. It starts
+no converter, writes nothing and moves nothing. The counts are those of a
+run in which every step passes.
 
 ## Run
 
@@ -122,6 +125,63 @@ photo. A dry run never shows it. When both converters did work in a run, one
 more line follows the counts: `Converted with dnglab: 11. With Adobe DNG
 Converter: 1.`
 
+## Move the originals to the Trash
+
+```bash
+desqueeze run "/Volumes/Card/Shoot 1" --factor 1.5 --trash-originals
+```
+
+With `--trash-originals`, the run moves each ARW that it converted to the
+Trash, after the tag of the last DNG is set. An ARW moves only when its DNG
+passes the check. <doc:WhatHappensToYourFiles> has the five conditions and
+the limits. The result has one more line:
+
+```
+1 converted · 2 set · 0 skipped · 0 failed
+Originals moved to the Trash: 1 of 1.
+Photos already in Lightroom: Metadata › Read Metadata from File.
+```
+
+The second number is the count of the ARW files that this run converted. An
+ARW that stays has a note that says why. Such a note does not change the
+exit code. Each converted ARW has one more step in the progress:
+
+```
+1/4 frame.ARW
+2/4 sample.dng
+3/4 frame.dng
+4/4 frame.ARW
+```
+
+See first what the run would do. A dry run moves nothing:
+
+```bash
+desqueeze run "/Volumes/Card/Shoot 1" --factor 1.5 --trash-originals --dry-run
+```
+
+```
+Dry run. No file was changed.
+  convert  frame.ARW  with dnglab
+  write    sample.dng
+  write    frame.dng
+  trash    frame.ARW
+A run would give: 1 converted · 2 set · 0 skipped · 0 failed
+```
+
+A `trash` step names an ARW that the run would move. An ARW whose DNG would
+have no full match has no such step, and a note says why.
+
+The rules of the flag:
+
+- It is off unless it is on the command line. No environment variable and
+  no saved setting turns it on.
+- It goes with `run` only. On `scan` and on `remove` it is a wrong command
+  line, with the exit code 2.
+- It does not go with `--no-convert`: a run that converts nothing has no
+  original to move. That is a wrong command line too.
+- Control-C before the originals move leaves every ARW in the folder. The
+  result says "stopped".
+
 ## One run in a folder at a time
 
 A run holds a lock on the folder until it ends. A second `run` or `remove`
@@ -150,7 +210,8 @@ Photos already in Lightroom: Metadata › Read Metadata from File.
 ```
 
 Each DNG now has the scale `1 1`. Remove does not delete a DNG that a run
-converted, and it does not touch an ARW.
+converted, and it does not touch an ARW. It never moves an original, and it
+does not take `--trash-originals`.
 
 ## JSON for a script
 
@@ -181,9 +242,11 @@ This run met a DNG with an older backup beside it:
       "name" : "sample.dng"
     }
   ],
+  "originalsInTrash" : 0,
   "set" : 0,
   "skipped" : 0,
   "stopped" : false,
+  "trashOriginals" : false,
   "unconvertedARWs" : 1
 }
 ```

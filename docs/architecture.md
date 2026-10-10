@@ -94,23 +94,24 @@ Test files are in `Tests/DesqueezeCoreTests/`.
 | `FolderChoice.swift` | What counts as a folder: a link to a folder is that folder, a package is not one. The sentence that says why a path is no folder. | `FolderChoiceTests.swift` |
 | `FolderScan.swift` | The lists of one folder: DNG files, ARW files, orphan backups. The rule for a pending ARW. | `FolderScanTests.swift` |
 | `FolderScanner.swift` | `FolderSnapshot`: the lists, the tag of each DNG, the backup state, and whether the folder is writable | `FolderScannerTests.swift` |
-| `FolderText.swift` | The sentences and counts about a folder: the counts line, the run button label, the folder messages, the advice about the converters | `FolderTextTests.swift` |
+| `FolderText.swift` | The sentences and counts about a folder: the counts line, the run button label, the folder messages, the advice about the converters. The words of the window about the originals: the label of the box, the line under it, and the run button label with the originals. | `FolderTextTests.swift`, `OriginalsTests.swift` |
 | `ProcessRunner.swift` | The protocol that starts a program with no shell, and its real implementation. A program that a signal ended is an error, not an exit code. | `ProcessRunnerTests.swift` |
 | `LoggingProcessRunner.swift` | The runner behind `--verbose`: each command line, its exit code, its output | `LoggingProcessRunnerTests.swift` |
 | `ToolLocator.swift` | Where the three programs are, and the sentences for a missing exiftool and for the dnglab install | `ToolLocatorTests.swift` |
-| `ScaleTag.swift` | `Scale`, and the three exiftool calls for `DefaultScale`: read a folder, write one file, read one file back | `ScaleTagTests.swift`. With the real exiftool: `IntegrationTests.swift` |
-| `Backups.swift` | The `_original` backup: exists, to the Trash, restore with one rename. The test variable `DESQUEEZE_TEST_BACKUP_FOLDER`. | `BackupsTests.swift`, `BackupTestFolderTests.swift` |
+| `ScaleTag.swift` | `Scale`, and the three exiftool calls for `DefaultScale`: read a folder, write one file, read one file back. The one read of a DNG before its original moves to the Trash. | `ScaleTagTests.swift`, `OriginalsTests.swift`. With the real exiftool: `IntegrationTests.swift`, `DnglabIntegrationTests.swift` |
+| `Backups.swift` | The `_original` backup: exists, to the Trash, restore with one rename. `trashFile`, the one way to the Trash for a work file, a leftover, and an original. The test variable `DESQUEEZE_TEST_BACKUP_FOLDER`. | `BackupsTests.swift`, `BackupTestFolderTests.swift` |
 | `RawConverter.swift` | The converter protocol, the pair of converters, the names of the output and of the work file, and the Adobe converter. The rules that hold for every converter: a name that is too long, the checks before the start, the leftovers of an earlier run, the work file, the rename, and what counts as a partial output. | `RawConverterTests.swift`. With the real converter: `IntegrationTests.swift` |
 | `DnglabConverter.swift` | The steps that only dnglab has: its command, the match write into the work file, the read-back, and dnglab's own words for a failure | `DnglabConverterTests.swift`. With the real dnglab: `DnglabIntegrationTests.swift` |
 | `ExclusiveRename.swift` | A rename that fails when the name is taken, and the path for a volume that has no such call | `ExclusiveRenameTests.swift`, which also makes APFS and ExFAT disk images |
 | `ARWFacts.swift` | The five facts about an ARW, the exiftool read that gets them, and how exiftool prints a file name | `ARWFactsTests.swift`. With the real exiftool: `DnglabIntegrationTests.swift` |
 | `AdobeMatch.swift` | The match table, the five rules of a full match, the tags to write, and the compare of numbers at the read-back | `AdobeMatchTests.swift`. Against the real Adobe DNG Converter: the drift check in `DnglabIntegrationTests.swift` |
 | `ConverterChoice.swift` | Which converter gets an ARW, in which order. The names of the converters and the sentences about who converts. | `ConverterChoiceTests.swift` |
-| `RunPlan.swift` | The one decision for a DNG: skip, blocked, or write. The plan of a dry run. | `PlanTests.swift` |
-| `RunSummary.swift` | The counts of a run, the note for each file with its `kind`, the counts line, the line about the two converters, the rule of the Lightroom line, the progress value, and the cancel flag | `RunSummaryTests.swift` |
+| `RunPlan.swift` | The one decision for a DNG: skip, blocked, or write. The plan of a dry run, with its step for an original that would move. | `PlanTests.swift`, `OriginalsPlanTests.swift` |
+| `Originals.swift` | The rule for one original (design 14.2): the function that decides "move" or "keep", the six sentences of an original that stays, the record of a file (size, modification date, file number) and its compare, and the check of the DNG | `OriginalsTests.swift` |
+| `RunSummary.swift` | The counts of a run, the note for each file with its `kind`, the counts line, the line about the two converters, the rule of the Lightroom line, the line about the originals, the progress value, and the cancel flag | `RunSummaryTests.swift`, `OriginalsTests.swift` |
 | `FolderLock.swift` | One run in a folder at a time: the advisory lock on the folder, what each answer of the system means, and the sentence of a run that did not start | `FolderLockTests.swift`, which also makes an ExFAT disk image. With two processes of the built tool: `TwoRunsTests.swift` in `Tests/DesqueezeCLITests/` |
-| `DesqueezeJob.swift` | The run and the dry run, in order, on a fresh scan. The run holds the folder lock. | `DesqueezeJobTests.swift`, `PlanTests.swift`, `FolderLockTests.swift`. With the real programs: `IntegrationTests.swift`, `DnglabIntegrationTests.swift` |
-| `Reports.swift` | The report types and their JSON: `ScanReport`, `RunReport`, `ErrorReport`, and the one function that prints them | `ReportsTests.swift` |
+| `DesqueezeJob.swift` | The run and the dry run, in order, on a fresh scan. The run holds the folder lock. The fifth step of a run that was asked to move the originals. | `DesqueezeJobTests.swift`, `PlanTests.swift`, `FolderLockTests.swift`, `OriginalsJobTests.swift`, `OriginalsPlanTests.swift`. With the real programs: `IntegrationTests.swift`, `DnglabIntegrationTests.swift` |
+| `Reports.swift` | The report types and their JSON: `ScanReport`, `RunReport`, `ErrorReport`, and the one function that prints them | `ReportsTests.swift`, `OriginalsPlanTests.swift` |
 | `Operations.swift` | `DesqueezeOperations`: scan, run, remove, each with a report that is ready to print | `OperationsTests.swift` |
 | `InterruptWatcher.swift` | A flag that a signal sets, so a run stops after its current file | No unit test. `InterruptTests.swift` in `Tests/DesqueezeCLITests/` sends real signals to the built tool. |
 | `Version.swift` | The version number of the tools | `VersionTests` in `BackupTestFolderTests.swift`, and the changelog test in `DocsCheckTests.swift` |
@@ -124,11 +125,11 @@ Test files are in `Tests/DesqueezeCLITests/`.
 
 | File | Owns | Tests |
 |---|---|---|
-| `Sources/DesqueezeCLI/Arguments.swift` | The parser: the commands, the options, each usage error | `ArgumentsTests.swift` |
-| `Sources/DesqueezeCLI/Commands.swift` | `DesqueezeTool`: parse, do, print. The exit codes. `ToolEnvironment`, which holds everything the tool takes from the outside. | `CommandsTests.swift`, `ExitCodeTests.swift` |
-| `Sources/DesqueezeCLI/TextOutput.swift` | The layout of the text for a person | `TextOutputTests.swift` |
-| `Sources/DesqueezeCLI/Usage.swift` | The version line, the help, and how a usage error is shown | `CommandsTests.swift` |
-| `Sources/DesqueezeCLI/LiveEnvironment.swift` | The real environment: the programs, the Trash, the signals, the two standard streams | No unit test. The end-to-end tests start the built tool: `EndToEndTests.swift`, `EndToEndFailureTests.swift`, `InterruptTests.swift`, `TwoRunsTests.swift`. |
+| `Sources/DesqueezeCLI/Arguments.swift` | The parser: the commands, the options, each usage error. `--trash-originals` is the only thing that turns the option of design 14 on. | `ArgumentsTests.swift`, `OriginalsToolTests.swift` |
+| `Sources/DesqueezeCLI/Commands.swift` | `DesqueezeTool`: parse, do, print. The exit codes. `ToolEnvironment`, which holds everything the tool takes from the outside. | `CommandsTests.swift`, `ExitCodeTests.swift`, `OriginalsToolTests.swift` |
+| `Sources/DesqueezeCLI/TextOutput.swift` | The layout of the text for a person | `TextOutputTests.swift`, `OriginalsToolTests.swift` |
+| `Sources/DesqueezeCLI/Usage.swift` | The version line, the help, and how a usage error is shown | `CommandsTests.swift`, `OriginalsToolTests.swift` |
+| `Sources/DesqueezeCLI/LiveEnvironment.swift` | The real environment: the programs, the Trash, the signals, the two standard streams | No unit test. The end-to-end tests start the built tool: `EndToEndTests.swift`, `EndToEndFailureTests.swift`, `EndToEndOriginalsTests.swift`, `InterruptTests.swift`, `TwoRunsTests.swift`. |
 | `Sources/desqueeze/main.swift` | One line that starts the tool | The same end-to-end tests |
 
 `BuiltTool.swift` starts the built tool for the end-to-end tests, and
@@ -143,7 +144,7 @@ Test files are in `MCPServer/Tests/DesqueezeMCPTests/`.
 | `Program.swift` | The program: its two flags, the test variable, the start of the server, the signals | `InProcessTests.swift`, `CommandLineTests.swift` |
 | `Tools.swift` | The three tools as a client sees them: names, descriptions, argument schemas, annotations | `ServerEndToEndTests.swift`, through the built server |
 | `ToolCall.swift` | The check of the arguments of one call | `ToolErrorTests.swift`, through the built server |
-| `ToolEnvironment.swift` | One tool call from its arguments to its result, through `DesqueezeOperations` | `InProcessTests.swift`, `ToolErrorTests.swift`, `ServerEndToEndTests.swift` |
+| `ToolEnvironment.swift` | One tool call from its arguments to its result, through `DesqueezeOperations`. It gives the option of design 14 as `false`, always: the server never moves an original. | `InProcessTests.swift`, `ToolErrorTests.swift`, `ServerEndToEndTests.swift` |
 | `ToolHandlers.swift` | The handlers for the list of tools and for a tool call, the progress messages, and the cancel of a call | `InProcessTests.swift`, `ServerEndToEndTests.swift` |
 | `CallQueue.swift` | One tool call at a time. The queue closes when the client is gone. | `InProcessTests.swift`, `AnsweringTransportTests.swift` |
 | `AnsweringTransport.swift` | The transport: one message is written at a time, and the program does not end with an answer owed | `AnsweringTransportTests.swift` |
@@ -157,8 +158,8 @@ tests check the bytes on the wire.
 
 | File | Owns | Tests |
 |---|---|---|
-| `AppModel.swift` | The window's state: the folder, the factor, the one job in flight, Cancel, a run that another run kept out, the quit during a run, the launch arguments | `AppModelTests.swift` in `App/PlateworksDesqueezeTests/`. `Fakes.swift` beside it holds its fakes. |
-| `ContentView.swift` | The one view: the drop zone, the factor row, the buttons, the progress bar, the result list | - |
+| `AppModel.swift` | The window's state: the folder, the factor, the box for the originals, the one job in flight, Cancel, a run that another run kept out, the quit during a run, the launch arguments | `AppModelTests.swift` and `OriginalsModelTests.swift` in `App/PlateworksDesqueezeTests/`. `Fakes.swift` beside them holds their fakes. |
+| `ContentView.swift` | The one view: the drop zone, the factor row, the box for the originals, the buttons, the progress bar, the result list | - |
 | `DesqueezeApp.swift` | The app and its delegate: one window, and the reply to a quit | - |
 | `Info.plist` | Written by XcodeGen from `project.yml`. A hand edit is lost. | - |
 
@@ -170,8 +171,8 @@ no app and opens no window.
 ## One run, step by step
 
 `DesqueezeJob.run(folder:)` does these steps in order, one file at a time.
-Each step has the rule that keeps the user's files safe. Design 4.3, 13.3
-and 13.9 are the contract.
+Each step has the rule that keeps the user's files safe. Design 4.3, 13.3,
+13.9 and 14.2 are the contract.
 
 0. **Lock the folder.** Before the scan, the run takes an advisory lock on
    the folder: it opens the folder and asks for `flock`. It holds the lock
@@ -220,7 +221,7 @@ and 13.9 are the contract.
    after a cancel. *Safety:* the work file is the only file that a failed
    conversion sends to the Trash. The job does not take the converter's
    word: a file moves only when its path is exactly the work file of that
-   ARW. The ARW is never changed, moved or deleted. A work file that the
+   ARW. A failed conversion never touches the ARW. A work file that the
    Trash refused is named in the note.
 8. **Decide for each DNG.** The found DNG files come first, then the new
    ones. A DNG at the factor is skipped. A DNG with an older backup beside
@@ -235,14 +236,36 @@ and 13.9 are the contract.
     Trash. After a failed write or check, one rename restores the backup.
     *Safety:* nothing is deleted. When the Trash refuses a backup, it stays
     beside the file and a note says so.
+12. **Move the originals, only on request.** The step exists only when the
+    caller gave `trashOriginals: true`, and never for Remove. It starts
+    after the tag of the last DNG, and not after a cancel. For each ARW that
+    this run converted, `OriginalDecision.decide` asks four things: the DNG
+    has a full match, its tag step ended at the factor, the DNG passes its
+    check, and the ARW is the file that was converted. The check of the DNG
+    is one exiftool read: the DNG is a regular file with bytes, it names
+    the ARW in `OriginalRawFileName`, and its `DefaultScale` is the factor.
+    The run recorded the size, the modification date and the file number of
+    the ARW before the conversion, and it reads them again as the last
+    thing before the move. Then `BackupHandling.trashFile` moves the ARW.
+    *Safety:* an ARW that fails one check stays, with an `originalKept`
+    note. A link or a folder never goes. When the Trash refuses the file,
+    the ARW stays: the job deletes nothing and tries no second way. A file
+    beside the ARW, such as `<base>.xmp`, is not touched.
 
 A cancel is honored between files, never in the middle of one. The result
 has the counts and one note for each file that has something to say.
 
 `DesqueezeJob.plan(folder:)` is the dry run. It makes the same scan, asks the
-same two functions (`ConverterChoice` and `TagDecision`), and changes no
-file. So a dry run and the run that follows cannot disagree. It takes no
-lock, so it can read a folder in which a run works.
+same three functions (`ConverterChoice`, `TagDecision` and
+`OriginalDecision`), and changes no file. So a dry run and the run that
+follows cannot disagree. It takes no lock, so it can read a folder in which
+a run works. For the originals it reads no ARW and no DNG: it plans a run in
+which every check passes.
+
+The option has no default value in `DesqueezeJob.run`, in
+`DesqueezeJob.plan` and in `DesqueezeOperations.run`. So each front end
+states it. The window gives the state of its box. The tool gives its flag,
+`--trash-originals`. The server gives `false`, always.
 
 ## Runtime behavior worth knowing
 
@@ -274,10 +297,15 @@ lock, so it can read a folder in which a run works.
 - **The window remembers the factor** of the last run in the app's saved
   settings. The first time, it starts at 1.5. The launch arguments are read
   from the command line only.
+- **The window never remembers the box for the originals.** It is off at
+  every launch, when a folder loads, and after every run, also a run that
+  was cancelled or that failed. No launch argument turns it on. A scan of
+  the loaded folder does not change it.
 - **The Lightroom line and the line about the two converters** are decided
   in the core (`RunSummary`). The window and the tool show them for the
   same runs, and the description of the server's tools gives a model the
-  same rule.
+  same rule. The line about the originals is made there too. It shows only
+  after a run that was asked to move them.
 
 ## Delivery
 

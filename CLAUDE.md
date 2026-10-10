@@ -6,7 +6,7 @@ This file is a router: the rules that must not break, and the one document to re
 
 ## Read this before changing that
 
-"Design" is `docs/superpowers/specs/2026-10-05-desqueeze-design.md`. Its sections 12 and 13 win over earlier ones.
+"Design" is `docs/superpowers/specs/2026-10-05-desqueeze-design.md`. Its sections 12, 13 and 14 win over earlier ones.
 
 | Changing | Read first |
 |---|---|
@@ -17,6 +17,7 @@ This file is a router: the rules that must not break, and the one document to re
 | The command line tool or its JSON | Design 12.1, `Sources/DesqueezeCore/Reports.swift` |
 | The MCP server | Design 12.2, `MCPServer/` |
 | The converters, the work file, the match table, the folder lock | Design 13, `Sources/DesqueezeCore/AdobeMatch.swift`, and the data file `docs/superpowers/specs/2026-10-09-ilce-7sm3-adobe-values.json` |
+| The originals to the Trash, on request | Design 14, `Sources/DesqueezeCore/Originals.swift`, and its section in `docs/changing-things.md` |
 | A sentence that a front end says | It is made once, in the core. `docs/changing-things.md` says where. |
 | Something that looks like a past decision | `docs/decisions.md` |
 | A change that you send from outside | `CONTRIBUTING.md` |
@@ -25,12 +26,12 @@ New specs go in `docs/superpowers/specs/` and get a row in `docs/README.md`.
 
 ## Invariants
 
-1. **The original is never at risk.** The app never changes, moves, or deletes an ARW. A DNG keeps its `_original` backup until the tag reads back correctly. Then the backup goes to the Trash. Nothing is deleted.
+1. **The original is never at risk.** The app never changes or deletes an ARW. It moves one to the Trash only on the user's request for that run, and only an ARW that the run converted, after every check of design 14.2. The option is off by default and is never saved. It has no default value in the core, and the MCP server always gives `false`. A DNG keeps its `_original` backup until the tag reads back correctly. Then the backup goes to the Trash. Nothing is deleted.
 2. **No pixels change.** The app sets tags. It never resamples or exports an image.
 3. **The app does not touch a backup it did not make.** A DNG with an existing `_original` is blocked, not skipped: exiftool never replaces one. An orphan backup is reported and left.
 4. **Only a pending ARW goes to a converter, and no converter writes over a file.** No converter starts when anything has the name `<base>.dng`. For a taken output name, dnglab refuses with exit code 6 and Adobe DNG Converter writes a second file, `_1.dng`. Never pass `-f` to dnglab. Never pass `-h` to Adobe DNG Converter: it opens a window and never returns.
 5. **Each converter writes a hidden work file, and an exclusive rename gives the DNG its name.** Adobe DNG Converter gets the name with `-o`. A conversion passes only when the exit code is 0, the work file has bytes, and the rename passed. For dnglab, the match must also read back. Adobe returns 0 for a file it cannot read.
-6. **Only the app's own files and checked backups go to the Trash.** A failed conversion sends only the exact work file of its ARW. Before a conversion, a leftover work file and exiftool's `_exiftool_tmp` beside it go there, and only when each is a regular file. A backup goes there after a good read-back. Nothing else does.
+6. **Only the app's own files, checked backups, and originals on request go to the Trash.** A failed conversion sends only the exact work file of its ARW. Before a conversion, a leftover work file and exiftool's `_exiftool_tmp` beside it go there, and only when each is a regular file. A backup goes there after a good read-back. An original goes there only under invariant 1, through `BackupHandling.trashFile`, with one try: a refusal keeps it. Nothing else does.
 7. **Top level only.** The scan does not enter subfolders and ignores hidden files.
 8. **Every read and write of `DefaultScale` names `SubIFD`.** That is the directory Camera Raw reads. A DNG with an unknown scale is never skipped.
 9. **The match table's numbers come from measurement.** Never estimate one. The table is a copy of the data file, and the drift check guards both against a new converter version or new firmware.

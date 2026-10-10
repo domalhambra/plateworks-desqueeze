@@ -69,7 +69,9 @@ tool's own words on a detail line below it.
    | The sentence is about | File | Test |
    |---|---|---|
    | A folder: the counts, the run button, read-only, the advice about the converters | `Sources/DesqueezeCore/FolderText.swift` | `Tests/DesqueezeCoreTests/FolderTextTests.swift` |
-   | One file of a run: most notes, the counts line, the Lightroom line and when it shows, the line about the two converters | `Sources/DesqueezeCore/RunSummary.swift` | `Tests/DesqueezeCoreTests/RunSummaryTests.swift` |
+   | The box for the originals in the window: its label, the line under it, the run button with the originals | `Sources/DesqueezeCore/FolderText.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
+   | One file of a run: most notes, the counts line, the Lightroom line and when it shows, the line about the two converters, the line about the originals | `Sources/DesqueezeCore/RunSummary.swift` | `Tests/DesqueezeCoreTests/RunSummaryTests.swift`, `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
+   | An original that stays: the six sentences, and the detail line of a DNG that did not pass its check | `Sources/DesqueezeCore/Originals.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
    | A run that did not start, because another run works in the folder | `Sources/DesqueezeCore/FolderLock.swift` | `Tests/DesqueezeCoreTests/FolderLockTests.swift` |
    | A write that failed, a backup that was restored, a partial DNG | `Sources/DesqueezeCore/DesqueezeJob.swift` | `Tests/DesqueezeCoreTests/DesqueezeJobTests.swift` |
    | Who converts | `Sources/DesqueezeCore/ConverterChoice.swift` | `Tests/DesqueezeCoreTests/ConverterChoiceTests.swift` |
@@ -77,10 +79,10 @@ tool's own words on a detail line below it.
    | A missing exiftool, the dnglab install | `Sources/DesqueezeCore/ToolLocator.swift` | `Tests/DesqueezeCoreTests/ToolLocatorTests.swift` |
    | A wrong factor, and the hint for a factor with a comma | `Sources/DesqueezeCore/SqueezeFactor.swift` | `Tests/DesqueezeCoreTests/SqueezeFactorTests.swift` |
    | A path that is no folder | `Sources/DesqueezeCore/FolderChoice.swift` | `Tests/DesqueezeCoreTests/FolderChoiceTests.swift` |
-   | The help and the usage errors of the tool | `Sources/DesqueezeCLI/Usage.swift`, `Sources/DesqueezeCLI/Arguments.swift` | `Tests/DesqueezeCLITests/CommandsTests.swift`, `Tests/DesqueezeCLITests/ArgumentsTests.swift` |
+   | The help and the usage errors of the tool | `Sources/DesqueezeCLI/Usage.swift`, `Sources/DesqueezeCLI/Arguments.swift` | `Tests/DesqueezeCLITests/CommandsTests.swift`, `Tests/DesqueezeCLITests/ArgumentsTests.swift`, `Tests/DesqueezeCLITests/OriginalsToolTests.swift` |
    | The layout of the tool's text | `Sources/DesqueezeCLI/TextOutput.swift` | `Tests/DesqueezeCLITests/TextOutputTests.swift` |
    | What a model reads about a tool | `MCPServer/Sources/desqueeze-mcp/Tools.swift` | `MCPServer/Tests/DesqueezeMCPTests/ServerEndToEndTests.swift` |
-   | The window alone | `App/PlateworksDesqueeze/AppModel.swift` | `App/PlateworksDesqueezeTests/AppModelTests.swift` |
+   | The window alone | `App/PlateworksDesqueeze/AppModel.swift` | `App/PlateworksDesqueezeTests/AppModelTests.swift`, `App/PlateworksDesqueezeTests/OriginalsModelTests.swift` |
    | The window alone, in the view | `App/PlateworksDesqueeze/ContentView.swift` | None. Check it by hand. |
 
 2. Change the test to the new words, and see it fail.
@@ -108,8 +110,8 @@ Read design 4.2 and 5 first.
 
 ## Add a note kind
 
-Read design 12.1 and 13.6 first. A front end reads the `kind` of a note,
-never the English sentence.
+Read design 12.1, 13.6 and 14.3 first. A front end reads the `kind` of a
+note, never the English sentence.
 
 1. Add the kind to the list in design 12.1, and to the two tests that pin
    every kind: `testEachKindIsWrittenAsItsName` in
@@ -127,14 +129,17 @@ never the English sentence.
    `Sources/DesqueezeCore/RunSummary.swift` is true only for a failed or a
    blocked file. The exit code in `Sources/DesqueezeCLI/Commands.swift` is 1
    for those, for a stopped run, and for a read-only folder.
-   `Tests/DesqueezeCLITests/ExitCodeTests.swift` judges the exit code.
+   `Tests/DesqueezeCLITests/ExitCodeTests.swift` judges the exit code. A
+   kind that only informs, as `convertedUnmatched` and `originalKept` do,
+   also goes into `isInformation` in `App/PlateworksDesqueeze/AppModel.swift`,
+   so the window gives its note the information symbol.
 5. Tell the model about the kind in the description of `desqueeze_run`, in
    `MCPServer/Sources/desqueeze-mcp/Tools.swift`.
 
 ## Add a field to the JSON
 
-Read design 12.1 and 13.6 first. The tool and the server print the same
-report types, so one change reaches both.
+Read design 12.1, 13.6 and 14.3 first. The tool and the server print the
+same report types, so one change reaches both.
 
 1. Add the key to the test of the shape in
    `Tests/DesqueezeCoreTests/ReportsTests.swift`, and see it fail.
@@ -184,6 +189,13 @@ Read design 12.2 first.
 6. Add the tool to the help text in
    `MCPServer/Sources/desqueeze-mcp/Program.swift`, and to the table in
    design 12.2.
+
+Never give a tool an argument that moves an original ARW (design 14.1). The
+server gives the core `trashOriginals: false`, always, in
+`MCPServer/Sources/desqueeze-mcp/ToolEnvironment.swift`.
+`testACallThatAsksToMoveTheOriginalsIsRefusedAndMovesNoARW` in
+`MCPServer/Tests/DesqueezeMCPTests/ServerEndToEndTests.swift` holds that
+rule.
 
 ## Add a camera to the match table
 
@@ -235,6 +247,39 @@ Read design 4.3 step 1, 13.3 and 13.4 first. Then read the rules in
    tests on the real programs and the drift check run.
 
 Never pass `-f` to dnglab. Never pass `-h` to Adobe DNG Converter.
+
+## Change the rule for the originals
+
+Read design 14 first, all of it. This is the one feature that removes a file
+of the user from the folder. Change the design first: it is the contract.
+
+| Rule | File | Test |
+|---|---|---|
+| When an ARW moves: the function that decides, and the order of its questions | `OriginalDecision` in `Sources/DesqueezeCore/Originals.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
+| The record of an ARW and its compare (size, modification date, file number, regular file) | `FileRecord` and `OriginalState` in `Sources/DesqueezeCore/Originals.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
+| The check of the DNG, and its one exiftool read | `DNGCheck` in `Sources/DesqueezeCore/Originals.swift`, `readOriginalCheck` in `Sources/DesqueezeCore/ScaleTag.swift` | `Tests/DesqueezeCoreTests/OriginalsTests.swift` |
+| The fifth step of the run: after every tag step, not after a cancel, one try of the Trash | `Sources/DesqueezeCore/DesqueezeJob.swift` | `Tests/DesqueezeCoreTests/OriginalsJobTests.swift`. With the real programs: `Tests/DesqueezeCoreTests/DnglabIntegrationTests.swift` |
+| The steps of the dry run | `Sources/DesqueezeCore/DesqueezeJob.swift` | `Tests/DesqueezeCoreTests/OriginalsPlanTests.swift`, `Tests/DesqueezeCoreTests/PlanTests.swift` |
+| The flag of the tool and its two usage errors | `Sources/DesqueezeCLI/Arguments.swift` | `Tests/DesqueezeCLITests/OriginalsToolTests.swift`, `Tests/DesqueezeCLITests/EndToEndOriginalsTests.swift` |
+| The box of the window: when it shows, and when it is off | `App/PlateworksDesqueeze/AppModel.swift` | `App/PlateworksDesqueezeTests/OriginalsModelTests.swift` |
+
+1. Write the test on fakes, and see it fail. For a rule that keeps an ARW in
+   the folder, also break the rule in the code and see the test fail. The
+   first break to try: the option is treated as on when it is off.
+2. Change the code. Keep these four rules:
+   - The option has no default value in `DesqueezeJob.run`,
+     `DesqueezeJob.plan` and `DesqueezeOperations.run`.
+   - The ARW moves through `BackupHandling.trashFile`, once. Never add a
+     delete, and never add a second way to the Trash.
+   - Nothing saves the option, and nothing but the box of the window and
+     the flag `--trash-originals` turns it on.
+   - The MCP server gives `false`.
+3. Run the three suites with the fixtures and dnglab installed. No test
+   reaches the real Trash: each one injects the trash function, or sets
+   `DESQUEEZE_TEST_BACKUP_FOLDER`.
+4. Check the window by hand, on a copy of a folder (the section "Check the
+   window by hand"). The window uses the real Trash. Do not tick the box
+   and click Run on a folder that you want to keep.
 
 ## Update the MCP library pin
 
@@ -292,7 +337,9 @@ saved settings.
 The arguments are in `LaunchOptions`, at the end of
 `App/PlateworksDesqueeze/AppModel.swift`. Design 9 has the full acceptance
 pass. The window uses the real Trash, so the backups of a hand check go
-there.
+there. No argument ticks the box "Move the original ARW files to the Trash"
+(design 14.4): tick it by hand, and only on a copy of a folder. With the
+box on, a run moves the ARW files of that copy to the real Trash.
 
 ## Add or change a document
 

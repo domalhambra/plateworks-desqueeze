@@ -10,7 +10,10 @@ to say: the name of the file, one plain sentence, and often a detail line
 with the words of the program that did the work. In the JSON, each note also
 has a `kind`. The sections below are in the order of the kinds.
 
-In every case below, an ARW is as it was. The tool never changes one.
+In every case below, an ARW is as it was, and where it was. The tool never
+changes one. It moves one only when you asked a run to move the originals,
+and then only after its checks: the section "The original stays" has each
+case in which it does not.
 
 ## The photo still looks squeezed
 
@@ -144,6 +147,40 @@ Kind: `convertedUnmatched`. This is not an error. dnglab converted the
 photo, Adobe DNG Converter is not installed, and the note says what the DNG
 lacks. <doc:CamerasAndLenses> explains both sentences.
 
+### The original stays
+
+```
+The original stays, because its DNG has no full match.
+The original stays, because its DNG is not complete.
+The original changed during the run, so it stays.
+The original is not a regular file, so it stays.
+The original stays, because its DNG could not be checked.
+The original could not go to the Trash, so it stays.
+```
+
+Kind: `originalKept`. This is not an error. You asked the run to move the
+originals to the Trash, the run converted this ARW, and the ARW is still in
+the folder. Nothing was lost. The result line says how many moved:
+"Originals moved to the Trash: 11 of 12."
+
+| The sentence | Meaning, and what to do |
+|---|---|
+| "The original stays, because its DNG has no full match." | dnglab converted the photo with no full match, and the DNG has the note "Converted. …" too. You need the ARW to convert the photo again when Adobe DNG Converter is installed. Keep it. |
+| "The original stays, because its DNG is not complete." | The tag step of the DNG did not end with the stretch of this run: the DNG is blocked, or its write failed. Read the note of the DNG, and follow it. |
+| "The original changed during the run, so it stays." | The size, the modification date or the file number of the ARW is not what it was before the conversion. Another program wrote the file or replaced it, or the file is gone. The DNG is from the earlier file. Look at both. |
+| "The original is not a regular file, so it stays." | A link or a folder has the name of the ARW now. The tool never moves one. |
+| "The original stays, because its DNG could not be checked." | The detail line has the reason: the DNG is not a regular file or has no bytes, exiftool could not read it, it does not name this ARW in `OriginalRawFileName`, or its `DefaultScale` is not the stretch of this run. Another program changed the DNG during the run. Scan the folder, and look at the DNG. |
+| "The original could not go to the Trash, so it stays." | The Trash refused the file. The detail line has the words of the system. A volume with no Trash gives this for every ARW. Move the file yourself, when you want it gone. |
+
+A later run does not move this ARW: its DNG is there now, so no run converts
+it again, and a run moves only an ARW that it converted itself. When you
+want the ARW gone, move it to the Trash yourself.
+
+An ARW whose conversion failed has no such note. Its "Not converted." note
+says enough, and the ARW stays. After a cancel, the ARW files that the run
+did not reach have no note either: the result says "stopped", and each of
+them is in the folder.
+
 ### An ARW is not converted, and there is no note
 
 The tool converts only an ARW that has no DNG. An ARW has a DNG when one of
@@ -168,7 +205,7 @@ installed.
 |---|---|
 | "No DNG or ARW files in this folder." | The top level of the folder has no photo that the tool works on. The tool does not read subfolders. Give it the folder that holds the photos. |
 | "This folder could not be read." | The line below it says why: nothing is at the path, the path is a file, or the path is a package such as an app or a photo library. |
-| "This folder is read-only. Desqueeze cannot change its files." | A scan works, and a run changes nothing. Unlock the card, or copy the folder to a disk that you can write to. The note of a run has the kind `folderReadOnly`. |
+| "This folder is read-only. Desqueeze cannot change its files." | A scan works, and a run changes nothing and moves nothing. Unlock the card, or copy the folder to a disk that you can write to. The note of a run has the kind `folderReadOnly`. |
 | "Drop a folder" | The window got a file, a package, or more than one item. |
 | "Another Desqueeze run is working in this folder. Wait for it to end, then run again." | The run did not start, and no file was changed. Another run holds the folder: in the window, in the command line tool, or in the MCP server. Wait for that run, then run again. If you see no run, look in Activity Monitor for a Desqueeze, a `desqueeze` or a `desqueeze-mcp` that still runs. The lock goes when that program ends. |
 

@@ -118,6 +118,12 @@ cp -R build/Build/Products/Release/Desqueeze.app /Applications/
 are in Lightroom already, select them there and use Metadata › Read Metadata
 from File.
 
+For a folder with ARW files to convert, the window has a box: "Move the
+original ARW files to the Trash". It is off each time. Tick it for one run,
+and the run moves each ARW that it converted to the Trash, after the DNG of
+that ARW passed a check. The section "What happens to your files" has the
+rule.
+
 ### The command line tool
 
 ```bash
@@ -144,11 +150,20 @@ desqueeze run "/path/to/a folder" --factor 1.5             # convert, then set t
 desqueeze remove "/path/to/a folder"                       # set every DNG back to no stretch
 ```
 
+To move each converted ARW to the Trash in the same run, add
+`--trash-originals`:
+
+```bash
+desqueeze run "/path/to/a folder" --factor 1.5 --trash-originals --dry-run   # shows a "trash" step for each ARW
+desqueeze run "/path/to/a folder" --factor 1.5 --trash-originals
+```
+
 | Option | Does |
 |---|---|
 | `--factor <number>` | The squeeze factor, from 1 to 4. `run` needs it. There is no default. |
 | `--dry-run` | For `run` and `remove`: lists what each file would get, and which converter gets each ARW. Changes no file. |
 | `--no-convert` | For `run`: leaves the ARW files alone. |
+| `--trash-originals` | For `run`: moves each original ARW to the Trash after its DNG passes the check. Off unless given. It does not go with `--no-convert`. |
 | `--json` | Prints one JSON object on standard output, and nothing else there. |
 | `--verbose` | Prints each exiftool and converter command, its exit code and its output on standard error. Also says when it removed a leftover work file. |
 
@@ -179,6 +194,10 @@ The server has three tools: `desqueeze_scan`, `desqueeze_run` and
 `desqueeze_remove`. They do the work of the three commands above and return
 the same JSON. A person does not type to the server.
 
+The server never moves an original ARW to the Trash. It has no argument for
+that, so an agent cannot remove your originals. Only the window and the
+command line tool can, on your request.
+
 ### One run in a folder at a time
 
 Only one run works in a folder at a time. A run holds a lock on the folder
@@ -197,8 +216,16 @@ Do not start two runs in one folder there.
 
 ### What happens to your files
 
-- An ARW is never changed, moved or deleted. Its new DNG goes beside it,
+- An ARW is never changed and never deleted. Its new DNG goes beside it,
   with the same base name.
+- An ARW moves only on your request for one run: the box in the window, or
+  `--trash-originals`. Then the run moves each ARW that it converted to the
+  Trash. It first checks that the DNG is complete, that the DNG names that
+  ARW, and that the ARW did not change during the run. When a check does not
+  pass, or the Trash refuses the file, the ARW stays, and a note says why.
+  A sidecar file, such as an XMP file, stays too. Look at the DNG files in
+  Lightroom before you empty the Trash: the check does not decode the
+  picture.
 - A converter writes a hidden work file beside the ARW, and the DNG gets its
   name only when it is complete. When a run ends hard, the hidden file can
   stay. The next run moves it to the Trash before it converts that photo.
