@@ -552,6 +552,42 @@ final class DnglabConverterTests: XCTestCase {
         XCTAssertEqual(disk.paths, [workPath])
     }
 
+    // The rename that a converter gets when no one gives it one must be the
+    // exclusive one. Here no `rename:` is given, the files are real, and the
+    // "dnglab" of the runner also makes `<base>.dng`, as another program
+    // would at the wrong moment. A plain `rename` would put the work file
+    // over that DNG.
+    func testTheDefaultRenameNeverReplacesADNGThatAppearedWhileDnglabWorked() throws {
+        let folder = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(folder) }
+        let arw = folder.appendingPathComponent("frame 1.ARW")
+        let dng = folder.appendingPathComponent("frame 1.dng")
+        let work = folder.appendingPathComponent(".frame 1.desqueeze-work.dng")
+        try Data("raw bytes".utf8).write(to: arw)
+        let others = Data("another program's DNG".utf8)
+        let tools = ScriptedTools()
+        let scripted = tools.runner.handler
+        tools.runner.handler = { call in
+            let result = scripted(call)
+            if call.executable == ScriptedTools.dnglab.path {
+                FileManager.default.createFile(atPath: dng.path, contents: others)
+            }
+            return result
+        }
+        let converter = DnglabConverter(executable: ScriptedTools.dnglab, exiftool: ScriptedTools.exiftool,
+                                        runner: tools.runner,
+                                        discardLeftover: { XCTFail("no leftover: \($0.lastPathComponent)") })
+
+        XCTAssertThrowsError(try converter.convert(arw, facts: adapted)) {
+            XCTAssertEqual($0 as? ConvertError,
+                           .failedForAll("A DNG with this name exists already. Not converted.", partial: work))
+        }
+
+        XCTAssertEqual(try Data(contentsOf: dng), others, "the DNG of the other program has the same bytes")
+        XCTAssertEqual(try Data(contentsOf: work), ScriptedTools.dnglabBytes, "the work file stays, for the job")
+        XCTAssertEqual(tools.runner.calls.count, 3, "dnglab, the match write and its read-back all ran")
+    }
+
     // MARK: A leftover work file (design 13.3, step 1)
 
     // A run that ended hard left the work file. Its name says that it is

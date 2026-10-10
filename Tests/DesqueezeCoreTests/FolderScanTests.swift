@@ -40,8 +40,29 @@ final class FolderScanTests: XCTestCase {
         try touch("real.dng_original")
         try FileManager.default.createDirectory(at: folder.appendingPathComponent("folder.dng"),
                                                 withIntermediateDirectories: true)
+        try touch("real.ARW")
+        try touch(".hidden.ARW")
         let contents = try FolderScan.contents(of: folder)
         XCTAssertEqual(contents.dngs.map(\.lastPathComponent), ["real.dng"])
+        // A hidden ARW is no photo of the folder: a run would convert it,
+        // and its work file would be `..hidden.desqueeze-work.dng`.
+        XCTAssertEqual(contents.arws.map(\.lastPathComponent), ["real.ARW"])
+    }
+
+    // A run that ended hard left the hidden work file of x.ARW (design
+    // 13.3). The scan does not see it: the ARW is still pending, and the
+    // folder has no DNG. So the next run converts the ARW again.
+    func testAFolderWithAnARWAndItsLeftoverWorkFileScansAsOnePendingARWAndNoDNG() throws {
+        try touch("x.ARW")
+        try touch(".x.desqueeze-work.dng")
+        let log = CallLog()
+        let backups = FakeBackups(log: log)
+        let snapshot = try FolderScanner(tag: FakeTag(log: log, backups: backups), backups: backups)
+            .snapshot(of: folder)
+        XCTAssertEqual(snapshot.dngs, [])
+        XCTAssertEqual(snapshot.pendingARWs.map(\.lastPathComponent), ["x.ARW"])
+        XCTAssertEqual(snapshot.orphanBackups, [])
+        XCTAssertEqual(log.entries, [], "with no DNG, exiftool does not read the folder")
     }
 
     func testSortsNamesTheWayFinderDoes() throws {

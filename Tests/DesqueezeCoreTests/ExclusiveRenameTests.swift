@@ -74,16 +74,23 @@ final class ExclusiveRenameTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: dng), Data("the new DNG".utf8))
     }
 
-    // Anything at the name stops the rename, and stays as it was: a file, a
-    // folder, a link, and a link that points at nothing.
-    func testOnTheRealDiskAnythingAtTheNameStaysAsItWas() throws {
+    /// Plants each kind of thing at the name `frame <n>.dng`, with a work
+    /// file beside it, and asks `rename` to move the work file there. The
+    /// answer must be "the name is taken", and the thing at the name must be
+    /// the one that was planted: a file, a folder, a link, and a link that
+    /// points at nothing.
+    func assertAnythingAtTheNameStaysAsItWas(_ rename: ExclusiveRename, file: StaticString = #filePath,
+                                             line: UInt = #line) throws {
         let folder = try makeTemporaryFolder()
         defer { removeTemporaryFolder(folder) }
         let files = FileManager.default
+        let target = folder.appendingPathComponent("elsewhere.bin")
+        try Data("a file of the person".utf8).write(to: target)
         let plant: [(String, (URL) throws -> Void)] = [
             ("a file", { try Data("another program's DNG".utf8).write(to: $0) }),
             ("an empty file", { try Data().write(to: $0) }),
             ("a folder", { try files.createDirectory(at: $0, withIntermediateDirectories: false) }),
+            ("a link to a file", { try files.createSymbolicLink(at: $0, withDestinationURL: target) }),
             ("a link to a folder", { try files.createSymbolicLink(at: $0, withDestinationURL: folder) }),
             ("a dangling link", {
                 try files.createSymbolicLink(atPath: $0.path, withDestinationPath: folder.path + "/no such file")
@@ -96,16 +103,38 @@ final class ExclusiveRenameTests: XCTestCase {
             try make(dng)
             let before = try files.attributesOfItem(atPath: dng.path)
 
-            XCTAssertEqual(ExclusiveRename.system.move(work, to: dng), .nameTaken, what)
+            XCTAssertEqual(rename.move(work, to: dng), .nameTaken, what, file: file, line: line)
 
-            XCTAssertEqual(try Data(contentsOf: work), Data("the new DNG".utf8), "\(what): the work file stays")
+            XCTAssertEqual(try? Data(contentsOf: work), Data("the new DNG".utf8), "\(what): the work file stays",
+                           file: file, line: line)
+            // `attributesOfItem` does not follow a link, so these are the
+            // type and the number of the thing at the name itself.
             let after = try files.attributesOfItem(atPath: dng.path)
-            XCTAssertEqual(after[.type] as? FileAttributeType, before[.type] as? FileAttributeType, what)
+            XCTAssertEqual(after[.type] as? FileAttributeType, before[.type] as? FileAttributeType, what,
+                           file: file, line: line)
             XCTAssertEqual(after[.systemFileNumber] as? Int, before[.systemFileNumber] as? Int,
-                           "\(what): the thing at the name was replaced")
+                           "\(what): the thing at the name was replaced", file: file, line: line)
         }
         XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent("frame 0.dng")),
-                       Data("another program's DNG".utf8))
+                       Data("another program's DNG".utf8), file: file, line: line)
+        XCTAssertEqual(try Data(contentsOf: target), Data("a file of the person".utf8),
+                       "nothing was written through a link", file: file, line: line)
+    }
+
+    // Anything at the name stops the rename, and stays as it was.
+    func testOnTheRealDiskAnythingAtTheNameStaysAsItWas() throws {
+        try assertAnythingAtTheNameStaysAsItWas(.system)
+    }
+
+    // The other path, for a volume that does not have the exclusive call:
+    // the system's own check of the name, and the system's own plain rename.
+    // The check must not follow a link. `FileManager.fileExists` follows
+    // one, says that a dangling link is not there, and the plain rename then
+    // replaces the link.
+    func testOnTheRealDiskTheCheckOfTheOtherPathDoesNotFollowALink() throws {
+        let system = ExclusiveRename.system
+        try assertAnythingAtTheNameStaysAsItWas(
+            ExclusiveRename(renameExclusive: { _, _ in ENOTSUP }, exists: system.exists, rename: system.rename))
     }
 
     func testOnTheRealDiskAFileThatIsNotThereFailsWithTheSystemsNumber() throws {
