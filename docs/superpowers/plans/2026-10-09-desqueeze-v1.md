@@ -23,10 +23,13 @@ MCPServer`), 0 failures.
 | 1 to 7 | Complete. |
 | 8, the window | Complete: three review rounds, then `b13f74b` and `87af8cf`. The window's state logic has unit tests in `App/PlateworksDesqueezeTests/`. |
 | 9, core support and `desqueeze` | Complete but for three small converter items from its last review, which Task 15A carries (its Part 1). |
-| 10, `desqueeze-mcp` | Built and merged (`c32be50`), in its own package, `MCPServer/`. Reviewed: seven fixes in work (signals, serial sends, end of input). Then one re-review. |
-| 15A, dnglab first: the core | **New, Dom's request 2026-10-09.** Design section 13. Not started. Runs after the Task 10 fixes. |
-| 15B, dnglab first: the three front ends | Texts and messages in the window, the tool and the MCP server. After 15A. |
-| 11 to 14 | Not started. Task 11's texts in this plan predate the command line tool, the MCP server and dnglab, and must cover all three. Task 13 also installs both tools and dnglab (`brew install dnglab` is done on Dom's Mac), registers the MCP server on Dom's yes, and needs Dom for the Lightroom check and one real drag from Finder. |
+| 10, `desqueeze-mcp` | Complete: built, merged (`c32be50`), fixed (`70f7c82`), re-reviewed. In its own package, `MCPServer/`. |
+| 15A, dnglab first: the core | Complete (`b914abb` to `6467cde`), reviewed. Design section 13. |
+| 15B, dnglab first: the three front ends | Complete (`665e09e` to `f3cab30`), reviewed. |
+| 15C, the work file | Built (`bb61646` to `85f6a6c`): dnglab writes a hidden work file and an exclusive rename gives the DNG its name. In review. |
+| 15D, the words | Fixes from the review of 15B. In work. |
+| 16, the documentation site | **New, Dom's decision 2026-10-09.** A DocC catalog in `Sources/DesqueezeCore/`, built with Xcode's `docc` and no package dependency: a user guide, how the match works, the tool and MCP reference, a contributor guide, and the API reference from the code. Built on Dom's Mac. Published later, on Dom's yes: a published site is a new property under the brand rules. After Task 11. |
+| 11 to 14 | Task 11 now also carries the MIT license (copyright Plateworks), the Medium tier (`docs/architecture.md`, `docs/changing-things.md`), and `CONTRIBUTING.md`, `SECURITY.md`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`. The repo stays private until Dom says. Before it goes public: Dom looks at the match table's origin, the render image in the specs folder (his photo), and the workspace paths in the documents. Not started. Task 11's texts in this plan predate the command line tool, the MCP server and dnglab, and must cover all three. Task 13 also installs both tools and dnglab (`brew install dnglab` is done on Dom's Mac), registers the MCP server on Dom's yes, and needs Dom for the Lightroom check and one real drag from Finder. |
 
 **Task 15, dnglab first.** Dom asked for dnglab as the converter, matched to
 Adobe's output, with Adobe DNG Converter as an optional backup. The match was
