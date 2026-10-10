@@ -568,7 +568,7 @@ name.
 
 A note's `kind` is one of `orphanBackup`, `notConverted`, `failed`,
 `blockedByBackup`, `leftoverBackup`, `backupKept`, `folderReadOnly`,
-`convertedUnmatched` (13.4). A front
+`convertedUnmatched` (13.4), `noFolderLock` (13.9), `originalKept` (14.3). A front
 end reads the kind, never the English sentence. `unconvertedARWs` is the count
 of pending ARW files the run left, from the run's own scan.
 
@@ -899,17 +899,46 @@ condition.
   is the one path left on which the app can replace a file it did not make.
 - A leftover work file is removed only when its ARW is converted again. If
   the ARW is gone, or a DNG now claims it, the hidden work file stays.
-- A base name longer than 235 bytes makes the work-file name longer than the
-  255 bytes a file name can have. The app does not start a converter for
-  such an ARW, and the note says that the name is too long.
+- **A long file name.** A file name on a Mac volume can have 255 UTF-16
+  units (measured 2026-10-10 on APFS, HFS+ and ExFAT: a name of 255 "あ", 765
+  bytes, is made, and 256 is refused). HFS+ stores an accented letter as two
+  units, so the app counts the decomposed form of the name. The longest name
+  that the app makes for an ARW is exiftool's temporary file beside the work
+  file, `.<base>.desqueeze-work.dng_exiftool_tmp`: the base name and 33 more
+  units. So a base name of more than 222 units gets no converter, and the
+  note says "The file name is too long. Shorten it, then run again." One
+  rule holds for both converters. (Until 2026-10-10 the rule counted 255
+  bytes and only the work file. That refused a long name with accented or
+  Japanese letters that works, and it let a base of 223 to 235 letters fail
+  in exiftool with the system's words.) The dry run uses the same rule.
 - **One run in a folder at a time.** A second run that starts while the
   first works would remove the first run's work file as a leftover, and each
   could then act on the other's half-written file. So a run takes an advisory
   lock on the folder (`flock` on the folder itself: no lock file is made),
   and a second run in any front end stops at once with "Another Desqueeze
   run is working in this folder. Wait for it to end, then run again." A scan
-  and a dry run take no lock. On a volume that has no such lock, the run
-  goes on without one, and the rule is the user's to keep.
+  and a dry run take no lock. The answer of the lock call decides:
+
+  | Answer | The run |
+  |---|---|
+  | The lock | Goes on, and frees the lock at its end. |
+  | `EWOULDBLOCK` | Stops with the sentence above. |
+  | `ENOTSUP`, `EOPNOTSUPP`, `ENOLCK`, `EISDIR`, `ENOSYS`, `EINVAL` | Goes on without a lock: the volume has none. The result has one note of the kind `noFolderLock`, on the folder's name: "This volume gives no folder lock. Do not start a second run in this folder while this run works." It is information, not a failure. |
+  | `EINTR` | Asks again. |
+  | Any other error | Stops as a folder that could not be read, with the system's words on the detail line. A descriptor that the system calls bad (`EBADF`) is not closed. |
+
+  Measured 2026-10-10: the lock holds on the startup volume and on APFS,
+  HFS+, ExFAT and FAT32 images, a second process gets `EWOULDBLOCK`, and the
+  lock is gone after a hard end. No network volume was measured. The
+  descriptor has `O_CLOEXEC`, so no program that the run starts keeps the
+  lock.
+- After a hard end of a run, the lock is free at once, and a converter that
+  the dead run started can still work for a moment. A run that starts in
+  that moment can meet its work file. Both converters end in under half a
+  second here, and two trials showed no collision.
+- A scan or a dry run that works while a run works can show a file in
+  change, for example a DNG as blocked by a backup that the run is about to
+  clear. Run it again after the run ends.
 - The match table's numbers were measured from files that Adobe DNG
   Converter wrote. The repo publishes them as measurements, as open-source
   raw tools publish values of the same origin. Dom decides this before the
