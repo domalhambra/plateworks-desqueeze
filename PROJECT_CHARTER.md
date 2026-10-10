@@ -4,61 +4,71 @@ _Chartered 2026-10-05, the day the design was approved. The approved design is `
 
 ## What it is
 
-A Mac app with one window. Drop a folder of photos shot through an anamorphic lens, pick the squeeze factor, and the app sets the `DefaultScale` tag on every DNG in the folder. Lightroom and Camera Raw read the tag and show each photo at its correct shape. Sony ARW files in the folder are converted to DNG first, because Adobe ignores the tag in an ARW.
+A small Mac tool for stills shot through an anamorphic lens. Give it a folder and the squeeze factor, and it sets the `DefaultScale` tag on every DNG in the folder. Lightroom and Camera Raw read the tag and show each photo at its correct shape. Sony ARW files in the folder are converted to DNG first, because the tag works only in a DNG.
 
-The app changes no pixels. The tag is one small value in the file, and Remove restores it.
+It has three front ends on one core: a window, a command line tool, `desqueeze`, and an MCP server, `desqueeze-mcp`, for Claude Code. All three do the same work.
+
+The app changes no pixels. The tag is one small value in the file, and Remove sets it back to no stretch.
 
 ## Why it exists
 
-Dom shoots stills on a Sony A7S III with anamorphic lenses of more than one squeeze factor. The same job took six terminal steps and a manual conversion. A Photoshop script could stretch the photos, but it converts the raw data to a JPEG and the editing range is gone.
+Dom, the maintainer, shoots stills on a Sony A7S III with anamorphic lenses of more than one squeeze factor. The same job took six terminal steps and a manual conversion. A Photoshop script could stretch the photos, but it converts the raw data to a JPEG and the editing range is gone.
 
 ## Register
 
-None yet. A register belongs to a published property. If Desqueeze ships, it takes an operational-tool row in `00_Resources/plateworks-principles.md`, beside Ignition and Undercurrent: an instrument, with no editorial voice and no persuasion.
+None yet. A register belongs to a published property. If Desqueeze ships as a Plateworks tool, it takes the register of an operational tool: an instrument, with no editorial voice and no persuasion.
 
 ## Vision / done state
 
 **Version 1 (personal use):** Dom drops a shoot folder on the window, picks a factor, and every DNG opens in Lightroom at the correct shape. "Done" is the acceptance pass in section 9 of the design, on a scratch copy of a real shoot.
 
-**Later, only if it earns it:** a Plateworks Tools release for other photographers. Not assumed. The design's section 3 lists what that release needs: a bundled exiftool, signing and notarization, brand marks, a register, a privacy page.
+**Later, only if it earns it:** a Plateworks Tools release for other photographers, as a built app. Not assumed. The design's section 3 lists what that release needs: a bundled exiftool and dnglab, signing and notarization, brand marks, a register, a privacy page. The source is open before that: MIT license, built from source.
 
-## Current status (2026-10-05)
+## Current status
 
-Design approved. No code yet. The method is proven by hand: the tag wrote and read back at four factors, and Adobe DNG Converter ran from the command line (design, section 2).
+**Design approved 2026-10-05.** The method is proven by hand: the tag wrote and read back at four factors, and Adobe DNG Converter ran from the command line (design, section 2).
 
-**Red-teamed 2026-10-09** (design, section 2.1). Eleven claims tested on scratch copies, each with a fix in the spec. dnglab, an open-source converter, was measured against Adobe's through Camera Raw: the renders look the same, but dnglab's white point clips 0.09 stops of highlight headroom on the A7S III. Adobe's converter stays for version 1, behind a protocol, so dnglab can take its place for a release. Capture One left the scope: Dom's workflow is moving to Lightroom.
+**Red-teamed 2026-10-09** (design, section 2.1). Each claim was tested on scratch copies, each with a fix in the spec. dnglab, an open-source converter, was measured against Adobe's through Camera Raw: the renders look the same, but dnglab's white level cut 0.09 stops of highlight headroom on the A7S III. Capture One left the scope: Dom's workflow is moving to Lightroom.
 
-## Location & filing
+**Built 2026-10-09.** Version 1 is built: the three suites are green, and the window, the command line tool and the MCP server all run on the same core. dnglab now converts each photo that it can match, with Adobe's values written into its DNG, and Adobe DNG Converter is an optional backup (design, section 13). The match is measured for one camera, the Sony A7S III. The license is MIT, and the repo is written to become public. Still open: the acceptance pass on a copy of a real shoot, and the check in Lightroom at each factor.
 
-- **Repo folder:** `20-29 Properties/27 Plateworks Desqueeze/`
-- **GitHub:** none yet. `plateworks-desqueeze`, private, when Dom confirms.
-- **Workspace filing:** a row in `00.00 JDex.md` and a `local` row in the workspace allowlist ledger. The Projects row in the workspace `CLAUDE.md` lands with this repo's own `CLAUDE.md`.
+## Location
+
+- **Repo:** this one. No GitHub repo yet. It starts private and becomes public.
+- **Documents:** `README.md` for a user, `CLAUDE.md` for the rules, `docs/README.md` for the index.
 
 ## Architecture
 
-- `Sources/DesqueezeCore/` — the logic: folder scan, tool location, the tag, the conversion, the job. No UI. Tested with `swift test`.
+- `Sources/DesqueezeCore/` — every rule: the folder scan, tool location, the tag, the conversion, the match, the job, the reports. No UI. Foundation only.
 - `App/PlateworksDesqueeze/` — the SwiftUI window, generated by XcodeGen from `project.yml`.
-- Two external tools do the file work: exiftool and Adobe DNG Converter.
-- No third-party Swift dependencies. No network. No data collection.
+- `Sources/DesqueezeCLI/` and `Sources/desqueeze/` — the command line tool.
+- `MCPServer/` — the MCP server, a package of its own. It alone has third-party Swift code.
+- Three external programs do the file work: exiftool, dnglab, and Adobe DNG Converter, which is optional.
+- No network. No data collection.
+- The full map is `docs/architecture.md`.
 
 ## Verification gates
 
-- `swift test` — unit tests on a fake process runner, and integration tests on the real tools against gitignored fixtures.
+- `swift test` — the core and the tool: unit tests on fakes, the docs check, and tests on the real programs against gitignored fixtures.
+- `swift test --package-path MCPServer` — the server, started as a client starts it.
+- `xcodebuild test` on the generated project — the state of the window, with no app started.
 - The acceptance pass by hand on a scratch copy of a real shoot folder.
-- One file opened in Lightroom at each factor. Only Dom can do this one.
+- One file opened in Lightroom at each factor. Only a person with Lightroom can do this one.
 
 ## Milestones
 
 - [x] Method proven by hand on scratch copies — 2026-10-05
 - [x] Design approved; charter filed — 2026-10-05
 - [x] Spec red-teamed; converter decision made — 2026-10-09
-- [ ] Implementation plan written
-- [ ] `DesqueezeCore` green under `swift test`
-- [ ] The window builds and runs on Dom's Mac
+- [x] Implementation plan written — 2026-10-09
+- [x] `DesqueezeCore` green under `swift test` — 2026-10-09
+- [x] The window builds and runs on Dom's Mac — 2026-10-09
+- [x] Command line tool and MCP server on the same core — 2026-10-09
+- [x] dnglab converts, matched to Adobe's values for the A7S III — 2026-10-09
 - [ ] Acceptance pass on a scratch copy of a real shoot
 - [ ] Dom confirms the shape in Lightroom at each factor he uses
-- [ ] Repo documented to the Floor tier; workspace Projects row added
-- [ ] Private GitHub repo created
+- [ ] Repo documented to the Medium tier, with the MIT license and the open-source files, and listed in the Plateworks workspace index. The documents were written 2026-10-09. The index row is open.
+- [ ] GitHub repo created, then made public
 
 ## Guardrails / principles
 
@@ -66,5 +76,5 @@ Design approved. No code yet. The method is proven by hand: the tag wrote and re
 - **No pixels change.** The app sets a tag. It never resamples or exports an image.
 - **Top level only.** The app does not enter subfolders.
 - **The app does not touch a backup it did not make.**
-- **Never test on Dom's photo folders.** Tests and acceptance use copies.
+- **Never test on a real photo folder.** Tests and acceptance use copies.
 - **Offline and private.** No outbound requests, no analytics.
