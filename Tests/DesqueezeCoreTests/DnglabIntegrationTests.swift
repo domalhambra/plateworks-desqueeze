@@ -4,9 +4,17 @@ import XCTest
 /// The real dnglab and the real exiftool, on copies of `fixtures/sample.ARW`
 /// in a temporary folder. Skips when a tool or the fixture is absent.
 ///
-/// The fixture is a frame from an adapted lens at ISO 800: the ARW says that
-/// it has no lens-correction data, so it is a full match (design 13.4).
+/// The fixture can be any Sony ARW. No test here holds a number of one
+/// frame: each value that a test expects comes from the frame itself, from
+/// its facts and from what `AdobeMatch` gives for them. A test of the match
+/// needs a frame that the match table covers (design 13.4). With another
+/// frame it skips, and says so (`factsOfACoveredFrame`).
 class RealDnglabTestCase: XCTestCase {
+    /// What a test of the match says when the frame in `fixtures/` is one
+    /// that the match table does not cover.
+    static let needsACoveredFrame = "This test needs a frame that the match table covers: "
+        + "a Sony A7S III, compressed raw, ISO 50 or 80 to 12800, adapted lens."
+
     /// The nine tags of the match, in the order of design 13.2.
     static let matchedTags = [
         "SubIFD:WhiteLevel", "IFD0:BaselineExposure", "IFD0:CameraCalibration1", "IFD0:CameraCalibration2",
@@ -52,6 +60,55 @@ class RealDnglabTestCase: XCTestCase {
         try XCTUnwrap(ARWFactsReader(exiftool: exiftool).read([arw])[arw.lastPathComponent])
     }
 
+    /// The facts of `arw`, for a test of the match. Skips the test when the
+    /// match table does not cover the frame: the photo in `fixtures/` is the
+    /// reader's own, and it can be any Sony ARW.
+    ///
+    /// The five rules of design 13.4 are spelled here, against the data
+    /// file, and `AdobeMatch` is not asked. So a rule that breaks in
+    /// `AdobeMatch` fails the assertion below for a frame that the table
+    /// covers. It does not turn the test into a skip.
+    func factsOfACoveredFrame(_ arw: URL, file: StaticString = #filePath, line: UInt = #line) throws -> ARWFacts {
+        let facts = try facts(of: arw)
+        let table = try JSONDecoder().decode(AdobeMatchTests.DataFile.self,
+                                             from: Data(contentsOf: AdobeMatchTests.dataFile))
+        let levels = facts.daylightLevels
+        let covered = facts.model == table.model
+            && facts.iso.map { table.byISO[String($0)] != nil } == true
+            && levels?.green == table.daylightReference.green && (levels?.red ?? 0) > 0 && (levels?.blue ?? 0) > 0
+            && facts.distortionCorrection == 255
+            && facts.rawFileType == 2
+        guard covered else { throw XCTSkip(Self.needsACoveredFrame, file: file, line: line) }
+        XCTAssertTrue(AdobeMatch.match(facts).isFull, "the table covers this frame, so it is a full match: \(facts)",
+                      file: file, line: line)
+        return facts
+    }
+
+    /// The value that the match writes into `tag` for an ARW with these
+    /// facts: Adobe's value for this frame, as the table gives it.
+    func matchValue(_ tag: String, for facts: ARWFacts, file: StaticString = #filePath,
+                    line: UInt = #line) throws -> String {
+        try XCTUnwrap(AdobeMatch.match(facts).tags.first { $0.name == tag }?.value, "the match has no \(tag)",
+                      file: file, line: line)
+    }
+
+    /// Reads `tags` from `dng` and holds each one to the value of the match
+    /// for these facts. Numbers are compared as numbers.
+    func assertTheMatch(of tags: [String], isIn dng: URL, for facts: ARWFacts, file: StaticString = #filePath,
+                        line: UInt = #line) throws {
+        for (tag, value) in zip(tags, try read(tags, in: dng)) {
+            let wanted = try matchValue(tag, for: facts, file: file, line: line)
+            XCTAssertTrue(AdobeMatch.sameNumbers(wanted, value), "\(tag): \(value), not \(wanted)", file: file,
+                          line: line)
+        }
+    }
+
+    /// What `file` holds for one tag, read alone. Nil for "no such tag".
+    func value(of tag: String, in file: URL) throws -> String? {
+        let value = try read([tag], in: file)[0]
+        return value == "-" ? nil : value
+    }
+
     /// The values of `tags` in `file`, as exiftool prints them with `-n`.
     /// `-` is "no such tag".
     func read(_ tags: [String], in file: URL) throws -> [String] {
@@ -68,26 +125,36 @@ class RealDnglabTestCase: XCTestCase {
 }
 
 final class DnglabIntegrationTests: RealDnglabTestCase {
-    func testTheFixtureIsAFrameFromAnAdaptedLensWithAFullMatch() throws {
+    // The facts of the fixture, whatever frame it is. The reader makes one
+    // read for all five. Here exiftool is asked for each tag alone, and the
+    // reader must give the same: a reader that asks for a wrong tag, or
+    // takes a column for another, fails.
+    func testARealReadGivesWhatExiftoolPrintsForEachTagAlone() throws {
         let arw = try copyFixture(as: "frame.ARW")
         let facts = try facts(of: arw)
-        XCTAssertEqual(facts, ARWFacts(
-            model: "ILCE-7SM3", iso: 800,
-            daylightLevels: ARWFacts.DaylightLevels(red: 2597, green: 1024, blue: 1556),
-            distortionCorrection: 255, rawFileType: 2), "no lens-correction data, and compressed raw")
-        XCTAssertTrue(AdobeMatch.match(facts).isFull)
+        XCTAssertNotNil(facts.model, "exiftool reads the fixture: \(facts)")
+        XCTAssertEqual(facts.model, try value(of: "IFD0:Model", in: arw))
+        XCTAssertEqual(facts.iso.map(String.init), try value(of: "ExifIFD:ISO", in: arw))
+        XCTAssertEqual(facts.daylightLevels.map { "\($0.red) \($0.green) \($0.blue)" },
+                       try value(of: "SR2SubIFD:WB_RGBLevelsDaylight", in: arw))
+        XCTAssertEqual(facts.distortionCorrection.map(String.init),
+                       try value(of: "SubIFD:DistortionCorrection", in: arw))
+        XCTAssertEqual(facts.rawFileType.map(String.init), try value(of: "SubIFD:SonyRawFileType", in: arw))
     }
 
     // One read for a list: a photo, and a file that exiftool cannot read.
+    // The photo gets the facts that a read of it alone gives.
     func testARealReadGivesFactsForAPhotoAndNoneForAFileThatIsNoPhoto() throws {
         let arw = try copyFixture(as: "frame.ARW")
         let junk = folder.appendingPathComponent("junk.ARW")
         try Data("not a photo".utf8).write(to: junk)
         let before = try Data(contentsOf: arw)
+        let alone = try facts(of: arw)
+        XCTAssertNotNil(alone.model, "exiftool reads the fixture: \(alone)")
 
         let read = ARWFactsReader(exiftool: exiftool).read([arw, junk])
 
-        XCTAssertEqual(read["frame.ARW"]?.iso, 800)
+        XCTAssertEqual(read["frame.ARW"], alone)
         XCTAssertEqual(read["junk.ARW"], ARWFacts.none)
         XCTAssertEqual(try names(), ["frame.ARW", "junk.ARW"], "the read makes no file")
         XCTAssertEqual(try Data(contentsOf: arw), before, "the read changes no file")
@@ -95,9 +162,10 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
 
     func testARealConversionWritesTheMatchAndTheDNGIsValid() throws {
         let arw = try copyFixture(as: "frame.ARW")
+        let facts = try factsOfACoveredFrame(arw)
         let arwBefore = try Data(contentsOf: arw)
 
-        let conversion = try converter.convert(arw, facts: try facts(of: arw))
+        let conversion = try converter.convert(arw, facts: facts)
 
         let dng = folder.appendingPathComponent("frame.dng")
         XCTAssertEqual(conversion, Conversion(dng: dng, unmatched: nil))
@@ -107,29 +175,24 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
         XCTAssertFalse(ConverterOutput.exists(atPath: ConverterOutput.workURL(for: arw).path))
         XCTAssertEqual(try Data(contentsOf: arw), arwBefore, "the ARW must not change")
 
-        // The tags, read back from the file. Adobe's values for this frame.
-        let values = try read(Self.matchedTags + ["IFD0:OriginalRawFileName"], in: dng)
-        let expected = [
-            "16383", "0.15", "0.9888 0 0 0 1 0 0 0 0.9955", "0.9888 0 0 0 1 0 0 0 0.9955",
-            "9.17112993057145e-05 1.80963827089821e-07 0.000132825207904173 1.86198019692823e-07 "
-                + "6.88838025482567e-05 1.77853114759923e-07",
-            "0.6", "1.25", "1", "250",
-        ]
-        for (tag, (value, wanted)) in zip(Self.matchedTags, zip(values, expected)) {
-            XCTAssertTrue(AdobeMatch.sameNumbers(wanted, value), "\(tag): \(value), not \(wanted)")
-        }
-        XCTAssertEqual(values.last, "frame.ARW", "the pending rule needs the file name")
+        // All nine tags, read back from the file: Adobe's values for this
+        // frame, as the table gives them for its facts.
+        XCTAssertEqual(Self.matchedTags.count, 9)
+        try assertTheMatch(of: Self.matchedTags, isIn: dng, for: facts)
+        XCTAssertEqual(try read(["IFD0:OriginalRawFileName"], in: dng), ["frame.ARW"],
+                       "the pending rule needs the file name")
 
-        // dnglab embeds the whole ARW by default. `--embed-raw false` stops that.
+        // dnglab embeds the whole ARW by default. `--embed-raw false` stops
+        // that. The tag is the proof. The size of the DNG is none: it
+        // depends on the photo, and a DNG with no ARW inside can be larger
+        // than its ARW.
         XCTAssertEqual(try read(["IFD0:OriginalRawFileData"], in: dng), ["-"], "no embedded raw")
-        let size = try XCTUnwrap(ConverterOutput.size(atPath: dng.path))
-        XCTAssertLessThan(size, arwBefore.count, "a DNG with the ARW inside is larger than the ARW")
 
         let validate = try SystemProcessRunner().run(exiftool, ["-validate", "-s3", dng.path])
         XCTAssertEqual(validate.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "OK", validate.stderr)
 
         // The DNG claims its ARW by the tag, also under another name.
-        let renamed = folder.appendingPathComponent("261004 Backyard Photos 0022.dng")
+        let renamed = folder.appendingPathComponent("Renamed on import 0022.dng")
         try FileManager.default.moveItem(at: dng, to: renamed)
         let backups = FileBackups(trash: { try FileManager.default.removeItem(at: $0) })
         let snapshot = try FolderScanner(tag: ScaleTag(exiftool: exiftool), backups: backups).snapshot(of: folder)
@@ -147,9 +210,16 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
 
         let dng = folder.appendingPathComponent("frame.dng")
         XCTAssertEqual(conversion, Conversion(dng: dng, unmatched: .model))
+        // What dnglab alone writes for this frame, with no step of the app:
+        // the same command, into a folder beside the photo folder.
+        let plain = folder.deletingLastPathComponent().appendingPathComponent("dnglab alone.dng")
+        let alone = try SystemProcessRunner().run(dnglab, ["convert", "--embed-raw", "false", arw.path, plain.path])
+        XCTAssertEqual(alone.exitCode, 0, alone.stderr)
+        let own = try read(Self.matchedTags, in: plain)
+        XCTAssertNotEqual(own[0], "-", "dnglab writes a white level of its own")
+
         let values = try read(Self.matchedTags + ["IFD0:OriginalRawFileName"], in: dng)
-        XCTAssertEqual(values.first, "15360", "dnglab's own white level")
-        XCTAssertEqual(Array(values[1..<9]), Array(repeating: "-", count: 8), "no other tag of the match")
+        XCTAssertEqual(Array(values[0..<9]), own, "each tag of the match is as dnglab alone leaves it")
         XCTAssertEqual(values.last, "frame.ARW")
         let validate = try SystemProcessRunner().run(exiftool, ["-validate", "-s3", dng.path])
         XCTAssertEqual(validate.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "OK", validate.stderr)
@@ -183,6 +253,8 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
     // the ARW.
     func testADNGThatAnotherProgramMakesJustBeforeTheRenameIsLeftAsItIs() throws {
         let arw = try copyFixture(as: "frame.ARW")
+        // A full match: dnglab gets the ARW first, and Adobe is the next.
+        let facts = try factsOfACoveredFrame(arw)
         let dng = folder.appendingPathComponent("frame.dng")
         let (trash, backups) = try makeTrash()
         let others = Data("another program's DNG".utf8)
@@ -207,9 +279,9 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path), [".frame.desqueeze-work.dng"],
                        "only the work file is in the injected trash")
         // The work file was complete: dnglab's DNG, with the match in it.
-        XCTAssertEqual(try read(["SubIFD:WhiteLevel", "IFD0:OriginalRawFileName"],
-                                in: trash.appendingPathComponent(".frame.desqueeze-work.dng")),
-                       ["16383", "frame.ARW"])
+        let work = trash.appendingPathComponent(".frame.desqueeze-work.dng")
+        try assertTheMatch(of: ["SubIFD:WhiteLevel"], isIn: work, for: facts)
+        XCTAssertEqual(try read(["IFD0:OriginalRawFileName"], in: work), ["frame.ARW"])
         XCTAssertEqual(adobeRunner.calls, [], "the next converter is not tried")
         XCTAssertEqual(summary.notes, [FileNote(name: "frame.ARW", kind: .notConverted, message: "Not converted.",
                                                 detail: "A DNG with this name exists already. Not converted.")])
@@ -223,6 +295,7 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
     // conversion then passes.
     func testARealConversionDiscardsTheLeftoverWorkFileOfAnEarlierRun() throws {
         let arw = try copyFixture(as: "frame 1.ARW")
+        let facts = try factsOfACoveredFrame(arw)
         let work = folder.appendingPathComponent(".frame 1.desqueeze-work.dng")
         try Data("II*\u{0}".utf8).write(to: work)
         let (trash, backups) = try makeTrash()
@@ -235,14 +308,14 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
 
         let conversion = try DnglabConverter(executable: dnglab, exiftool: exiftool,
                                              discardLeftover: { try backups.trashFile($0) })
-            .convert(arw, facts: try facts(of: arw))
+            .convert(arw, facts: facts)
 
         XCTAssertEqual(conversion, Conversion(dng: folder.appendingPathComponent("frame 1.dng"), unmatched: nil))
         XCTAssertEqual(try names(), ["frame 1.ARW", "frame 1.dng"])
         XCTAssertEqual(try Data(contentsOf: trash.appendingPathComponent(".frame 1.desqueeze-work.dng")),
                        Data("II*\u{0}".utf8), "the leftover is in the injected trash")
-        XCTAssertEqual(try read(["SubIFD:WhiteLevel", "IFD0:OriginalRawFileName"], in: conversion.dng),
-                       ["16383", "frame 1.ARW"])
+        try assertTheMatch(of: ["SubIFD:WhiteLevel"], isIn: conversion.dng, for: facts)
+        XCTAssertEqual(try read(["IFD0:OriginalRawFileName"], in: conversion.dng), ["frame 1.ARW"])
     }
 
     // A hard end during the match write left `<work file>_exiftool_tmp`.
@@ -252,6 +325,7 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
     // the real exiftool then convert and match.
     func testARealConversionDiscardsTheLeftoverOfExiftoolBesideTheWorkFile() throws {
         let arw = try copyFixture(as: "frame 1.ARW")
+        let facts = try factsOfACoveredFrame(arw)
         let work = folder.appendingPathComponent(".frame 1.desqueeze-work.dng")
         let leftover = folder.appendingPathComponent(".frame 1.desqueeze-work.dng_exiftool_tmp")
         try Data("II*\u{0}".utf8).write(to: work)
@@ -260,7 +334,7 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
 
         let conversion = try DnglabConverter(executable: dnglab, exiftool: exiftool,
                                              discardLeftover: { try backups.trashFile($0) })
-            .convert(arw, facts: try facts(of: arw))
+            .convert(arw, facts: facts)
 
         XCTAssertEqual(conversion, Conversion(dng: folder.appendingPathComponent("frame 1.dng"), unmatched: nil))
         XCTAssertEqual(try names(), ["frame 1.ARW", "frame 1.dng"], "no hidden file stays")
@@ -268,8 +342,9 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
                        [".frame 1.desqueeze-work.dng", ".frame 1.desqueeze-work.dng_exiftool_tmp"])
         XCTAssertEqual(try Data(contentsOf: trash.appendingPathComponent(leftover.lastPathComponent)),
                        Data("half a write".utf8))
-        XCTAssertEqual(try read(["SubIFD:WhiteLevel", "IFD0:OriginalRawFileName"], in: conversion.dng),
-                       ["16383", "frame 1.ARW"], "the match was written: exiftool did not refuse")
+        // The match was written: exiftool did not refuse.
+        try assertTheMatch(of: ["SubIFD:WhiteLevel"], isIn: conversion.dng, for: facts)
+        XCTAssertEqual(try read(["IFD0:OriginalRawFileName"], in: conversion.dng), ["frame 1.ARW"])
     }
 
     // The real dnglab returns 6 for an output that exists, and does not
@@ -296,16 +371,16 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
     func testARealConversionOfAnARWWithATabInItsNamePassesItsMatch() throws {
         let arw = try copyFixture(as: "tab\there.ARW")
         let reader = ARWFactsReader(exiftool: exiftool)
-        let facts = try XCTUnwrap(reader.read([arw])["tab\there.ARW"], "the facts come back under the real name")
-        XCTAssertTrue(AdobeMatch.match(facts).isFull)
+        XCTAssertNotNil(reader.read([arw])["tab\there.ARW"], "the facts come back under the real name")
+        let facts = try factsOfACoveredFrame(arw)
 
         let conversion = try converter.convert(arw, facts: facts)
 
         XCTAssertEqual(conversion, Conversion(dng: folder.appendingPathComponent("tab\there.dng"), unmatched: nil))
         XCTAssertEqual(try names(), ["tab\there.ARW", "tab\there.dng"])
         // What the real exiftool prints for the tag, and what the file holds.
-        XCTAssertEqual(try read(["SubIFD:WhiteLevel", "IFD0:OriginalRawFileName"], in: conversion.dng),
-                       ["16383", "tab.here.ARW"])
+        try assertTheMatch(of: ["SubIFD:WhiteLevel"], isIn: conversion.dng, for: facts)
+        XCTAssertEqual(try read(["IFD0:OriginalRawFileName"], in: conversion.dng), ["tab.here.ARW"])
         let raw = try SystemProcessRunner().run(exiftool, ["-b", "-IFD0:OriginalRawFileName", conversion.dng.path])
         XCTAssertEqual(raw.stdout, "tab\there.ARW", "the tag holds the real name")
 
@@ -359,7 +434,9 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
 /// dnglab path, and compares every tag of the match. It fails when a new
 /// Adobe version, a new dnglab version, or new camera firmware changes a
 /// value. Skips unless dnglab, Adobe DNG Converter and the fixtures are all
-/// there. It starts Adobe DNG Converter once.
+/// there, and when the frame in `fixtures/` is one that the match table does
+/// not cover: such a frame has no match to compare. It starts Adobe DNG
+/// Converter once, and not at all when it skips.
 ///
 /// Both paths are the ones of design 13.3: the converter writes the hidden
 /// work file, dnglab's match goes into it, and the rename gives it the name
@@ -379,13 +456,15 @@ final class AdobeDriftTests: RealDnglabTestCase {
         try files.createDirectory(at: dnglabFolder, withIntermediateDirectories: false)
         let forAdobe = try copyFixture(as: "frame.ARW", into: adobeFolder)
         let forDnglab = try copyFixture(as: "frame.ARW", into: dnglabFolder)
+        // Before the first converter starts: with a frame that the table
+        // does not cover, the test skips here.
+        let facts = try factsOfACoveredFrame(forDnglab)
 
         let adobes = try AdobeConverter(
             executable: adobe, discardLeftover: { XCTFail("no leftover was expected: \($0.lastPathComponent)") }
         ).convert(forAdobe).dng
-        let facts = try facts(of: forDnglab)
         let ours = try converter.convert(forDnglab, facts: facts)
-        XCTAssertNil(ours.unmatched, "the fixture is a full match: \(facts)")
+        XCTAssertNil(ours.unmatched, "the frame is a full match: \(facts)")
         // The work-file path: the DNG is at its name, it is the file that
         // the tags are read from below, and no work file is left. The
         // listing has hidden files too.
@@ -413,8 +492,9 @@ final class AdobeDriftTests: RealDnglabTestCase {
     }
 }
 
-/// A real run with dnglab first. The fixture is a full match, so Adobe DNG
-/// Converter is never started here, also when it is installed.
+/// A real run with dnglab first. A frame that the match table covers goes to
+/// dnglab, so Adobe DNG Converter is never started here, also when it is
+/// installed.
 final class DnglabRunIntegrationTests: RealDnglabTestCase {
     // Tests discard backups for good. The real Trash is checked by hand.
     var backups: FileBackups { FileBackups(trash: { try FileManager.default.removeItem(at: $0) }) }
@@ -436,6 +516,8 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
         }
         try FileManager.default.copyItem(at: sampleDNG, to: folder.appendingPathComponent("already here.dng"))
         let arw = try copyFixture(as: "frame.ARW")
+        // A full match: with both converters, dnglab gets the ARW.
+        let facts = try factsOfACoveredFrame(arw)
         let arwBefore = try Data(contentsOf: arw)
         let factor = SqueezeFactor(1.5)!
         let job = job(withAdobe: true)
@@ -460,8 +542,8 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
         // The match is in the DNG, and the stretch too: the tag step ran on
         // the file that the match wrote.
         let dng = folder.appendingPathComponent("frame.dng")
-        XCTAssertEqual(try read(["SubIFD:WhiteLevel", "IFD0:BaselineExposure", "IFD0:OriginalRawFileName"], in: dng),
-                       ["16383", "0.15", "frame.ARW"])
+        try assertTheMatch(of: ["SubIFD:WhiteLevel", "IFD0:BaselineExposure"], isIn: dng, for: facts)
+        XCTAssertEqual(try read(["IFD0:OriginalRawFileName"], in: dng), ["frame.ARW"])
         XCTAssertEqual(try tag.read(dng), Scale(horizontal: 1.5, vertical: 1))
         let validate = try SystemProcessRunner().run(exiftool, ["-validate", "-s3", dng.path])
         XCTAssertEqual(validate.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "OK", validate.stderr)
@@ -473,20 +555,27 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
         let removed = try job.run(folder: folder, factor: .noStretch, convert: false, remove: true)
         XCTAssertEqual([removed.set, removed.failed], [2, 0])
         XCTAssertEqual(try tag.read(dng), .noStretch)
-        XCTAssertEqual(try read(["SubIFD:WhiteLevel"], in: dng), ["16383"], "Remove keeps the match")
+        try assertTheMatch(of: ["SubIFD:WhiteLevel"], isIn: dng, for: facts) // Remove keeps the match.
     }
 
     // dnglab alone, and a file that is no photo: failed, with dnglab's words.
     // dnglab made no DNG, so the folder holds what it held.
+    //
+    // dnglab alone converts the photo whatever frame it is. A frame with no
+    // full match counts as converted, and gets the note of design 13.4.
     func testARealRunWithDnglabAloneReportsAFileThatDnglabCannotRead() throws {
-        _ = try copyFixture(as: "frame.ARW")
+        let arw = try copyFixture(as: "frame.ARW")
+        let facts = try facts(of: arw)
         try Data("not a photo".utf8).write(to: folder.appendingPathComponent("junk.ARW"))
 
         let summary = try job(withAdobe: false).run(folder: folder, factor: .noStretch, convert: true)
 
         XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.failed, summary.unconvertedARWs],
                        [1, 1, 1, 1])
-        XCTAssertEqual(summary.notes, [FileNote(
+        let unmatched = AdobeMatch.match(facts).failed.map {
+            [FileNote.convertedUnmatched("frame.dng", rule: $0, facts: facts)]
+        } ?? []
+        XCTAssertEqual(summary.notes, unmatched + [FileNote(
             name: "junk.ARW", kind: .notConverted, message: "Not converted.",
             detail: "dnglab returned 7. Unsupported file: Error: No decoder found, model '', make: '', mode: ''.")])
         XCTAssertEqual(try names(), ["frame.ARW", "frame.dng", "junk.ARW"])

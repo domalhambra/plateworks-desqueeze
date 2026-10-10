@@ -5,15 +5,27 @@ import XCTest
 /// asserts on standard output, standard error, and the exit code. Skips when
 /// a fixture, exiftool or Adobe DNG Converter is absent.
 ///
-/// The fixture ARW is a full match, so on a Mac with dnglab the tool converts
-/// it with dnglab, and Adobe DNG Converter does not start. With no dnglab,
-/// Adobe converts it. `firstConverter` is the one that this Mac gives.
+/// The fixture ARW can be any Sony ARW, so no test here holds a number of
+/// one frame. Which converter gets the ARW comes from the frame itself
+/// (design 13.4): dnglab, when it is installed and the frame has a full
+/// match. Adobe DNG Converter for every other frame, and with no dnglab.
+/// These tests skip without Adobe DNG Converter, so one of the two converts.
 final class EndToEndTests: BuiltToolTestCase {
+    /// The facts of the fixture ARW, as the product's own reader gives them.
+    /// The read changes no file.
+    var fixtureFacts: ARWFacts {
+        let arw = Self.fixtures.appendingPathComponent("sample.ARW")
+        return ToolLocator().exiftool().flatMap { ARWFactsReader(exiftool: $0).read([arw])["sample.ARW"] } ?? .none
+    }
+
+    /// True when dnglab gets the fixture ARW on this Mac.
+    var dnglabConverts: Bool { ToolLocator().dnglab() != nil && AdobeMatch.match(fixtureFacts).isFull }
+
     /// The converter that gets the fixture ARW on this Mac.
-    var firstConverter: String { ToolLocator().dnglab() == nil ? "adobe" : "dnglab" }
+    var firstConverter: String { dnglabConverts ? "dnglab" : "adobe" }
 
     /// The two counts of design 13.6, for one ARW converted on this Mac.
-    var oneConversion: [Int] { ToolLocator().dnglab() == nil ? [0, 1] : [1, 0] }
+    var oneConversion: [Int] { dnglabConverts ? [1, 0] : [0, 1] }
 
     // MARK: scan
 
@@ -276,22 +288,38 @@ final class EndToEndTests: BuiltToolTestCase {
         XCTAssertTrue(result.messages.contains(
             "$ \(exiftool) -m -T -filename -SubIFD:DefaultScale -OriginalRawFileName -ext dng '\(folder.path)'"),
             result.stderr)
-        if let dnglab = ToolLocator().dnglab()?.path {
-            // dnglab's command, and the three exiftool commands around it:
-            // the facts, the match write, and its read-back.
+        let dnglab = ToolLocator().dnglab()?.path
+        let facts = fixtureFacts
+        if dnglab != nil {
+            // With dnglab installed, the facts of the ARW are read first,
+            // whatever the frame is. The row is exiftool's own: the five
+            // facts of the fixture, with `-` for one that it does not have.
             XCTAssertTrue(hasLine("$ \(exiftool) -m -n -T -filename -IFD0:Model -ExifIFD:ISO "
                 + "-SR2SubIFD:WB_RGBLevelsDaylight -SubIFD:DistortionCorrection -SubIFD:SonyRawFileType '/",
                                   "/Shoot with spaces/frame.ARW'"), result.stderr)
-            XCTAssertTrue(result.messages.contains { $0.hasSuffix("frame.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255\t2") },
-                          result.stderr)
+            let row = [facts.model, facts.iso.map(String.init),
+                       facts.daylightLevels.map { "\($0.red) \($0.green) \($0.blue)" },
+                       facts.distortionCorrection.map(String.init), facts.rawFileType.map(String.init)]
+                .map { $0 ?? "-" }.joined(separator: "\t")
+            XCTAssertNotNil(facts.model, "exiftool reads the fixture")
+            XCTAssertTrue(result.messages.contains { $0.hasSuffix("frame.ARW\t" + row) }, result.stderr)
+        }
+        if let dnglab, dnglabConverts {
+            // A full match: dnglab's command, then the match write and its
+            // read-back. The values are Adobe's for this frame, as the table
+            // gives them for its facts.
             XCTAssertTrue(result.messages.contains {
                 $0.hasPrefix("$ \(dnglab) convert --embed-raw false '/")
                     && $0.contains("/Shoot with spaces/frame.ARW' '/")
                     && $0.hasSuffix("/Shoot with spaces/.frame.desqueeze-work.dng'")
             }, result.stderr)
+            let match = AdobeMatch.match(facts).tags
+            XCTAssertEqual(match.prefix(3).map(\.name),
+                           ["SubIFD:WhiteLevel", "IFD0:BaselineExposure", "IFD0:CameraCalibration1"])
+            let values = match.map(\.value)
             XCTAssertTrue(result.messages.contains {
-                $0.hasPrefix("$ \(exiftool) -m -overwrite_original -SubIFD:WhiteLevel=16383 "
-                    + "-IFD0:BaselineExposure=0.15 '-IFD0:CameraCalibration1=0.9888 0 0 0 1 0 0 0 0.9955' ")
+                $0.hasPrefix("$ \(exiftool) -m -overwrite_original -SubIFD:WhiteLevel=\(values[0]) "
+                    + "-IFD0:BaselineExposure=\(values[1]) '-IFD0:CameraCalibration1=\(values[2])' ")
                     && $0.contains(" -IFD0:OriginalRawFileName=frame.ARW '/")
                     && $0.hasSuffix("/Shoot with spaces/.frame.desqueeze-work.dng'")
             }, result.stderr)
@@ -300,7 +328,15 @@ final class EndToEndTests: BuiltToolTestCase {
             XCTAssertFalse(result.messages.contains { $0.contains(converter) },
                            "a full match does not start Adobe DNG Converter")
         } else {
-            XCTAssertTrue(hasLine("$ '\(converter)' -c -d '/", "/Shoot with spaces/frame.ARW'"), result.stderr)
+            // No dnglab, or a frame with no full match: Adobe DNG Converter
+            // gets the name of the work file, and dnglab does not start.
+            XCTAssertTrue(result.messages.contains {
+                $0.hasPrefix("$ '\(converter)' -c -d '/")
+                    && $0.contains("/Shoot with spaces' -o .frame.desqueeze-work.dng '/")
+                    && $0.hasSuffix("/Shoot with spaces/frame.ARW'")
+            }, result.stderr)
+            XCTAssertFalse(result.messages.contains { $0.contains(" convert --embed-raw ") },
+                           "dnglab does not start for a frame that it cannot match")
         }
         XCTAssertTrue(hasLine("$ \(exiftool) -m '-SubIFD:DefaultScale=1.5 1' '/", "/Shoot with spaces/already here.dng'"),
                       result.stderr)

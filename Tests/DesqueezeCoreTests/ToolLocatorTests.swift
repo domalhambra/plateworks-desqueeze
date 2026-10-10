@@ -38,7 +38,7 @@ final class ToolLocatorTests: XCTestCase {
     }
 
     func testConverterPrefersTheRegisteredApp() {
-        let registered = URL(fileURLWithPath: "/Users/x/Apps/Adobe DNG Converter.app")
+        let registered = URL(fileURLWithPath: "/Somewhere/Apps/Adobe DNG Converter.app")
         let binary = "/Contents/MacOS/Adobe DNG Converter"
         let found = locator(registered: registered, present: [
             registered.path + binary, "/Applications/Adobe DNG Converter.app" + binary,

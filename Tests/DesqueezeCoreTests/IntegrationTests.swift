@@ -153,7 +153,7 @@ final class IntegrationTests: XCTestCase {
     func testARenamedDNGStillClaimsItsARW() throws {
         // The fixture DNG was converted from a file named sample.ARW, so its
         // OriginalRawFileName tag is "sample.ARW".
-        _ = try copyFixture("sample.dng", as: "261004 Backyard Photos 0022.dng")
+        _ = try copyFixture("sample.dng", as: "Renamed on import 0022.dng")
         _ = try copyFixture("sample.ARW", as: "sample.ARW")
         let snapshot = try scanner.snapshot(of: folder)
         XCTAssertEqual(snapshot.dngs.first?.originalRawFileName, "sample.ARW")

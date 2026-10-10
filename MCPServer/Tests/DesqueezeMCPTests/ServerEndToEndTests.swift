@@ -239,8 +239,8 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertEqual(json["factor"] as? String, "1.5")
         XCTAssertEqual(counts(json), [1, 2, 0, 0, 0, 0], "the counts of the run it plans")
         XCTAssertEqual(json["steps"] as? [NSDictionary], [
-            // The fixture is a full match: dnglab gets it when it is installed.
-            ["name": "frame.ARW", "action": "convert", "converter": ToolLocator().dnglab() == nil ? "adobe" : "dnglab"],
+            // dnglab gets a frame with a full match, when it is installed.
+            ["name": "frame.ARW", "action": "convert", "converter": dnglabConvertsTheFixture() ? "dnglab" : "adobe"],
             ["name": "already here.dng", "action": "write"],
             ["name": "frame.dng", "action": "write"],
         ])
@@ -270,7 +270,7 @@ final class ServerEndToEndTests: ServerTestCase {
                                         "convertedByAdobe", "set", "skipped", "blocked", "failed", "stopped",
                                         "unconvertedARWs", "notes"])
         XCTAssertEqual([json["convertedByDnglab"], json["convertedByAdobe"]] as? [Int],
-                       ToolLocator().dnglab() == nil ? [0, 1] : [1, 0])
+                       dnglabConvertsTheFixture() ? [1, 0] : [0, 1])
         XCTAssertEqual(json["folder"] as? String, folder.path)
         XCTAssertEqual(json["factor"] as? String, "1.5")
         XCTAssertEqual(json["dryRun"] as? Bool, false)
@@ -604,12 +604,17 @@ final class ServerEndToEndTests: ServerTestCase {
         let perFile = max(Date().timeIntervalSince(firstFileDone), 0.001)
         // Enough files for 3 seconds of work after the first file.
         let copies = max(14, Int(3 / perFile) + 2)
-        // Each copy is 11.5 MB. A timing near the floor would make thousands
-        // of them and fill the disk. Past this limit the Mac is too fast for
-        // the test, and the in-process twin pins the rule.
+        // Each copy is a whole DNG: about 12 MB for a frame of the Sony
+        // A7S III, and more for a larger sensor. A timing near the floor
+        // would make thousands of them and fill the disk. Past this limit
+        // the Mac is too fast for the test, and the in-process twin pins
+        // the rule.
         let mostCopies = 60
         if copies > mostCopies {
-            throw XCTSkip("This Mac is too fast for this test: \(copies) files of 11.5 MB would be needed "
+            let size = try FileManager.default.attributesOfItem(
+                atPath: Self.fixtures.appendingPathComponent("sample.dng").path)[.size] as? Int ?? 0
+            let megabytes = String(format: "%.1f", Double(size) / 1_000_000)
+            throw XCTSkip("This Mac is too fast for this test: \(copies) files of \(megabytes) MB would be needed "
                 + "(\(perFile) seconds a file; the limit is \(mostCopies)). The in-process twin, "
                 + "AnsweringTransportTests.testTheStreamStaysOpenWhileACallIsInWorkLongerThanThePatience, "
                 + "pins the rule.")

@@ -111,6 +111,19 @@ class ServerTestCase: XCTestCase {
         try copyFixture("sample.ARW", as: "frame.ARW")
     }
 
+    /// True when dnglab gets the fixture ARW on this Mac (design 13.4):
+    /// dnglab is installed, and the frame has a full match. The fixture can
+    /// be any Sony ARW, so the answer comes from the frame itself, through
+    /// the product's own reader. Adobe DNG Converter gets every other
+    /// frame: `requireFixturesAndTools` skips without it. The read changes
+    /// no file.
+    func dnglabConvertsTheFixture() -> Bool {
+        let locator = ToolLocator()
+        guard locator.dnglab() != nil, let exiftool = locator.exiftool() else { return false }
+        let arw = Self.fixtures.appendingPathComponent("sample.ARW")
+        return AdobeMatch.match(ARWFactsReader(exiftool: exiftool).read([arw])["sample.ARW"] ?? .none).isFull
+    }
+
     /// `count` DNG files and no ARW: `1.dng`, `2.dng`, and so on.
     func makeDNGs(_ count: Int) throws {
         for number in 1...count { try copyFixture("sample.dng", as: "\(number).dng") }

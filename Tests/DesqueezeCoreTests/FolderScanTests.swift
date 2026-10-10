@@ -79,7 +79,7 @@ final class FolderScanTests: XCTestCase {
 
     func testARenamedDNGClaimsItsARWThroughOriginalRawFileName() {
         let arws = ["DSC05680.ARW", "DSC05681.ARW"].map { folder.appendingPathComponent($0) }
-        let renamed = dng("261004 Backyard Photos 0022.dng", original: "dsc05680.arw")
+        let renamed = dng("Renamed on import 0022.dng", original: "dsc05680.arw")
         let pending = FolderScan.pending(arws: arws, dngs: [renamed], orphanBackups: [])
         XCTAssertEqual(pending.map(\.lastPathComponent), ["DSC05681.ARW"])
     }
@@ -88,7 +88,7 @@ final class FolderScanTests: XCTestCase {
     // the camera's own letter case.
     func testOriginalRawFileNameInTheCamerasOwnCaseClaimsItsARW() {
         let arws = ["DSC05680.ARW", "DSC05681.ARW"].map { folder.appendingPathComponent($0) }
-        let renamed = dng("261004 Backyard Photos 0022.dng", original: "DSC05680.ARW")
+        let renamed = dng("Renamed on import 0022.dng", original: "DSC05680.ARW")
         let pending = FolderScan.pending(arws: arws, dngs: [renamed], orphanBackups: [])
         XCTAssertEqual(pending.map(\.lastPathComponent), ["DSC05681.ARW"])
     }
