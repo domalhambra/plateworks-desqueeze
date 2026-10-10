@@ -172,7 +172,7 @@ final class FakeConverter: RawConverter, @unchecked Sendable {
         if fail.contains(arw.lastPathComponent) { throw ConvertError.failed("made no DNG") }
         // dnglab's converter writes a hidden work file, and Adobe's writes
         // `<base>.dng` (design 13.3).
-        let ownFile = reportsTheMatch ? ConverterOutput.workURL(for: arw) : AdobeConverter.outputURL(for: arw)
+        let ownFile = reportsTheMatch ? ConverterOutput.workURL(for: arw) : ConverterOutput.url(for: arw)
         if nameTakenAtRename.contains(arw.lastPathComponent) {
             throw ConvertError.failedForAll("A DNG with this name exists already. Not converted.",
                                             partial: reportedPartial ?? ownFile)
@@ -180,7 +180,7 @@ final class FakeConverter: RawConverter, @unchecked Sendable {
         if failWithPartial.contains(arw.lastPathComponent) {
             throw ConvertError.failed("\(name) returned 1.", partial: reportedPartial ?? ownFile)
         }
-        return Conversion(dng: AdobeConverter.outputURL(for: arw),
+        return Conversion(dng: ConverterOutput.url(for: arw),
                           unmatched: reportsTheMatch ? AdobeMatch.match(facts).failed : nil)
     }
 }

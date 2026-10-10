@@ -315,11 +315,6 @@ public struct AdobeConverter: RawConverter {
         rules = ConverterRules(name: ConverterKind.adobe.name, exists: fileExists, size: fileSize)
     }
 
-    /// `ConverterOutput.url(for:)`, under its first name.
-    public static func outputURL(for arw: URL) -> URL {
-        ConverterOutput.url(for: arw)
-    }
-
     /// `-c` is lossless compression. `-d` is the output folder. The command
     /// line ignores the converter's window preferences.
     ///

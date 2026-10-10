@@ -63,6 +63,20 @@ final class OperationsTests: XCTestCase {
         XCTAssertFalse(RawConverters.none.canConvert)
     }
 
+    // One source: the converters that the job runs. The two paths are for
+    // the report, and do not decide what can convert.
+    func testWhatCanConvertIsAskedOfTheConvertersThatTheJobRuns() {
+        func operations(paths: Bool, converters: RawConverters) -> DesqueezeOperations {
+            DesqueezeOperations(exiftool: exiftool, dnglab: paths ? dnglabTool : nil,
+                                dngConverter: paths ? converterTool : nil, tag: h.tag, converters: converters,
+                                backups: h.backups)
+        }
+        XCTAssertTrue(operations(paths: false, converters: h.converters(withConverter: true)).canConvert)
+        XCTAssertTrue(operations(paths: false, converters: h.converters(withConverter: false, withDnglab: true))
+            .canConvert)
+        XCTAssertFalse(operations(paths: true, converters: .none).canConvert)
+    }
+
     // The same choice in the run and in the dry run, through the entry points.
     func testWithBothConvertersAFullMatchGoesToDnglabInTheRunAndInTheDryRun() throws {
         h.facts.facts = ["X.ARW": .adapted]

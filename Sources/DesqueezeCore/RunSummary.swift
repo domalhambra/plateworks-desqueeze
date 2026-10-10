@@ -85,7 +85,9 @@ extension FileNote {
     /// The only place that makes these sentences.
     ///
     /// When only rule 4 failed, every tag of the match is in the DNG, and it
-    /// has no lens correction. When rule 1, 2, 3 or 5 failed, no tag of the
+    /// has no lens correction. The detail line says that the ARW holds
+    /// lens-correction data only when the ARW says so. When the ARW has no
+    /// word about it, the line says that. When rule 1, 2, 3 or 5 failed, no tag of the
     /// match is in it.
     ///
     /// - Parameters:
@@ -114,7 +116,10 @@ extension FileNote {
                 : "The table of Adobe's values has compressed raw only, and this ARW is another kind."
         case .noLensCorrection:
             what = "The DNG has no built-in lens correction."
-            why = "The ARW holds lens-correction data, and dnglab does not write it into the DNG."
+            // No value is not "the ARW holds data": the tag can be absent.
+            why = facts.distortionCorrection == nil
+                ? "The ARW does not say whether it has lens-correction data, and dnglab writes none into the DNG."
+                : "The ARW holds lens-correction data, and dnglab does not write it into the DNG."
         }
         return FileNote(name: dng, kind: .convertedUnmatched,
                         message: "Converted. \(what) \(installAdobeForTheSameFile)", detail: why)

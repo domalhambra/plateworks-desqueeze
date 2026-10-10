@@ -32,6 +32,27 @@ final class RunSummaryTests: XCTestCase {
             detail: "The ARW holds lens-correction data, and dnglab does not write it into the DNG."))
     }
 
+    // The ARW has no word about lens-correction data: the tag is absent, or
+    // exiftool could not read it. The note must not say that the ARW holds
+    // such data. It says what is known: the ARW does not say.
+    func testTheNoteOfAFrameThatDoesNotSayIfItHasLensCorrectionDataSaysSo() {
+        let silent = ARWFacts(model: "ILCE-7SM3", iso: 80,
+                              daylightLevels: ARWFacts.DaylightLevels(red: 2496, green: 1024, blue: 1617),
+                              distortionCorrection: nil, rawFileType: 2)
+        XCTAssertEqual(AdobeMatch.match(silent).failed, .noLensCorrection)
+        XCTAssertEqual(FileNote.convertedUnmatched("X.dng", rule: .noLensCorrection, facts: silent), FileNote(
+            name: "X.dng", kind: .convertedUnmatched,
+            message: "Converted. The DNG has no built-in lens correction. \(Self.ending)",
+            detail: "The ARW does not say whether it has lens-correction data, and dnglab writes none into the DNG."))
+        // Any value that is there, and is not "no data", is data.
+        for value in [17, 0, 1] {
+            let says = ARWFacts(model: "ILCE-7SM3", iso: 80, daylightLevels: silent.daylightLevels,
+                                distortionCorrection: value, rawFileType: 2)
+            XCTAssertEqual(FileNote.convertedUnmatched("X.dng", rule: .noLensCorrection, facts: says).detail,
+                           "The ARW holds lens-correction data, and dnglab does not write it into the DNG.", "\(value)")
+        }
+    }
+
     // Rule 1, 2, 3 or 5 failed: no tag of the match is in the DNG.
     func testTheNoteOfAFrameWithNoTableRowSaysThatTheLevelsAreDnglabsOwn() {
         let levels = "Converted. The levels are dnglab's own. \(Self.ending)"

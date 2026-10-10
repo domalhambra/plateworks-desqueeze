@@ -52,7 +52,10 @@ public struct DesqueezeOperations: Sendable {
     /// True when one converter or the other is installed, so a pending ARW
     /// can convert. A front end gives this to the sentences of `FolderText`
     /// and `RunReport` that ask for `converterAvailable`.
-    public var canConvert: Bool { dnglab != nil || dngConverter != nil }
+    ///
+    /// It is `RawConverters.canConvert` of the converters that the job runs:
+    /// one source. `dnglab` and `dngConverter` are the paths for the report.
+    public var canConvert: Bool { converters.canConvert }
 
     private var job: DesqueezeJob { DesqueezeJob(tag: tag, converters: converters, backups: backups) }
 
