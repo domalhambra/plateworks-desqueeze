@@ -5,10 +5,11 @@ import Foundation
 ///
 /// dnglab does not write `<base>.dng`. It writes a hidden **work file**
 /// beside the ARW, `ConverterOutput.workURL`, and the DNG gets its name only
-/// when it is complete and matched (design 13.3). The steps, after the
-/// checks that nothing has the name `<base>.dng` and that no leftover file
-/// of exiftool is there. Steps 1 and 5 are the same for Adobe DNG Converter,
-/// and `ConverterRules` does them. Steps 2 to 4 are this converter's own:
+/// when it is complete and matched (design 13.3). First come the checks
+/// that nothing has the name `<base>.dng`, and that no leftover of exiftool
+/// from a tag step, `<base>.dng_exiftool_tmp`, is there. Then the steps.
+/// Steps 1 and 5 are the same for Adobe DNG Converter, and `ConverterRules`
+/// does them. Steps 2 to 4 are this converter's own:
 ///
 /// 1. A work file that is there already is the leftover of a run that ended
 ///    hard, and so is `<work file>_exiftool_tmp`, which exiftool leaves when

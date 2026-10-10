@@ -31,10 +31,9 @@ import Foundation
 /// leftover file is in the way: `<base>.dng_exiftool_tmp`, a work file that
 /// the Trash refused, or a folder or a link at the name of the work file.
 /// The ARW is then failed with that converter's words, and the next
-/// converter does not start. The same holds when the
-/// Trash refuses the work file of a failed conversion: a work file that
-/// cannot be removed stops the ARW, in this run as in the next one, and the
-/// note names it.
+/// converter does not start. The same holds when the Trash refuses the work
+/// file of a failed conversion: a work file that cannot be removed stops
+/// the ARW, in this run as in the next one, and the note names it.
 ///
 /// **A DNG with no full match.** With dnglab alone, an ARW that the table
 /// does not cover still converts. It counts as converted, and it gets a
