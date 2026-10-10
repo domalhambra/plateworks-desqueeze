@@ -58,6 +58,15 @@ final class FakeTag: ScaleTagging, @unchecked Sendable {
     private var fileWrites: [String] = []
     private var written: [String: SqueezeFactor] = [:]
     private var readsFail = false
+    private var checked: [String] = []
+
+    /// The name of each DNG that the check before an original moves read
+    /// (design 14.2, line 5), in order.
+    var originalChecks: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return checked
+    }
 
     /// The gate that holds the read of the folder with this name.
     func readGate(_ folderName: String) -> Gate {
@@ -142,6 +151,7 @@ final class FakeTag: ScaleTagging, @unchecked Sendable {
     func readOriginalCheck(_ dng: URL) throws -> OriginalCheckTags {
         lock.lock()
         defer { lock.unlock() }
+        checked.append(dng.lastPathComponent)
         return OriginalCheckTags(originalRawFileName: dng.deletingPathExtension().lastPathComponent + ".ARW",
                                  scale: written[dng.path].map { Scale(horizontal: $0.value, vertical: 1) })
     }
@@ -151,12 +161,22 @@ final class FakeTag: ScaleTagging, @unchecked Sendable {
 final class FakeBackups: BackupHandling, @unchecked Sendable {
     private let lock = NSLock()
     private var names: [String] = []
+    private var files: [String] = []
 
     /// The name of each DNG whose backup the job discarded, in order.
     var discarded: [String] {
         lock.lock()
         defer { lock.unlock() }
         return names
+    }
+
+    /// The name of each file that the job gave to `trashFile`, in order: an
+    /// original on its way to the Trash (design 14.2). The file stays where
+    /// it is: this fake moves nothing.
+    var filesGiven: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return files
     }
 
     func backupExists(for dng: URL) -> Bool { false }
@@ -169,19 +189,31 @@ final class FakeBackups: BackupHandling, @unchecked Sendable {
 
     func restoreBackup(for dng: URL) throws {}
 
-    func trashFile(_ file: URL) throws {}
+    func trashFile(_ file: URL) throws {
+        lock.lock()
+        files.append(file.lastPathComponent)
+        lock.unlock()
+    }
 }
 
-/// Either converter. It makes an empty DNG beside the ARW, and starts no
-/// program.
+/// Either converter. It makes a small DNG beside the ARW, and starts no
+/// program. The DNG has bytes, as the check before an original moves asks
+/// (design 14.2, line 5).
 struct FakeConverter: RawConverter {
     /// The rule that kept the DNG from a full match, as dnglab reports it
     /// for a frame that the table does not cover. Nil is a full match.
     var unmatched: AdobeMatch.Rule?
+    /// The names of the ARW files whose conversion fails. Such an ARW has no
+    /// DNG after the run, so it is still pending.
+    var failing: Set<String> = []
+    /// Holds each conversion, when a test gives one.
+    var gate: Gate?
 
     func convert(_ arw: URL, facts: ARWFacts) throws -> Conversion {
+        gate?.pass()
+        if failing.contains(arw.lastPathComponent) { throw ConvertError.failed("The fake cannot read this file.") }
         let dng = ConverterOutput.url(for: arw)
-        try Data().write(to: dng)
+        try Data("a DNG".utf8).write(to: dng)
         return Conversion(dng: dng, unmatched: unmatched)
     }
 }
@@ -208,6 +240,9 @@ final class ModelHarness {
     /// What the model saved for the next launch. It is only this variable:
     /// no test reads or writes the defaults of a real app.
     var savedFactor: String?
+    /// Every value that a model gave to its one way to save, in order. The
+    /// model has no other way: the box of design 14.4 is never saved.
+    private(set) var saves: [String] = []
     /// The time of the model's clock. A test moves it.
     var time: TimeInterval = 1_000
     /// Each line that the model said to VoiceOver.
@@ -247,7 +282,11 @@ final class ModelHarness {
     func makeModel(hasExiftool: Bool = true) -> AppModel {
         AppModel(
             tag: hasExiftool ? tag : nil, converters: converters, backups: backups,
-            savedFactor: savedFactor, saveFactor: { [weak self] in self?.savedFactor = $0 },
+            savedFactor: savedFactor,
+            saveFactor: { [weak self] in
+                self?.savedFactor = $0
+                self?.saves.append($0)
+            },
             now: { [weak self] in self?.time ?? 0 }, announce: { [weak self] in self?.announcements.append($0) })
     }
 

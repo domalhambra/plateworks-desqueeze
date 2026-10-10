@@ -26,7 +26,11 @@ final class AppModel: ObservableObject {
     /// The loaded folder. Set at the moment of a load, before its scan.
     @Published private(set) var folder: URL?
     /// What the newest scan of `folder` found. Nil until that scan lands.
-    @Published private(set) var snapshot: FolderSnapshot?
+    @Published private(set) var snapshot: FolderSnapshot? {
+        // The box of design 14.4 is on only while it shows. A folder with
+        // no pending ARW that can convert turns it off.
+        didSet { if trashOriginals, !showsTrashOriginals { trashOriginals = false } }
+    }
     /// True while the newest scan is in flight.
     @Published private(set) var isScanning = false
     /// True when the newest scan of `folder` failed.
@@ -48,6 +52,15 @@ final class AppModel: ObservableObject {
     /// run that started, and after a new folder loads.
     @Published private(set) var runRefusal: String?
     @Published private(set) var phase = RunPhase.idle
+    /// The box "Move the original ARW files to the Trash" (design 14.4).
+    ///
+    /// It is off at every launch, when a folder loads, and after every run,
+    /// also a run that was cancelled, that failed, or that did not start.
+    /// It is never saved, and no launch argument turns it on: only
+    /// `setTrashOriginals` does, from a click on the box. A scan of the
+    /// loaded folder does not change it, unless the folder then has no
+    /// pending ARW that can convert.
+    @Published private(set) var trashOriginals = false
 
     /// Reads and writes the tag. Nil when exiftool is not installed.
     private let tag: ScaleTagging?
@@ -155,7 +168,12 @@ final class AppModel: ObservableObject {
     /// full match (design 13.4). That file is converted, and the result
     /// keeps its "done" mark (`RunSummary.needsAttention`). Every other
     /// kind of note is about a file to look at.
-    nonisolated static func isInformation(_ note: FileNote) -> Bool { note.kind == .convertedUnmatched }
+    ///
+    /// An original that stays in the folder is information too (design
+    /// 14.3): the run did its work, and the note says why the ARW is there.
+    nonisolated static func isInformation(_ note: FileNote) -> Bool {
+        note.kind == .convertedUnmatched || note.kind == .originalKept
+    }
 
     /// The messages about the loaded folder. They come from the newest
     /// scan, and from a click on Run or Remove that started no run.
@@ -167,7 +185,49 @@ final class AppModel: ObservableObject {
     /// The count in the run button: DNG files, plus ARW files that can convert.
     private var runCount: Int { snapshot?.runCount(converterAvailable: converterAvailable) ?? 0 }
 
-    var runLabel: String { FolderText.runLabel(count: runCount) }
+    /// `Desqueeze N photos`, and while the box is on `Desqueeze N photos,
+    /// move M originals to the Trash` (design 14.4). The core makes both.
+    var runLabel: String {
+        FolderText.runLabel(count: runCount, originalsToTrash: trashOriginals ? originalsCount : 0)
+    }
+
+    // MARK: The originals (design 14.4)
+
+    /// The pending ARW files of the loaded folder that a run can convert,
+    /// and so the originals that a run can move. 0 for a folder that is
+    /// read-only: a run converts nothing there.
+    private var originalsCount: Int {
+        guard let snapshot, snapshot.isWritable else { return 0 }
+        return snapshot.convertibleARWs(converterAvailable: converterAvailable)
+    }
+
+    /// True when the loaded folder has a pending ARW that can convert. The
+    /// box shows only then. In every other state it is not shown, and it is
+    /// off.
+    var showsTrashOriginals: Bool { originalsCount > 0 }
+
+    /// False while a run or a scan is in work: the box then cannot change.
+    var canChangeTrashOriginals: Bool { showsTrashOriginals && !isScanning && !isRunning }
+
+    /// The click on the box. It does nothing while the box does not show,
+    /// and while a run or a scan is in work.
+    func setTrashOriginals(_ on: Bool) {
+        guard canChangeTrashOriginals else { return }
+        trashOriginals = on
+    }
+
+    /// The line under the box while it is on: what the run will do with
+    /// the originals. The core makes it. Nil while the box is off.
+    var trashOriginalsLine: String? {
+        trashOriginals ? FolderText.trashOriginalsLine(count: originalsCount) : nil
+    }
+
+    /// What VoiceOver hears when a run ends: the counts, and after a run
+    /// that was asked to move the originals, the core's line with the two
+    /// counts of design 14.3.
+    nonisolated static func announcement(_ summary: RunSummary) -> String {
+        [summary.countsLine, summary.originalsLine].compactMap { $0 }.joined(separator: ". ")
+    }
 
     /// The sentence about the ARW files a run left, with the reason when
     /// neither converter is installed. Nil when the run left none.
@@ -257,6 +317,10 @@ final class AppModel: ObservableObject {
         summary = nil
         runRefusal = nil
         progress = nil
+        // Also for the folder that was loaded already: a box that stays on
+        // from an earlier folder is the way this option can move files that
+        // the person wants (design 14.1).
+        trashOriginals = false
         scan(url)
     }
 
@@ -299,13 +363,16 @@ final class AppModel: ObservableObject {
             return
         }
         customError = nil
+        // The factor is the only thing that the window saves. The box of
+        // design 14.4 is never saved.
         saveFactor(factor.label)
-        start(factor: factor, convert: true, remove: false)
+        start(factor: factor, convert: true, trashOriginals: trashOriginals, remove: false)
     }
 
+    /// Remove never moves an original, whatever the box says (design 14.2).
     func remove() {
         guard canRemove else { return }
-        start(factor: .noStretch, convert: false, remove: true)
+        start(factor: .noStretch, convert: false, trashOriginals: false, remove: true)
     }
 
     /// Stops the run after its current file. The click is acknowledged at
@@ -374,9 +441,13 @@ final class AppModel: ObservableObject {
         _ = await job.work.result
     }
 
-    /// - Parameter remove: the intent of the Remove button. The job does not
-    ///   guess it from the factor and `convert`.
-    private func start(factor: SqueezeFactor, convert: Bool, remove: Bool) {
+    /// - Parameters:
+    ///   - trashOriginals: the box, as it is at the click on Run. The job
+    ///     gets this value, and a change of the box after the click does not
+    ///     reach it.
+    ///   - remove: the intent of the Remove button. The job does not guess
+    ///     it from the factor and `convert`.
+    private func start(factor: SqueezeFactor, convert: Bool, trashOriginals: Bool, remove: Bool) {
         guard let folder, let tag else { return }
         let runner = DesqueezeJob(tag: tag, converters: converters, backups: backups)
         let flag = CancelFlag()
@@ -386,9 +457,7 @@ final class AppModel: ObservableObject {
         let work = Task.detached {
             defer { updatesEnd.finish() }
             // The job scans the folder itself. It gets no counts from here.
-            // The window moves no original (design 14): it has no box for
-            // that yet.
-            return try runner.run(folder: folder, factor: factor, convert: convert, trashOriginals: false,
+            return try runner.run(folder: folder, factor: factor, convert: convert, trashOriginals: trashOriginals,
                                   remove: remove, cancel: flag) {
                 updatesEnd.yield($0)
             }
@@ -408,6 +477,11 @@ final class AppModel: ObservableObject {
             var refused = false
             if case .failure(let error) = outcome, error is FolderLock.Busy { refused = true }
             job = nil
+            // The box is off after every run: one that completed, one that
+            // was cancelled, one that failed, and one that did not start
+            // (design 14.4). The next run moves no original unless the
+            // person ticks the box again.
+            self.trashOriginals = false
             // No scan for a window that is about to close: the scan would
             // leave an exiftool process behind the app.
             guard !isQuitting else { return }
@@ -431,7 +505,9 @@ final class AppModel: ObservableObject {
             // screen, and nothing else says so.
             // With no result, the run did not start, or its own scan failed.
             // The window shows the sentence that VoiceOver hears.
-            announce(result?.countsLine ?? runRefusal ?? FolderText.unreadable)
+            // After a run that was asked to move the originals, it hears
+            // the core's line with the two counts too (design 14.4).
+            announce(result.map(Self.announcement) ?? runRefusal ?? FolderText.unreadable)
         }
     }
 }

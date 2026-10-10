@@ -16,6 +16,10 @@ struct ContentView: View {
             if model.exiftoolMissing { missingExiftool }
             dropZone
             factorRow
+            // Only for a folder with a pending ARW that can convert (design
+            // 14.4). Between the factor and the Run button, so the person
+            // reads it before the click.
+            if model.showsTrashOriginals { originalsRow }
             actionRow
             if model.isRunning { runProgress }
             if let summary = model.summary { result(summary) }
@@ -224,6 +228,29 @@ struct ContentView: View {
             .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+    /// The box that asks the run to move each original ARW to the Trash
+    /// (design 14.4). The model keeps it off unless the person ticks it, and
+    /// off again after every run. The label and the line under it are the
+    /// core's.
+    private var originalsRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(FolderText.trashOriginalsLabel,
+                   isOn: Binding(get: { model.trashOriginals }, set: { model.setTrashOriginals($0) }))
+                .toggleStyle(.checkbox)
+                // Off while a run or a scan is in work: the box cannot
+                // change then.
+                .disabled(!model.canChangeTrashOriginals)
+                .accessibilityLabel(FolderText.trashOriginalsLabel)
+            // What the run will do, with the count. It wraps, and is not cut.
+            if let line = model.trashOriginalsLine {
+                Text(line)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
     private var actionRow: some View {
         HStack(spacing: 8) {
             if model.isRunning {
@@ -290,6 +317,12 @@ struct ContentView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            // Only after a run that was asked to move the originals (design
+            // 14.3). The core makes the line, and VoiceOver heard it with
+            // the counts when the run ended.
+            if let originals = summary.originalsLine {
+                Text(originals).font(.callout)
+            }
             if let left = model.unconvertedLine(summary) {
                 Text(left).font(.callout)
             }
@@ -305,10 +338,11 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(summary.notes) { note in
                             VStack(alignment: .leading, spacing: 2) {
-                                // A DNG with no full match is converted.
-                                // Its note informs, so it has the symbol
-                                // of information, and the result above
-                                // keeps its "done" symbol.
+                                // A DNG with no full match is converted,
+                                // and an original that stays is no
+                                // failure. Each note informs, so it has
+                                // the symbol of information, and the
+                                // result above keeps its "done" symbol.
                                 if AppModel.isInformation(note) {
                                     SymbolLine(.information, note.name).font(.callout.weight(.medium))
                                 } else {
