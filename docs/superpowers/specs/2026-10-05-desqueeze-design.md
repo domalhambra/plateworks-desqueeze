@@ -581,6 +581,10 @@ Build and test: `swift build --package-path MCPServer`,
   and a file-changing call must not run for nobody.
 - One message is written to standard output at a time, and the server does
   not exit while an answer is being written.
+- Known limit: a client that stops reading while its pipe is full holds the
+  server open, also after a signal, because the answer cannot be written. The
+  run has stopped after its file by then and no backup is left. Only the
+  unread report is lost when the client then kills the server.
 
 ### 12.3 Install
 
