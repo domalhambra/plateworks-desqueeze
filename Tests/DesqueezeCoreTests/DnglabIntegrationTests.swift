@@ -423,9 +423,16 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
         }
         XCTAssertEqual(try names(), ["frame.ARW", "frame.dng_exiftool_tmp"], "no DNG and no work file was made")
 
-        // The fact behind the rule, on a DNG that is put there by hand.
+        // The fact behind the rule, on a DNG that is put there by hand. It
+        // needs the fixture DNG. With the ARW alone in `fixtures/`, the
+        // test skips here, as every test does that lacks a fixture: it
+        // does not fail.
+        let sample = IntegrationTests.fixtures.appendingPathComponent("sample.dng")
+        guard FileManager.default.fileExists(atPath: sample.path) else {
+            throw XCTSkip("No fixture DNG. Run scripts/make_fixtures.sh with one ARW file.")
+        }
         let dng = folder.appendingPathComponent("frame.dng")
-        try FileManager.default.copyItem(at: IntegrationTests.fixtures.appendingPathComponent("sample.dng"), to: dng)
+        try FileManager.default.copyItem(at: sample, to: dng)
         let before = try Data(contentsOf: dng)
         XCTAssertThrowsError(try ScaleTag(exiftool: exiftool).write(SqueezeFactor(1.5)!, to: dng)) {
             guard case TagError.toolFailed(let words) = $0 else { return XCTFail("\($0)") }
