@@ -7,6 +7,9 @@ final class RawConverterTests: XCTestCase {
     let dngPath = "/tmp/Shoot 1/DSC05680.dng"
     /// The hidden work file that the converter writes (design 13.3).
     let workPath = "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng"
+    /// What exiftool leaves beside the work file when it ends hard in
+    /// dnglab's match.
+    let workTmpPath = "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng_exiftool_tmp"
     var runner: FakeRunner!
     var disk: FakeDisk!
     var steps: Steps!
@@ -151,11 +154,12 @@ final class RawConverterTests: XCTestCase {
         }
         XCTAssertEqual(runner.calls.count, 1)
         XCTAssertEqual(steps.renames, [], "with no work file there is nothing to rename")
-        // Before the start: the name, the two leftovers of exiftool, and the
-        // leftover work file. After the converter: the work file again.
+        // Before the start: the name, the leftover of exiftool beside it,
+        // and the two leftovers of this app. After the converter: the work
+        // file again.
         XCTAssertEqual(disk.checked, [
             dngPath, "/tmp/Shoot 1/DSC05680.dng_exiftool_tmp",
-            "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng_exiftool_tmp", workPath, workPath,
+            workPath, "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng_exiftool_tmp", workPath,
         ])
     }
 
@@ -289,21 +293,22 @@ final class RawConverterTests: XCTestCase {
 
     // MARK: A leftover file of exiftool (design 13.3)
 
-    // exiftool that ended hard left `<name>_exiftool_tmp`. It refuses every
-    // later write beside it, so the tag step could never pass. The ARW is
-    // not converted, by no converter, and the sentence names the file.
-    func testALeftoverFileOfExiftoolStopsTheConverterBeforeItStartsAndIsNoPartial() {
-        for leftover in ["DSC05680.dng_exiftool_tmp", ".DSC05680.desqueeze-work.dng_exiftool_tmp"] {
-            setUp()
-            disk.paths = ["/tmp/Shoot 1/" + leftover]
-            XCTAssertThrowsError(try converter().convert(arw), leftover) {
-                XCTAssertEqual($0 as? ConvertError, .failedForAll(
-                    "A leftover file, \(leftover), is beside this photo."
-                        + (leftover.hasPrefix(".") ? " \(hiddenFileSentence)" : "") + " Delete it, then run again.",
-                    partial: nil))
-            }
-            XCTAssertEqual(runner.calls, [], "\(leftover): the converter never started")
+    // exiftool that ended hard in the tag step left
+    // `<base>.dng_exiftool_tmp`. It refuses every later write beside it, so
+    // the tag step could never pass. The ARW is not converted, by no
+    // converter, and the sentence names the file. The file is not this
+    // app's to remove: nothing is discarded, also not a leftover work file.
+    func testALeftoverFileOfExiftoolBesideTheDNGsNameStopsTheConverterAndNothingIsDiscarded() {
+        let leftover = "/tmp/Shoot 1/DSC05680.dng_exiftool_tmp"
+        disk.paths = [leftover, workPath, workTmpPath]
+        XCTAssertThrowsError(try converter().convert(arw)) {
+            XCTAssertEqual($0 as? ConvertError, .failedForAll(
+                "A leftover file, DSC05680.dng_exiftool_tmp, is beside this photo. Delete it, then run again.",
+                partial: nil))
         }
+        XCTAssertEqual(runner.calls, [], "the converter never started")
+        XCTAssertEqual(steps.discarded, [])
+        XCTAssertEqual(disk.paths, [leftover, workPath, workTmpPath])
     }
 
     // A file with another name is no leftover of this ARW.
@@ -380,6 +385,38 @@ final class RawConverterTests: XCTestCase {
         XCTAssertEqual(steps.discarded, [workPath])
         XCTAssertEqual(runner.calls, [], "the converter did not start")
         XCTAssertEqual(disk.paths, [workPath], "the leftover is where it was")
+    }
+
+    // exiftool that ended hard in dnglab's match left
+    // `<work file>_exiftool_tmp`. Both names are this app's own, so step 1
+    // discards both, the work file first, and the conversion goes on. Before,
+    // that file stopped the ARW on every run, with a note about a file that
+    // Finder does not show.
+    func testTheLeftoverOfExiftoolBesideTheWorkFileIsDiscardedWithTheWorkFile() throws {
+        for leftovers in [[workTmpPath], [workPath, workTmpPath]] {
+            setUp()
+            converterWritesItsFile()
+            disk.paths = Set(leftovers)
+            let conversion = try converter().convert(arw)
+            XCTAssertEqual(conversion, Conversion(dng: dng, unmatched: nil), "\(leftovers)")
+            XCTAssertEqual(steps.discarded, leftovers, "the discard gets the two names of this app, and no other")
+            XCTAssertEqual(runner.calls.count, 1, "\(leftovers)")
+            XCTAssertEqual(disk.paths, [dngPath], "\(leftovers)")
+        }
+    }
+
+    // The Trash refused the leftover of exiftool. The converter does not
+    // start, and the sentence names that file.
+    func testALeftoverOfExiftoolBesideTheWorkFileThatCannotBeDiscardedStopsTheConversion() {
+        disk.paths = [workTmpPath]
+        steps.discardError = NamedError(text: "The Trash refused it.")
+        assertFails(.failedForAll(
+            "A leftover file, .DSC05680.desqueeze-work.dng_exiftool_tmp, is beside this photo. \(hiddenFileSentence) "
+                + "Delete it, then run again.",
+            partial: nil))
+        XCTAssertEqual(steps.discarded, [workTmpPath])
+        XCTAssertEqual(runner.calls, [], "the converter did not start")
+        XCTAssertEqual(disk.paths, [workTmpPath], "the leftover is where it was")
     }
 
     // MARK: The rename (design 13.3, step 5)

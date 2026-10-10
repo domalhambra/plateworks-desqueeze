@@ -245,6 +245,33 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
                        ["16383", "frame 1.ARW"])
     }
 
+    // A hard end during the match write left `<work file>_exiftool_tmp`.
+    // With that file there, the real exiftool refuses to write the work
+    // file, so before step 1 took it the ARW failed on every run. Now it
+    // goes to the injected trash with the work file, and the real dnglab and
+    // the real exiftool then convert and match.
+    func testARealConversionDiscardsTheLeftoverOfExiftoolBesideTheWorkFile() throws {
+        let arw = try copyFixture(as: "frame 1.ARW")
+        let work = folder.appendingPathComponent(".frame 1.desqueeze-work.dng")
+        let leftover = folder.appendingPathComponent(".frame 1.desqueeze-work.dng_exiftool_tmp")
+        try Data("II*\u{0}".utf8).write(to: work)
+        try Data("half a write".utf8).write(to: leftover)
+        let (trash, backups) = try makeTrash()
+
+        let conversion = try DnglabConverter(executable: dnglab, exiftool: exiftool,
+                                             discardLeftover: { try backups.trashFile($0) })
+            .convert(arw, facts: try facts(of: arw))
+
+        XCTAssertEqual(conversion, Conversion(dng: folder.appendingPathComponent("frame 1.dng"), unmatched: nil))
+        XCTAssertEqual(try names(), ["frame 1.ARW", "frame 1.dng"], "no hidden file stays")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path).sorted(),
+                       [".frame 1.desqueeze-work.dng", ".frame 1.desqueeze-work.dng_exiftool_tmp"])
+        XCTAssertEqual(try Data(contentsOf: trash.appendingPathComponent(leftover.lastPathComponent)),
+                       Data("half a write".utf8))
+        XCTAssertEqual(try read(["SubIFD:WhiteLevel", "IFD0:OriginalRawFileName"], in: conversion.dng),
+                       ["16383", "frame 1.ARW"], "the match was written: exiftool did not refuse")
+    }
+
     // The real dnglab returns 6 for an output that exists, and does not
     // touch it. Here the discard says yes and leaves the file. The file is
     // not reported as partial, so nothing sends it anywhere.

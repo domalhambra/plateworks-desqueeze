@@ -966,32 +966,61 @@ final class DesqueezeJobTests: XCTestCase {
 
     // MARK: A leftover file of exiftool (design 13.3)
 
-    // `<base>.dng_exiftool_tmp`, or the same beside the work file, stops the
-    // ARW before either converter starts. The note names the file. Nothing
-    // goes to the Trash: the leftover is not this run's to remove.
+    // `<base>.dng_exiftool_tmp` stops the ARW before either converter
+    // starts. The note names the file. Nothing goes to the Trash: the
+    // leftover is not this run's to remove, and the leftovers of this app
+    // beside it stay too.
     func testALeftoverFileOfExiftoolStopsTheARWWithItsNoteAndNothingGoesToTheTrash() throws {
-        for (leftover, withAdobe) in [("frame 1.dng_exiftool_tmp", true), ("frame 1.dng_exiftool_tmp", false),
-                                      (".frame 1.desqueeze-work.dng_exiftool_tmp", true)] {
+        let leftover = "frame 1.dng_exiftool_tmp"
+        for (withDnglab, withAdobe) in [(true, true), (true, false), (false, true)] {
             let real = try RealShoot()
             defer { removeTemporaryFolder(real.shoot) }
             try Data("half a write".utf8).write(to: real.shoot.appendingPathComponent(leftover))
+            try Data("cut off".utf8).write(to: real.work)
             let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
 
-            let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files, withAdobe: withAdobe),
-                                       backups: files).run(real.snapshot, factor: factor, convert: true)
+            let summary = DesqueezeJob(
+                tag: tag, converters: real.tools.converters(backups: files, withDnglab: withDnglab, withAdobe: withAdobe),
+                backups: files).run(real.snapshot, factor: factor, convert: true)
 
             XCTAssertEqual(summary.notes, [FileNote(
                 name: "frame 1.ARW", kind: .notConverted, message: "Not converted.",
-                detail: "A leftover file, \(leftover), is beside this photo."
-                    + (leftover.hasPrefix(".") ? " \(hiddenFileSentence)" : "") + " Delete it, then run again.")],
-                leftover)
+                detail: "A leftover file, \(leftover), is beside this photo. Delete it, then run again.")])
             XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs, summary.set], [0, 1, 1, 0])
             XCTAssertEqual(real.tools.calls(to: ScriptedTools.dnglab), [], "dnglab did not start")
             XCTAssertEqual(real.tools.calls(to: ScriptedTools.adobe), [], "Adobe DNG Converter did not start")
             XCTAssertEqual(try real.names(in: real.trash), [], "nothing goes to the Trash")
-            XCTAssertEqual(try real.names(in: real.shoot), [leftover, "frame 1.ARW"].sorted())
+            XCTAssertEqual(try real.names(in: real.shoot), [".frame 1.desqueeze-work.dng", "frame 1.ARW", leftover])
             XCTAssertEqual(try Data(contentsOf: real.shoot.appendingPathComponent(leftover)), Data("half a write".utf8))
             XCTAssertEqual(log.entries, [], "no tag work")
+        }
+    }
+
+    // A hard end during dnglab's match left `<work file>_exiftool_tmp`, and
+    // the work file with it. Both names are this app's own: on real files,
+    // both go to the Trash, and the conversion then passes. With dnglab,
+    // with Adobe DNG Converter alone, and with both.
+    func testTheLeftoverOfExiftoolBesideTheWorkFileGoesToTheTrashWithTheWorkFileAndTheConversionPasses() throws {
+        let leftover = ".frame 1.desqueeze-work.dng_exiftool_tmp"
+        for (withDnglab, withAdobe, withWorkFile) in [(true, true, true), (true, false, false), (false, true, true)] {
+            let real = try RealShoot()
+            defer { removeTemporaryFolder(real.shoot) }
+            try Data("half a write".utf8).write(to: real.shoot.appendingPathComponent(leftover))
+            if withWorkFile { try Data("cut off".utf8).write(to: real.work) }
+            let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
+
+            let summary = DesqueezeJob(
+                tag: tag, converters: real.tools.converters(backups: files, withDnglab: withDnglab, withAdobe: withAdobe),
+                backups: files).run(real.snapshot, factor: .noStretch, convert: true)
+
+            XCTAssertEqual(summary.notes, [], "dnglab \(withDnglab), Adobe \(withAdobe)")
+            XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs], [1, 0, 0])
+            XCTAssertEqual(try real.names(in: real.trash),
+                           (withWorkFile ? [".frame 1.desqueeze-work.dng"] : []) + [leftover])
+            XCTAssertEqual(try Data(contentsOf: real.trash.appendingPathComponent(leftover)), Data("half a write".utf8))
+            XCTAssertEqual(try real.names(in: real.shoot), ["frame 1.ARW", "frame 1.dng"], "no hidden file stays")
+            XCTAssertEqual(try Data(contentsOf: real.dng),
+                           withDnglab ? ScriptedTools.dnglabBytes : ScriptedTools.adobeBytes)
         }
     }
 

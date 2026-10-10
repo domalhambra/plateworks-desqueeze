@@ -10,6 +10,9 @@ final class DnglabConverterTests: XCTestCase {
     /// The hidden work file that dnglab writes (design 13.3).
     let workPath = "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng"
     var work: URL { URL(fileURLWithPath: workPath) }
+    /// What exiftool leaves beside the work file when it ends hard in the
+    /// match write.
+    let workTmpPath = "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng_exiftool_tmp"
 
     /// An adapted lens at ISO 800: a full match.
     let adapted = ARWFacts(model: "ILCE-7SM3", iso: 800,
@@ -616,6 +619,36 @@ final class DnglabConverterTests: XCTestCase {
         XCTAssertEqual(disk.paths, [workPath], "the leftover is where it was")
     }
 
+    // exiftool that ended hard in the match write left
+    // `<work file>_exiftool_tmp`, and the real exiftool then refuses every
+    // write of the work file. Both names are this app's own, so step 1
+    // discards both, the work file first, and the conversion goes on.
+    func testTheLeftoverOfExiftoolBesideTheWorkFileIsDiscardedWithTheWorkFile() throws {
+        for leftovers in [[workTmpPath], [workPath, workTmpPath]] {
+            setUp()
+            disk.paths = Set(leftovers)
+            let conversion = try converter().convert(arw, facts: adapted)
+            XCTAssertEqual(conversion, Conversion(dng: dng, unmatched: nil), "\(leftovers)")
+            XCTAssertEqual(tools.discarded, leftovers, "the discard gets the two names of this app, and no other")
+            XCTAssertEqual(runner.calls.count, 3, "\(leftovers)")
+            XCTAssertEqual(disk.paths, [dngPath], "\(leftovers)")
+        }
+    }
+
+    // The Trash refused the leftover of exiftool. No program starts, and
+    // the sentence names that file.
+    func testALeftoverOfExiftoolBesideTheWorkFileThatCannotBeDiscardedStopsTheConversion() {
+        disk.paths = [workTmpPath]
+        tools.discardError = NamedError(text: "The Trash refused it.")
+        assertFails(.failedForAll(
+            "A leftover file, .DSC05680.desqueeze-work.dng_exiftool_tmp, is beside this photo. \(hiddenFileSentence) "
+                + "Delete it, then run again.",
+            partial: nil))
+        XCTAssertEqual(tools.discarded, [workTmpPath])
+        XCTAssertEqual(runner.calls, [], "no program started")
+        XCTAssertEqual(disk.paths, [workTmpPath], "the leftover is where it was")
+    }
+
     // MARK: Before the start
 
     // The DNG that stopped the converter is not ours: no partial, no call.
@@ -627,23 +660,21 @@ final class DnglabConverterTests: XCTestCase {
         XCTAssertEqual(runner.calls, [])
     }
 
-    // A leftover file of exiftool, beside the DNG's name or beside the work
-    // file's: no program starts, nothing is discarded, and no partial.
-    func testALeftoverFileOfExiftoolStopsTheConversionBeforeAnyProgram() {
-        for leftover in ["DSC05680.dng_exiftool_tmp", ".DSC05680.desqueeze-work.dng_exiftool_tmp"] {
-            setUp()
-            // A leftover work file is there too. It is not discarded: the
-            // conversion could not pass, so nothing is touched.
-            disk.paths = ["/tmp/Shoot 1/" + leftover, workPath]
-            assertFails(.failedForAll(
-                "A leftover file, \(leftover), is beside this photo."
-                    + (leftover.hasPrefix(".") ? " \(hiddenFileSentence)" : "") + " Delete it, then run again.",
-                partial: nil),
-                nil, leftover)
-            XCTAssertEqual(runner.calls, [], leftover)
-            XCTAssertEqual(tools.discarded, [], leftover)
-            XCTAssertEqual(tools.renames, [], leftover)
-        }
+    // A leftover file of exiftool beside the DNG's name, from a tag step
+    // that ended hard: no program starts, nothing is discarded, and no
+    // partial. The file is not this app's to remove.
+    func testALeftoverFileOfExiftoolBesideTheDNGsNameStopsTheConversionBeforeAnyProgram() {
+        // The two leftovers of this app are there too. They are not
+        // discarded: the conversion could not pass, so nothing is touched.
+        let leftover = "/tmp/Shoot 1/DSC05680.dng_exiftool_tmp"
+        disk.paths = [leftover, workPath, workTmpPath]
+        assertFails(.failedForAll(
+            "A leftover file, DSC05680.dng_exiftool_tmp, is beside this photo. Delete it, then run again.",
+            partial: nil))
+        XCTAssertEqual(runner.calls, [])
+        XCTAssertEqual(tools.discarded, [])
+        XCTAssertEqual(tools.renames, [])
+        XCTAssertEqual(disk.paths, [leftover, workPath, workTmpPath])
     }
 
     // The check of the DNG's name comes before step 1: with a DNG at the

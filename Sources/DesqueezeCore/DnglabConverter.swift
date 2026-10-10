@@ -11,7 +11,9 @@ import Foundation
 /// and `ConverterRules` does them. Steps 2 to 4 are this converter's own:
 ///
 /// 1. A work file that is there already is the leftover of a run that ended
-///    hard. `discardLeftover` takes it. When that fails, no program starts.
+///    hard, and so is `<work file>_exiftool_tmp`, which exiftool leaves when
+///    it ends hard in step 3. `discardLeftover` takes them. When that fails,
+///    no program starts.
 /// 2. `dnglab convert --embed-raw false <in.ARW> <work file>`. Without the
 ///    flag dnglab puts the whole ARW inside the DNG.
 /// 3. One exiftool call that writes every tag into the work file, with `-m`
@@ -60,11 +62,12 @@ public struct DnglabConverter: RawConverter {
     /// - Parameters:
     ///   - executable: dnglab.
     ///   - exiftool: writes the tags and reads them back.
-    ///   - discardLeftover: takes away the work file that an earlier run
-    ///     left. It gets only `ConverterOutput.workURL` of the ARW in work.
-    ///     The app gives `BackupHandling.trashFile` of the job's backups,
-    ///     so the file goes to the Trash. There is no default, so no caller
-    ///     reaches the Trash by leaving it out.
+    ///   - discardLeftover: takes away what an earlier run left. It gets
+    ///     only `ConverterOutput.workURL` of the ARW in work, and
+    ///     `<work file>_exiftool_tmp`. The app gives
+    ///     `BackupHandling.trashFile` of the job's backups, so the file goes
+    ///     to the Trash. There is no default, so no caller reaches the Trash
+    ///     by leaving it out.
     ///   - fileExists: whether anything has this name. It must not follow a
     ///     symbolic link. Tests inject it.
     ///   - fileSize: the size of a file in bytes, nil when it cannot be read.

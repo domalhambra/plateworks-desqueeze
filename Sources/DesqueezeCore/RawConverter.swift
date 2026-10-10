@@ -95,9 +95,10 @@ public struct RawConverters: Sendable {
     /// starts every program, so a `LoggingProcessRunner` shows them all.
     ///
     /// - Parameter backups: where each converter sends the work file that
-    ///   an earlier run left (design 13.3, step 1). Give the backups of the
-    ///   job, so every discarded file goes to one place. There is no
-    ///   default, so no caller reaches the Trash by leaving it out.
+    ///   an earlier run left, and exiftool's leftover beside it (design
+    ///   13.3, step 1). Give the backups of the job, so every discarded file
+    ///   goes to one place. There is no default, so no caller reaches the
+    ///   Trash by leaving it out.
     public init(exiftool: URL, dnglab: URL?, adobe: URL?, runner: ProcessRunner = SystemProcessRunner(),
                 backups: BackupHandling) {
         let discard: @Sendable (URL) throws -> Void = { try backups.trashFile($0) }
@@ -198,16 +199,20 @@ public enum ConverterOutput {
 /// 1. **Before the start.** When anything has the name `<base>.dng`, the
 ///    program is not started. That refusal reports no partial output: the
 ///    thing at the name is not ours.
-/// 2. **A leftover file of exiftool stops the ARW, for every converter.**
-///    When `<base>.dng_exiftool_tmp` or `<work file>_exiftool_tmp` is
-///    there, no program is started: exiftool refuses to write beside its own
-///    leftover, so the tag step, or dnglab's match, could never pass. The
-///    sentence names the file. The file stays where it is: it is not moved
-///    to the Trash, and it is not a partial output.
-/// 3. **A leftover work file is discarded** (design 13.3, step 1). A run
-///    that ended hard left it, and its name says that it is this app's own.
-///    `discardLeftover` takes it. When that fails, no program starts, the
-///    failure holds for every converter, and the sentence names the file.
+/// 2. **A leftover file of exiftool beside the DNG's name stops the ARW,
+///    for every converter.** When `<base>.dng_exiftool_tmp` is there, no
+///    program is started: exiftool refuses to write beside its own leftover,
+///    so the tag step could never pass. The sentence names the file. The
+///    file stays where it is: it is not this app's to remove, it is not
+///    moved to the Trash, and it is not a partial output. Nothing else is
+///    discarded either.
+/// 3. **The two leftovers of this app are discarded** (design 13.3, step
+///    1): the work file, and `<work file>_exiftool_tmp`, which exiftool
+///    leaves when it ends hard in dnglab's match. A run that ended hard left
+///    them, and their names say that they are this app's own.
+///    `discardLeftover` takes each one that is there, the work file first.
+///    When that fails, no program starts, the failure holds for every
+///    converter, and the sentence names the file.
 /// 4. **A partial output is reported only when the program ran:** after a
 ///    signal ended it, after a non-zero exit, after exit 0 with an empty
 ///    file, after `match` failed, or after the rename failed. It is always
@@ -242,7 +247,8 @@ struct ConverterRules: Sendable {
     let name: String
     let exists: @Sendable (String) -> Bool
     let size: @Sendable (String) -> Int?
-    /// Rule 3. It gets only `ConverterOutput.workURL` of the ARW in work.
+    /// Rule 3. It gets only the two leftovers of the ARW in work:
+    /// `ConverterOutput.workURL`, and `<work file>_exiftool_tmp`.
     let discardLeftover: @Sendable (URL) throws -> Void
     /// Rule 8.
     let rename: @Sendable (URL, URL) -> ExclusiveRename.Outcome
@@ -272,15 +278,13 @@ struct ConverterRules: Sendable {
         guard !exists(output.path) else {
             throw ConvertError.failed(Self.nameTaken)
         }
-        // exiftool writes the DNG in the tag step, and the work file in
-        // dnglab's match. Both names are checked for every converter.
-        for file in [output, work] {
-            let leftover = ConverterOutput.exiftoolLeftoverURL(for: file)
-            guard !exists(leftover.path) else {
-                throw ConvertError.failedForAll(Self.leftover(named: leftover.lastPathComponent))
-            }
+        // exiftool writes the DNG in the tag step. Its leftover there is
+        // not this app's to remove.
+        let tagLeftover = ConverterOutput.exiftoolLeftoverURL(for: output)
+        guard !exists(tagLeftover.path) else {
+            throw ConvertError.failedForAll(Self.leftover(named: tagLeftover.lastPathComponent))
         }
-        try discardTheLeftover(at: work)
+        try discardTheLeftovers(of: work)
         let result: ProcessResult
         do {
             result = try start(work)
@@ -321,16 +325,17 @@ struct ConverterRules: Sendable {
         return output
     }
 
-    /// Rule 3. The name of the work file says that it is this app's own, so
-    /// a leftover is discarded with no question. When it cannot be, the
-    /// conversion fails for every converter, and the sentence names the file
-    /// to delete.
-    private func discardTheLeftover(at work: URL) throws {
-        guard exists(work.path) else { return }
-        do {
-            try discardLeftover(work)
-        } catch {
-            throw ConvertError.failedForAll(Self.leftover(named: work.lastPathComponent))
+    /// Rule 3. The names of the work file and of exiftool's leftover beside
+    /// it say that they are this app's own, so each one that is there is
+    /// discarded with no question. When one cannot be, the conversion fails
+    /// for every converter, and the sentence names the file to delete.
+    private func discardTheLeftovers(of work: URL) throws {
+        for leftover in [work, ConverterOutput.exiftoolLeftoverURL(for: work)] where exists(leftover.path) {
+            do {
+                try discardLeftover(leftover)
+            } catch {
+                throw ConvertError.failedForAll(Self.leftover(named: leftover.lastPathComponent))
+            }
         }
     }
 
@@ -359,8 +364,8 @@ struct ConverterRules: Sendable {
 /// checks of `ConverterRules`:
 ///
 /// 1. A work file that is there already is the leftover of a run that ended
-///    hard. `discardLeftover` takes it. When that fails, the converter does
-///    not start.
+///    hard, and so is `<work file>_exiftool_tmp`. `discardLeftover` takes
+///    them. When that fails, the converter does not start.
 /// 2. `"<Adobe DNG Converter>" -c -d <folder> -o <work file name> <in.ARW>`.
 /// 3. A rename of the work file to `<base>.dng` that fails when anything has
 ///    that name (`ExclusiveRename`).
@@ -385,11 +390,12 @@ public struct AdobeConverter: RawConverter {
     private let rules: ConverterRules
 
     /// - Parameters:
-    ///   - discardLeftover: takes away the work file that an earlier run
-    ///     left. It gets only `ConverterOutput.workURL` of the ARW in work.
-    ///     The app gives `BackupHandling.trashFile` of the job's backups,
-    ///     so the file goes to the Trash. There is no default, so no caller
-    ///     reaches the Trash by leaving it out.
+    ///   - discardLeftover: takes away what an earlier run left. It gets
+    ///     only `ConverterOutput.workURL` of the ARW in work, and
+    ///     `<work file>_exiftool_tmp`. The app gives
+    ///     `BackupHandling.trashFile` of the job's backups, so the file goes
+    ///     to the Trash. There is no default, so no caller reaches the Trash
+    ///     by leaving it out.
     ///   - fileExists: whether anything has this name. It must not follow a
     ///     symbolic link. Tests inject it.
     ///   - fileSize: the size of a file in bytes, nil when it cannot be read.
