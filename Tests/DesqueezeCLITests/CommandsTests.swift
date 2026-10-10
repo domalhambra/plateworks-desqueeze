@@ -63,13 +63,16 @@ final class CommandsTests: XCTestCase {
     }
 
     // `--verbose` prints more than the commands: one line for each leftover
-    // work file that a converter removed (`ConverterRules.removedLeftover`).
-    // The help says so, where it says what `--verbose` prints.
-    func testHelpSaysThatVerboseAlsoNamesALeftoverWorkFileThatWasRemoved() {
+    // work file that a converter removed (`ConverterRules.removedLeftover`),
+    // and one line with the error number when the volume gave no folder
+    // lock (`FolderLock.noLockLine`, design 13.9). The help says so, where
+    // it says what `--verbose` prints.
+    func testHelpSaysWhatVerboseSaysBesideTheCommands() {
         h.run("--help")
         let text = h.out.lines.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: " ")
         XCTAssertTrue(text.contains("Prints each exiftool and converter command, its exit code, and its output on "
-            + "standard error. Also says when it removed a leftover work file."), text)
+            + "standard error. Also says when it removed a leftover work file, and the error number when the "
+            + "volume gave no folder lock."), text)
     }
 
     // Control-C, and the Terminal window that closes (the tool takes the

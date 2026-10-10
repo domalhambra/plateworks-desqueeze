@@ -238,6 +238,26 @@ final class TextOutputTests: XCTestCase {
         ])
     }
 
+    // A run on a volume that gives no folder lock has one note more, on the
+    // name of the folder (design 13.9). It is a line as every other note,
+    // and the first one. The sentence is the core's.
+    func testARunShowsTheNoteOfAVolumeWithNoFolderLock() {
+        let report = RunReport(folder: folder, factor: SqueezeFactor(1.5)!, summary: summary {
+            $0.set = 2
+            $0.notes = [FileNote(
+                name: "Shoot 1", kind: .noFolderLock,
+                message: "This volume gives no folder lock. Do not start a second run in this folder while "
+                    + "this run works.",
+                detail: nil)]
+        })
+        XCTAssertEqual(TextOutput.run(report, converterInstalled: true), [
+            "2 set · 0 skipped · 0 failed",
+            "Shoot 1: This volume gives no folder lock. Do not start a second run in this folder while this "
+                + "run works.",
+            "Photos already in Lightroom: Metadata › Read Metadata from File.",
+        ])
+    }
+
     func testADryRunShowsEachStepThenTheResultOfThatRun() {
         let plan = RunPlan(
             steps: [RunPlan.Step(name: "frame.ARW", action: .convert, converter: .dnglab),

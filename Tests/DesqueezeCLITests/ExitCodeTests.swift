@@ -47,6 +47,19 @@ final class ExitCodeTests: XCTestCase {
         XCTAssertEqual(DesqueezeTool.exitCode(RunReport(folder: folder, factor: .noStretch, summary: summary)), 0)
     }
 
+    // A run on a volume that gives no folder lock went on, and nothing
+    // failed. Its note does not make the code 1 (design 13.9).
+    func testANoteForAVolumeWithNoFolderLockGivesZero() {
+        var summary = RunSummary()
+        summary.set = 2
+        summary.notes = [FileNote(name: "Shoot 1", kind: .noFolderLock,
+                                  message: "This volume gives no folder lock.", detail: nil)]
+        let folder = URL(fileURLWithPath: "/tmp/Shoot 1")
+        XCTAssertEqual(DesqueezeTool.exitCode(RunReport(folder: folder, factor: .noStretch, summary: summary)), 0)
+        summary.blocked = 1
+        XCTAssertEqual(DesqueezeTool.exitCode(RunReport(folder: folder, factor: .noStretch, summary: summary)), 1)
+    }
+
     func testABlockedFileGivesOneInARunAndInADryRun() throws {
         try h.touch("A.dng", "A.dng_original")
         h.tools.scales = ["A.dng": "1 1"]

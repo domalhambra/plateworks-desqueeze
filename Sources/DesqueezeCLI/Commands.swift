@@ -101,7 +101,9 @@ public enum DesqueezeTool {
     /// code of the run it plans. A scan has no such code: when it completed,
     /// it gives 0. A DNG with no full match (`convertedUnmatched`) is
     /// converted: it does not make the code 1 (design 13.4). An original
-    /// that stays (`originalKept`) does not make it 1 either (design 14.3).
+    /// that stays (`originalKept`) does not make it 1 either (design 14.3),
+    /// and no more does a run on a volume that gives no folder lock
+    /// (`noFolderLock`, design 13.9).
     static func exitCode(_ report: RunReport) -> Int32 {
         let readOnly = report.notes.contains { $0.kind == .folderReadOnly }
         return report.failed > 0 || report.blocked > 0 || report.stopped || readOnly ? 1 : 0
@@ -139,7 +141,9 @@ public enum DesqueezeTool {
         }
         // One runner starts exiftool, dnglab and Adobe DNG Converter, so
         // `--verbose` shows each command of all three. The same sink gets
-        // the line about a leftover work file that a converter removed.
+        // the line about a leftover work file that a converter removed, and
+        // the line with the error number of a volume that gave no folder
+        // lock (design 13.9).
         let operations = DesqueezeOperations(exiftool: exiftool, dnglab: environment.dnglab,
                                              dngConverter: environment.dngConverter, runner: runner,
                                              backups: environment.backups, verbose: verbose)
@@ -153,7 +157,8 @@ public enum DesqueezeTool {
             // MCP server say the same.
             return fail(FolderLock.busyMessage, detail: nil, invocation, environment)
         } catch {
-            // Every other error is a scan that failed. No file was tried.
+            // Every other error is a scan that failed, or a lock call that
+            // failed (`FolderLock.Failed`, design 13.9). No file was tried.
             return fail(FolderText.unreadable(path: url.path), detail: describe(error), invocation, environment)
         }
     }

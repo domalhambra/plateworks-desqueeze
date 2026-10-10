@@ -59,7 +59,9 @@ public enum TextOutput {
     /// converters did work in a run, one line after the counts says how
     /// many ARW files each converted. After a run that was asked to move the
     /// originals, the next line says how many moved (design 14.3). After a
-    /// run that set at least one photo, the Lightroom line is last.
+    /// run that set at least one photo, the Lightroom line is last. The
+    /// note of a volume that gives no folder lock (design 13.9) is a note
+    /// as any other, and the core puts it first.
     ///
     /// In a dry run, the step of an original that the run would move reads
     /// `  trash    frame.ARW` (design 14.5).

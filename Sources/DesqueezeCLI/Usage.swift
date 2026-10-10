@@ -41,7 +41,8 @@ public enum Usage {
                              nothing else there.
           --verbose          Prints each exiftool and converter command, its exit
                              code, and its output on standard error. Also says
-                             when it removed a leftover work file.
+                             when it removed a leftover work file, and the error
+                             number when the volume gave no folder lock.
 
         \(wrapped("\(ConverterText.whoConverts) \(ConverterText.matchedValues) "
             + "With no converter, run still sets the stretch on the DNG files."))
