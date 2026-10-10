@@ -159,6 +159,21 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(h.announcements, [try XCTUnwrap(h.model.summary).countsLine])
     }
 
+    // The run's own scan fails, so there is no summary. The window shows the
+    // sentence of the core then, and VoiceOver hears it.
+    func testTheEndOfARunWhoseScanFailedSaysTheUnreadableSentenceToVoiceOver() async throws {
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        await h.load(try h.folder("Shoot", files: ["a.dng"]))
+
+        h.tag.failReads(true)
+        h.model.run()
+        await h.runEnds()
+        XCTAssertNil(h.model.summary)
+        XCTAssertEqual(h.model.folderMessages, [FolderText.unreadable])
+        XCTAssertEqual(h.announcements, [FolderText.unreadable])
+    }
+
     // MARK: Remove
 
     // The folder has one ARW with no DNG. Remove has no ARW work, so it
@@ -197,7 +212,13 @@ final class AppModelTests: XCTestCase {
         // Inside the double-click time, on purpose: that rule is for the
         // Cancel button, and a quit does not wait for it.
         XCTAssertEqual(h.model.answerQuit(), .afterRun)
-        let wait = Task { await h.model.stopRunForQuit() }
+        let returned = Flag()
+        // Nothing awaits this task: if the quit path never returned, the
+        // bounded wait below fails the test, and the test must still end.
+        Task {
+            await h.model.stopRunForQuit()
+            returned.isSet = true
+        }
         await h.settle()
         XCTAssertEqual(h.backups.discarded, [], "the file in work is not complete")
         XCTAssertEqual(h.model.phase, .stopping)
@@ -206,7 +227,7 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(h.model.answerQuit(), .alreadyWaiting)
 
         h.tag.writeGate.open()
-        await wait.value
+        await h.wait("the quit path returns") { returned.isSet }
         XCTAssertEqual(h.backups.discarded, ["a.dng"], "the quit path returned after the file in work was complete")
         XCTAssertEqual(h.tag.writes, ["1.5 1 a.dng"], "no other file started")
 
@@ -225,16 +246,17 @@ final class AppModelTests: XCTestCase {
         h.model.run()
         await h.wait("the file is in work") { h.tag.writeGate.arrivals == 1 }
 
+        // The app delegate asks first, and only then stops the run.
+        XCTAssertEqual(h.model.answerQuit(), .afterRun)
         let returned = Flag()
-        let wait = Task {
+        Task {
             await h.model.stopRunForQuit()
             returned.isSet = true
         }
         await h.settle()
         XCTAssertFalse(returned.isSet, "the job has not returned")
         h.tag.writeGate.open()
-        await wait.value
-        XCTAssertTrue(returned.isSet)
+        await h.wait("the quit path returns") { returned.isSet }
     }
 
     func testAQuitWithNoRunQuitsNowAndTheQuitPathReturnsAtOnce() async throws {
@@ -246,13 +268,27 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(h.model.answerQuit(), .now)
 
         let returned = Flag()
-        let wait = Task {
+        Task {
             await h.model.stopRunForQuit()
             returned.isSet = true
         }
         await h.wait("the quit path returns") { returned.isSet }
-        await wait.value
         XCTAssertEqual(h.tag.reads.count, 1)
+    }
+
+    // `answerQuit` is the only writer of the quit flag. A stop with no run in
+    // work, and no answer before it, leaves the next answer at "now".
+    func testTheQuitPathAloneDoesNotMakeALaterQuitWait() async throws {
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+
+        let returned = Flag()
+        Task {
+            await h.model.stopRunForQuit()
+            returned.isSet = true
+        }
+        await h.wait("the quit path returns") { returned.isSet }
+        XCTAssertEqual(h.model.answerQuit(), .now, "nothing is in work, so nothing is waited for")
     }
 
     // MARK: The app becomes active

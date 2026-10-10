@@ -63,7 +63,8 @@ final class AppModel: ObservableObject {
     /// The number of the newest scan. A scan that lands with an older number
     /// is discarded.
     private var scanNumber = 0
-    /// True after a quit has stopped a run. The app is about to end.
+    /// True after a quit request met a run in flight. The app is about to
+    /// end. Only `answerQuit` sets it.
     private var isQuitting = false
     private static let notAFolder = "Drop a folder"
 
@@ -331,8 +332,9 @@ final class AppModel: ObservableObject {
     /// For a quit during a run. Cancels the run and returns when its current
     /// file is complete. Returns at once when no file work is in flight.
     /// The caller must quit next: the window stays as it is, "running".
+    /// `answerQuit` has set the quit flag before this runs, as the app
+    /// delegate calls it first. This method never sets it.
     func stopRunForQuit() async {
-        isQuitting = true
         guard let job else { return }
         job.cancel.cancel()
         if phase == .running { phase = .stopping }
@@ -382,7 +384,9 @@ final class AppModel: ObservableObject {
             phase = .idle
             // VoiceOver hears the counts. The result line is new on the
             // screen, and nothing else says so.
-            if let result { announce(result.countsLine) }
+            // With no result, the run's own scan failed, and the window shows
+            // the sentence of an unreadable folder.
+            announce(result?.countsLine ?? FolderText.unreadable)
         }
     }
 }

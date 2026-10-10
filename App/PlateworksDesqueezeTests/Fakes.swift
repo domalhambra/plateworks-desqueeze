@@ -44,8 +44,8 @@ final class Gate: @unchecked Sendable {
     }
 }
 
-/// Acts like exiftool on a folder of empty files. It knows no tag until it
-/// has written one, so the first run writes every DNG.
+/// Acts like exiftool on a folder of empty files. `readFolder` returns no
+/// rows, so no scale is known and every run writes every DNG.
 final class FakeTag: ScaleTagging, @unchecked Sendable {
     /// Holds each write.
     let writeGate = Gate()

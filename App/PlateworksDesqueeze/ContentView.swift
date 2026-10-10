@@ -74,7 +74,10 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-            } else if model.isScanning {
+            }
+            // Also beside counts that are there: a scan after the app became
+            // active leaves the old counts and turns Run and Remove off.
+            if model.isScanning {
                 ProgressView()
                     .controlSize(.small)
                     .accessibilityLabel("Reading the folder")
