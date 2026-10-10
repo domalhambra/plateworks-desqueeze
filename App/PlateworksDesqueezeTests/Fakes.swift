@@ -148,6 +148,8 @@ final class FakeBackups: BackupHandling, @unchecked Sendable {
     }
 
     func restoreBackup(for dng: URL) throws {}
+
+    func trashFile(_ file: URL) throws {}
 }
 
 /// One model with its fakes, in temporary folders of its own.

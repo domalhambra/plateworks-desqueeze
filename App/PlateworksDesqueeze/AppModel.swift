@@ -409,7 +409,7 @@ extension AppModel {
             tag: exiftool.map { ScaleTag(exiftool: $0) },
             converter: converter.map { AdobeConverter(executable: $0) },
             // The window moves a backup to the Trash.
-            backups: FileBackups(),
+            backups: FileBackups.systemTrash,
             savedFactor: UserDefaults.standard.string(forKey: factorKey),
             saveFactor: { UserDefaults.standard.set($0, forKey: factorKey) },
             now: { ProcessInfo.processInfo.systemUptime },

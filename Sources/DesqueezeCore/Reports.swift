@@ -99,6 +99,11 @@ public struct RunReport: Codable, Equatable, Sendable {
     /// True when the folder held no DNG, no ARW and no orphan backup. It is
     /// for the text of a front end, and it is not in the JSON, which stays
     /// the object of design 12.1.
+    ///
+    /// It is part of `==` and not part of the JSON, so it does not read back:
+    /// a report decoded from JSON always has `false`, and it is not equal to
+    /// the report that was encoded when that one held `true`. Use the flag
+    /// on a report from `DesqueezeOperations`, never on a decoded one.
     public private(set) var folderIsEmpty = false
 
     private enum CodingKeys: String, CodingKey {

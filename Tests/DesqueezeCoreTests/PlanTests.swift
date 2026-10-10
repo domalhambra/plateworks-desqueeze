@@ -92,6 +92,25 @@ final class PlanTests: XCTestCase {
         XCTAssertEqual(plan.summary.unconvertedARWs, 0)
     }
 
+    // Remove never converts, whatever `convert` says. The plan must not list
+    // a conversion for a Remove that was given `convert: true`.
+    func testAPlanForRemoveHasNoConvertStepEvenWhenConvertIsTrue() {
+        let state = h.snapshot(dngs: [h.dng("A.dng", at: 1.5)], pending: ["X.ARW"])
+        let plan = h.job().plan(state, factor: .noStretch, convert: true, remove: true)
+        XCTAssertEqual(plan.steps, [step("A.dng", .write)])
+        XCTAssertEqual(plan.summary.converted, 0)
+        XCTAssertEqual(plan.summary.unconvertedARWs, 0)
+    }
+
+    // Remove writes 1 1. A factor that rides along beside `remove` is ignored.
+    func testAPlanForRemoveDecidesAtNoStretchWhateverFactorItWasGiven() {
+        let state = h.snapshot(dngs: [h.dng("at factor.dng", at: 1.5), h.dng("plain.dng", at: 1)])
+        let plan = h.job().plan(state, factor: factor, convert: false, remove: true)
+        XCTAssertEqual(plan.steps, [step("at factor.dng", .write), step("plain.dng", .skip)])
+        XCTAssertEqual(plan.summary.set, 1)
+        XCTAssertEqual(plan.summary.skipped, 1)
+    }
+
     // Remove is an intent. A plan at factor 1 with no conversion is not one.
     func testAPlanAtFactorOneWithNoConvertStillReportsTheARWFiles() {
         let state = h.snapshot(dngs: [h.dng("A.dng", at: 1.5)], pending: ["X.ARW"])
@@ -157,6 +176,8 @@ final class PlanTests: XCTestCase {
             Scenario(name: "apply, no converter", factor: factor, convert: true, withConverter: false, build: mixed),
             Scenario(name: "apply at factor 1, no convert", factor: .noStretch, convert: false, build: mixed),
             Scenario(name: "remove", factor: .noStretch, convert: false, remove: true, build: mixed),
+            Scenario(name: "remove, asked to convert", factor: .noStretch, convert: true, remove: true, build: mixed),
+            Scenario(name: "remove, given a free factor", factor: factor, convert: true, remove: true, build: mixed),
             Scenario(name: "only ARW files", factor: factor, convert: true) { $0.snapshot(pending: ["X.ARW"]) },
             Scenario(name: "only an orphan", factor: factor, convert: true) {
                 $0.snapshot(orphans: ["gone.dng_original"])
@@ -201,10 +222,12 @@ final class PlanTests: XCTestCase {
                 .run(scenario.build(real), factor: scenario.factor, convert: scenario.convert,
                      remove: scenario.remove)
 
+            // Remove writes 1 1, whatever factor it was given.
+            let written = scenario.remove ? SqueezeFactor.noStretch : scenario.factor
             let expected = plan.steps.compactMap { step -> String? in
                 switch step.action {
                 case .convert: return "convert \(step.name)"
-                case .write: return "write \(scenario.factor.tagValue) \(step.name)"
+                case .write: return "write \(written.tagValue) \(step.name)"
                 case .skip, .blocked: return nil
                 }
             }

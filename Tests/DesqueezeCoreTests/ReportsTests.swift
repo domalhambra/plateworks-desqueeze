@@ -160,6 +160,21 @@ final class ReportsTests: XCTestCase {
         XCTAssertFalse(RunReport(folder: folder, factor: factor, summary: RunSummary()).folderIsEmpty)
     }
 
+    // `folderIsEmpty` is in `==` and not in the JSON, so a decoded report
+    // always has false. It is for the text of a front end only.
+    func testFolderIsEmptyIsNotInTheJSONAndADecodedReportHasFalse() throws {
+        var empty = RunSummary()
+        empty.folderIsEmpty = true
+        let report = RunReport(folder: folder, factor: factor, summary: empty)
+        XCTAssertTrue(report.folderIsEmpty)
+        let text = try ReportJSON.text(report)
+        XCTAssertFalse(text.contains("folderIsEmpty"), "the key is not in the JSON")
+
+        let decoded = try JSONDecoder().decode(RunReport.self, from: Data(text.utf8))
+        XCTAssertFalse(decoded.folderIsEmpty)
+        XCTAssertNotEqual(decoded, report, "the flag is part of ==, so the decoded copy differs")
+    }
+
     func testTheRunReportCarriesTheSummary() throws {
         let json = try object(RunReport(folder: folder, factor: factor, summary: summary()))
         XCTAssertEqual(json, try parsed("""

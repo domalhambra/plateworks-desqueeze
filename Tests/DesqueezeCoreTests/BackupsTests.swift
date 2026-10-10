@@ -20,6 +20,14 @@ final class BackupsTests: XCTestCase {
         FileBackups(trash: { _ in XCTFail("this test must not discard a backup") })
     }
 
+    // The Trash has a name, and no initializer falls back to it. Evaluating
+    // the constant moves nothing. The initializer has no default, so a call
+    // with no argument does not compile.
+    func testTheRealTrashIsANamedConstant() {
+        let systemTrash: BackupHandling = FileBackups.systemTrash
+        XCTAssertNotNil(systemTrash as? FileBackups)
+    }
+
     func testBackupURLAppendsOriginalToTheFullName() {
         XCTAssertEqual(FileBackups.backupURL(for: dng).lastPathComponent, "one.dng_original")
         XCTAssertEqual(FileBackups.backupURL(for: dng).deletingLastPathComponent().path, folder.path)
@@ -44,6 +52,14 @@ final class BackupsTests: XCTestCase {
         let backups = FileBackups(trash: { seen.url = $0 })
         try backups.trashBackup(for: dng)
         XCTAssertEqual(seen.url?.path, folder.path + "/one.dng_original")
+    }
+
+    // The partial DNG of a failed conversion goes where a backup goes, as it is.
+    func testTrashFileSendsTheFileItselfToTheInjectedFunction() throws {
+        let seen = URLBox()
+        let backups = FileBackups(trash: { seen.url = $0 })
+        try backups.trashFile(dng)
+        XCTAssertEqual(seen.url?.path, folder.path + "/one.dng")
     }
 
     func testBackupURLKeepsTheNameAsItIs() {

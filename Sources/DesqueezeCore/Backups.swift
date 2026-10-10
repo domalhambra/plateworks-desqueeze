@@ -7,18 +7,28 @@ public protocol BackupHandling: Sendable {
     func trashBackup(for dng: URL) throws
     /// Replaces the DNG with its backup. The backup file is consumed.
     func restoreBackup(for dng: URL) throws
+    /// Moves a file that is not a backup to the Trash. The job uses it for
+    /// the partial DNG of a failed conversion (design, section 4.3). It goes
+    /// where a backup goes, so a test that injects the Trash for backups
+    /// injects it for this file too.
+    func trashFile(_ file: URL) throws
 }
 
 public struct FileBackups: BackupHandling {
     private let trash: @Sendable (URL) throws -> Void
 
-    /// - Parameter trash: how to discard a backup. The default moves it to the
-    ///   Trash. Tests inject a function, so they never fill the real Trash.
-    public init(trash: @escaping @Sendable (URL) throws -> Void = {
-        try FileManager.default.trashItem(at: $0, resultingItemURL: nil)
-    }) {
+    /// - Parameter trash: how to discard a file. There is no default, so no
+    ///   one reaches the Trash by leaving it out. Use `systemTrash` for the
+    ///   real Trash. Tests inject a function, so they never fill it.
+    public init(trash: @escaping @Sendable (URL) throws -> Void) {
         self.trash = trash
     }
+
+    /// Backups that move a discarded file to the real Trash. The window
+    /// and the command line tool name it. No test does.
+    public static let systemTrash = FileBackups(trash: {
+        try FileManager.default.trashItem(at: $0, resultingItemURL: nil)
+    })
 
     public static func backupURL(for dng: URL) -> URL {
         URL(fileURLWithPath: dng.path + "_original")
@@ -32,6 +42,10 @@ public struct FileBackups: BackupHandling {
         try trash(Self.backupURL(for: dng))
     }
 
+    public func trashFile(_ file: URL) throws {
+        try trash(file)
+    }
+
     /// One atomic `rename`. The restored file is the backup itself, with its
     /// own creation date and permissions. `FileManager.replaceItemAt` keeps the
     /// replaced file's creation date, which is the time of the failed write.
@@ -43,7 +57,7 @@ public struct FileBackups: BackupHandling {
     }
 }
 
-/// A place for discarded backups that is not the Trash. For tests only.
+/// A place for discarded files that is not the Trash. For tests only.
 ///
 /// The end-to-end tests start the built command line tools as child
 /// processes, so they cannot inject a function as the unit tests do. They set
@@ -55,9 +69,10 @@ public struct FileBackups: BackupHandling {
 /// - Its value must be an absolute path to a folder that exists. Any other
 ///   value is an error, and the tool stops before it reads a photo folder.
 ///   So `=1`, or an empty value, starts nothing.
-/// - A backup is moved to that folder. Nothing is ever removed, and no file
-///   there is replaced. The worst case is a backup in a folder that the
-///   person named, in place of the Trash.
+/// - A backup, or the partial DNG of a failed conversion, is moved to that
+///   folder. Nothing is ever removed, and no file there is replaced. The
+///   worst case is a file in a folder that the person named, in place of the
+///   Trash.
 /// - A front end that takes the folder must say so on standard error.
 /// - Only `fromEnvironment` reads the variable. The window never calls it.
 extension FileBackups {
@@ -83,7 +98,7 @@ extension FileBackups {
     public static func fromEnvironment(
         _ environment: [String: String]
     ) throws -> (backups: FileBackups, testFolder: URL?) {
-        guard let value = environment[testFolderVariable] else { return (FileBackups(), nil) }
+        guard let value = environment[testFolderVariable] else { return (.systemTrash, nil) }
         var isFolder: ObjCBool = false
         guard value.hasPrefix("/"), FileManager.default.fileExists(atPath: value, isDirectory: &isFolder),
               isFolder.boolValue else {

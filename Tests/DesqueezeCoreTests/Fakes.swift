@@ -10,11 +10,16 @@ final class FakeRunner: ProcessRunner, @unchecked Sendable {
 
     var calls: [Call] = []
     var handler: (Call) -> ProcessResult = { _ in ProcessResult(exitCode: 0, stdout: "", stderr: "") }
+    /// Thrown after the handler ran, as when a signal ends a program that
+    /// has already written part of its output.
+    var failure: Error?
 
     func run(_ executable: URL, _ arguments: [String]) throws -> ProcessResult {
         let call = Call(executable: executable.path, arguments: arguments)
         calls.append(call)
-        return handler(call)
+        let result = handler(call)
+        if let failure { throw failure }
+        return result
     }
 }
 
@@ -52,6 +57,8 @@ final class FakeBackups: BackupHandling, @unchecked Sendable {
     var existing: Set<String> = []
     var trashError: Error?
     var restoreError: Error?
+    /// Set when `trashFile` must fail, as when the Trash refuses.
+    var trashFileError: Error?
 
     init(log: CallLog) { self.log = log }
 
@@ -61,6 +68,11 @@ final class FakeBackups: BackupHandling, @unchecked Sendable {
         log.entries.append("trash \(dng.lastPathComponent)")
         if let trashError { throw trashError }
         existing.remove(dng.lastPathComponent)
+    }
+
+    func trashFile(_ file: URL) throws {
+        log.entries.append("trashFile \(file.lastPathComponent)")
+        if let trashFileError { throw trashFileError }
     }
 
     func restoreBackup(for dng: URL) throws {
@@ -119,6 +131,8 @@ final class FakeTag: ScaleTagging, @unchecked Sendable {
 final class FakeConverter: RawConverter, @unchecked Sendable {
     let log: CallLog
     var fail: Set<String> = []
+    /// ARW names whose failed conversion also left a partial DNG.
+    var failWithPartial: Set<String> = []
     var onConvert: (() -> Void)?
 
     init(log: CallLog) { self.log = log }
@@ -127,6 +141,9 @@ final class FakeConverter: RawConverter, @unchecked Sendable {
         log.entries.append("convert \(arw.lastPathComponent)")
         onConvert?()
         if fail.contains(arw.lastPathComponent) { throw ConvertError.failed("made no DNG") }
+        if failWithPartial.contains(arw.lastPathComponent) {
+            throw ConvertError.failed("Adobe DNG Converter returned 1.", partial: AdobeConverter.outputURL(for: arw))
+        }
         return AdobeConverter.outputURL(for: arw)
     }
 }

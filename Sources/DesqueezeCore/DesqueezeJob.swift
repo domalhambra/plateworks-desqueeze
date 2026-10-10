@@ -5,6 +5,12 @@ import Foundation
 /// Order: scan the folder, convert every pending ARW, then tag every DNG, the
 /// new ones last. One file at a time. Cancel is honored between files.
 ///
+/// **A failed conversion.** The ARW is listed as failed and the run goes on.
+/// When the converter left a partial DNG, the job moves it to the Trash
+/// through `BackupHandling.trashFile` and says so on the note's detail line,
+/// or names the file to delete when the Trash refuses (design 4.3). The ARW
+/// is never touched.
+///
 /// The notes of a run start with one note for each orphan backup in the
 /// folder, so every front end reports them.
 ///
@@ -25,7 +31,8 @@ public struct DesqueezeJob: Sendable {
     /// - Parameter converter: nil when Adobe DNG Converter is not installed.
     ///   The DNG files still run.
     /// - Parameter backups: where a backup goes after a write that passed its
-    ///   check. There is no default, so no caller reaches the Trash by
+    ///   check, and where the partial DNG of a failed conversion goes. There
+    ///   is no default, so no caller reaches the Trash by
     ///   leaving it out. The window and the tool name the Trash themselves.
     public init(tag: ScaleTagging, converter: RawConverter?, backups: BackupHandling) {
         self.tag = tag
@@ -40,8 +47,9 @@ public struct DesqueezeJob: Sendable {
     ///
     /// - Parameters:
     ///   - convert: false leaves the ARW files alone.
-    ///   - remove: true for Remove, with `factor` at `.noStretch`. Remove
-    ///     never converts, whatever `convert` says, and it reports no ARW
+    ///   - remove: true for Remove. Remove writes `.noStretch` whatever
+    ///     `factor` says, so a factor given beside it never reaches a file.
+    ///     It never converts, whatever `convert` says, and it reports no ARW
     ///     files left.
     /// - Throws: only when the scan fails. No file is changed then. A file
     ///   that fails during the run is a note in the summary, not an error.
@@ -94,6 +102,12 @@ public struct DesqueezeJob: Sendable {
         convert && converter != nil ? snapshot.pendingARWs : []
     }
 
+    /// Remove writes `.noStretch` and nothing else. The wrong state, Remove
+    /// with a stretch, cannot reach a file.
+    private static func factor(_ factor: SqueezeFactor, remove: Bool) -> SqueezeFactor {
+        remove ? .noStretch : factor
+    }
+
     /// The DNG of a conversion. The converter writes no stretch, so the
     /// scale is known, and the job does not read the new file.
     private static func converted(_ arw: URL, to dng: URL) -> DNGFile {
@@ -113,6 +127,7 @@ public struct DesqueezeJob: Sendable {
     /// It walks the files in the order of `run`, and asks the same questions.
     /// It assumes that each conversion and each write passes.
     func plan(_ snapshot: FolderSnapshot, factor: SqueezeFactor, convert: Bool, remove: Bool = false) -> RunPlan {
+        let factor = Self.factor(factor, remove: remove)
         var plan = RunPlan(steps: [], summary: opening(snapshot, remove: remove))
         guard snapshot.isWritable else { return plan }
 
@@ -150,6 +165,7 @@ public struct DesqueezeJob: Sendable {
         cancel: CancelFlag = CancelFlag(),
         progress: (RunProgress) -> Void = { _ in }
     ) -> RunSummary {
+        let factor = Self.factor(factor, remove: remove)
         var summary = opening(snapshot, remove: remove)
         guard snapshot.isWritable else { return summary }
 
@@ -173,7 +189,11 @@ public struct DesqueezeJob: Sendable {
                     summary.failed += 1
                     // This ARW made no DNG, so its tag step will not happen.
                     total -= 1
-                    summary.notes.append(.notConverted(arw.lastPathComponent, detail: Self.describe(error)))
+                    var detail = Self.describe(error)
+                    if case ConvertError.failed(_, let partial?) = error {
+                        detail += " " + discard(partial: partial)
+                    }
+                    summary.notes.append(.notConverted(arw.lastPathComponent, detail: detail))
                 }
                 completed += 1
                 progress(RunProgress(completed: completed, total: total, name: arw.lastPathComponent))
@@ -190,6 +210,17 @@ public struct DesqueezeJob: Sendable {
             progress(RunProgress(completed: completed, total: total, name: dng.name))
         }
         return summary
+    }
+
+    /// Moves the partial DNG of a failed conversion to the Trash. The ARW is
+    /// never touched. Returns the sentence for the note's detail line.
+    private func discard(partial: URL) -> String {
+        do {
+            try backups.trashFile(partial)
+            return "The partial DNG was moved to the Trash."
+        } catch {
+            return "A partial DNG, \(partial.lastPathComponent), is beside the ARW. Delete it, then run again."
+        }
     }
 
     private func tagOne(_ dng: DNGFile, _ factor: SqueezeFactor, _ summary: inout RunSummary) {
@@ -234,7 +265,7 @@ public struct DesqueezeJob: Sendable {
     static func describe(_ error: Error) -> String {
         switch error {
         case TagError.toolFailed(let text): return text
-        case ConvertError.failed(let text): return text
+        case ConvertError.failed(let text, _): return text
         default: return error.localizedDescription
         }
     }

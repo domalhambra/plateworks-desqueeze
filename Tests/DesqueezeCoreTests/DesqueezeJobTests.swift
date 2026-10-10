@@ -171,6 +171,20 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(summary.skipped, 1)
     }
 
+    // Remove writes 1 1. A factor that rides along beside `remove` is ignored,
+    // so no caller can make Remove write a stretch.
+    func testRemoveWritesOneOneWhateverFactorItWasGiven() {
+        let files = [dng("A.dng", at: 1.5), dng("B.dng", at: 1), dng("C.dng", at: 2)]
+        let summary = job().run(snapshot(dngs: files), factor: factor, convert: false, remove: true)
+        XCTAssertEqual(log.entries, [
+            "write 1 1 A.dng", "read A.dng", "trash A.dng",
+            "write 1 1 C.dng", "read C.dng", "trash C.dng",
+        ])
+        XCTAssertEqual(summary.set, 2)
+        XCTAssertEqual(summary.skipped, 1)
+        XCTAssertEqual(summary.failed, 0)
+    }
+
     // "Unknown" is not "1 1". Remove must not skip a file that was never read.
     func testRemoveWritesAFileWhoseScaleIsUnknown() {
         let summary = job().run(snapshot(dngs: [unread("A.dng"), dng("B.dng", at: 1)]),
@@ -220,11 +234,86 @@ final class DesqueezeJobTests: XCTestCase {
         let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW", "Y.ARW"]),
                                 factor: factor, convert: true)
         XCTAssertEqual(log.entries.filter { $0.hasPrefix("convert") }, ["convert X.ARW", "convert Y.ARW"])
+        XCTAssertFalse(log.entries.contains { $0.hasPrefix("trashFile") }, "no partial DNG, nothing to discard")
         XCTAssertFalse(log.entries.contains("write 1.5 1 X.dng"))
         XCTAssertEqual(summary.converted, 1)
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(summary.set, 2)
         XCTAssertEqual(summary.notes, [FileNote(name: "X.ARW", kind: .notConverted, message: "Not converted.", detail: "made no DNG")])
+    }
+
+    // A conversion that failed after it started may have left a partial DNG.
+    // The ARW keeps its `failed` note, and the note says where the file went.
+    func testAPartialDNGFromAFailedConversionGoesToTheTrashAndTheNoteSaysSo() {
+        converter.failWithPartial = ["X.ARW"]
+        let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW", "Y.ARW"]),
+                                factor: factor, convert: true)
+        XCTAssertEqual(log.entries.filter { $0.hasPrefix("convert") || $0.hasPrefix("trashFile") }, [
+            "convert X.ARW", "trashFile X.dng", "convert Y.ARW",
+        ], "the run continues with the next ARW")
+        XCTAssertFalse(log.entries.contains("write 1.5 1 X.dng"), "a failed conversion is never tagged")
+        XCTAssertEqual(summary.converted, 1)
+        XCTAssertEqual(summary.failed, 1)
+        XCTAssertEqual(summary.unconvertedARWs, 1, "the ARW whose conversion failed is still unconverted")
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: "X.ARW", kind: .notConverted, message: "Not converted.",
+            detail: "Adobe DNG Converter returned 1. The partial DNG was moved to the Trash.")])
+    }
+
+    func testARefusedTrashForAPartialDNGNamesTheFileToDelete() {
+        converter.failWithPartial = ["X.ARW"]
+        backups.trashFileError = NamedError(text: "The Trash refused it.")
+        let summary = job().run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+        XCTAssertEqual(log.entries, ["convert X.ARW", "trashFile X.dng"])
+        XCTAssertEqual(summary.failed, 1)
+        XCTAssertEqual(summary.unconvertedARWs, 1)
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: "X.ARW", kind: .notConverted, message: "Not converted.",
+            detail: "Adobe DNG Converter returned 1. A partial DNG, X.dng, is beside the ARW. Delete it, then run again.")])
+    }
+
+    func testAFailedConversionWithNoPartialDNGDiscardsNothing() {
+        converter.fail = ["X.ARW"]
+        _ = job().run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+        XCTAssertEqual(log.entries, ["convert X.ARW"])
+    }
+
+    // The whole path on real files: an AdobeConverter on a fake runner that
+    // leaves an empty DNG, a real folder, and a Trash that is a temporary
+    // folder. The empty file must move there, and the ARW must not change.
+    func testAnEmptyDNGFromAConversionReallyMovesToTheInjectedTrash() throws {
+        let shoot = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(shoot) }
+        let trash = shoot.deletingLastPathComponent().appendingPathComponent("Test trash")
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        let arw = shoot.appendingPathComponent("a.ARW")
+        try Data("raw bytes".utf8).write(to: arw)
+
+        let runner = FakeRunner()
+        runner.handler = { _ in
+            FileManager.default.createFile(atPath: shoot.appendingPathComponent("a.dng").path, contents: Data())
+            return ProcessResult(exitCode: 0, stdout: "", stderr: "")
+        }
+        let environment = [FileBackups.testFolderVariable: trash.path]
+        let files = try FileBackups.fromEnvironment(environment).backups
+        let realJob = DesqueezeJob(tag: tag, converter: AdobeConverter(executable: URL(fileURLWithPath: "/nonexistent/Adobe DNG Converter"), runner: runner),
+                                   backups: files)
+
+        let summary = realJob.run(
+            FolderSnapshot(folder: shoot, dngs: [], pendingARWs: [arw], orphanBackups: [], isWritable: true),
+            factor: factor, convert: true)
+
+        XCTAssertEqual(runner.calls.count, 1)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: shoot.path), ["a.ARW"])
+        XCTAssertEqual(try Data(contentsOf: arw), Data("raw bytes".utf8))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path), ["a.dng"])
+        XCTAssertEqual(try Data(contentsOf: trash.appendingPathComponent("a.dng")), Data())
+        XCTAssertEqual(summary.failed, 1)
+        XCTAssertEqual(summary.unconvertedARWs, 1)
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: "a.ARW", kind: .notConverted, message: "Not converted.",
+            detail: "Adobe DNG Converter made an empty DNG. The partial DNG was moved to the Trash.")])
+        XCTAssertEqual(log.entries, [], "the job tagged nothing")
     }
 
     func testWithNoConverterTheARWFilesWaitAndTheDNGFilesRun() {
