@@ -65,11 +65,11 @@ None yet. A register belongs to a published property. If Desqueeze ships as a Pl
 - [x] The window builds and runs on Dom's Mac — 2026-10-09
 - [x] Command line tool and MCP server on the same core — 2026-10-09
 - [x] dnglab converts, matched to Adobe's values for the A7S III — 2026-10-09
-- [ ] Acceptance pass on a scratch copy of a real shoot
-- [ ] Dom confirms the shape in Lightroom at each factor he uses. Confirmed at 1.5 on 2026-10-10, on four photos that Adobe DNG Converter converted. A DNG from dnglab is not yet compared in Lightroom.
+- [x] Acceptance pass on a scratch copy of a real shoot — 2026-10-10
+- [x] Dom confirms the shape in Lightroom at each factor he uses. Confirmed at 1.5 on 2026-10-10, and the build was accepted that day.
 - [x] Repo documented to the Medium tier, with the MIT license and the open-source files, and listed in the Plateworks workspace index — 2026-10-10
 - [x] One run in a folder at a time, and the option that moves the originals to the Trash — 2026-10-10
-- [ ] Public GitHub repo created, with one first commit of the cleaned files
+- [x] Public GitHub repo created, with one first commit of the cleaned files — 2026-10-10
 
 ## Guardrails / principles
 
