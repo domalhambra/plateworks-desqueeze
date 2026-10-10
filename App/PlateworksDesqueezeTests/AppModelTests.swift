@@ -229,6 +229,68 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(h.model.folderMessages, [])
     }
 
+    // One state, one message. A run is refused, and the scan that follows
+    // the refusal fails: the folder went away. The scan is the newer event,
+    // so the window shows "could not be read", and VoiceOver hears the
+    // same. Until 2026-10-10 VoiceOver heard the refusal.
+    func testAfterARefusalAScanThatFailsWinsInTheWindowAndForVoiceOver() async throws {
+        let sentence = "Another Desqueeze run is working in this folder. Wait for it to end, then run again."
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        let folder = try h.folder("Shoot", files: ["a.dng"])
+        await h.load(folder)
+        guard case .held(let other) = FolderLock.system.take(folder) else { return XCTFail("the lock of the test") }
+        defer { other.release() }
+
+        // The refused run reads nothing. Only the scan after it meets this.
+        h.tag.failReads(true)
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.folderMessages, ["This folder could not be read."])
+        XCTAssertEqual(h.announcements, ["This folder could not be read."], "VoiceOver hears what the window shows")
+        XCTAssertNil(h.model.runRefusal, "the refusal is not kept behind the newer message")
+        XCTAssertFalse(h.announcements.contains(sentence))
+
+        // The folder is back. The next scan shows its counts, and no
+        // sentence about a click that the newer event replaced.
+        h.tag.failReads(false)
+        h.model.appBecameActive()
+        await h.wait("the scan lands") { !h.model.isScanning }
+        XCTAssertEqual(h.model.folderMessages, [])
+        XCTAssertEqual(h.model.countsLine, "1 DNG")
+    }
+
+    // The same rule for a scan that fails later, when the app becomes
+    // active again: the refusal goes, and it does not come back with the
+    // next good scan.
+    func testAScanThatFailsLaterTakesTheSentenceOfARefusedRunAway() async throws {
+        let sentence = "Another Desqueeze run is working in this folder. Wait for it to end, then run again."
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        let folder = try h.folder("Shoot", files: ["a.dng"])
+        await h.load(folder)
+        guard case .held(let other) = FolderLock.system.take(folder) else { return XCTFail("the lock of the test") }
+        defer { other.release() }
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.folderMessages, [sentence])
+
+        // A good scan keeps the sentence: nothing newer has happened.
+        h.model.appBecameActive()
+        await h.wait("the scan lands") { !h.model.isScanning }
+        XCTAssertEqual(h.model.folderMessages, [sentence])
+
+        h.tag.failReads(true)
+        h.model.appBecameActive()
+        await h.wait("the scan lands") { !h.model.isScanning }
+        XCTAssertEqual(h.model.folderMessages, ["This folder could not be read."])
+
+        h.tag.failReads(false)
+        h.model.appBecameActive()
+        await h.wait("the scan lands") { !h.model.isScanning }
+        XCTAssertEqual(h.model.folderMessages, [], "the refusal does not come back")
+    }
+
     // MARK: Remove
 
     // The folder has one ARW with no DNG. Remove has no ARW work, so it
@@ -469,8 +531,9 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(h.savedFactor)
         h.model.customText = "1.6"
         h.model.run()
-        XCTAssertEqual(h.savedFactor, "1.6")
         await h.runEnds()
+        XCTAssertEqual(h.savedFactor, "1.6")
+        XCTAssertEqual(h.saves, ["1.6"], "one run, one save")
         XCTAssertEqual(h.tag.writes, ["1.6 1 a.dng"])
 
         let next = h.makeModel()
@@ -481,6 +544,89 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(h.makeModel().choice, .preset(SqueezeFactor(2)!))
         h.savedFactor = "not a factor"
         XCTAssertEqual(h.makeModel().choice, .preset(SqueezeFactor(1.5)!))
+    }
+
+    // A run that did not start saves nothing (design 13.9): another run
+    // works in the folder, and this one read no file. Until 2026-10-10 the
+    // click saved the factor before the run was refused.
+    func testARunThatWasRefusedSavesNoFactor() async throws {
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        let folder = try h.folder("Shoot", files: ["a.dng"])
+        await h.load(folder)
+        guard case .held(let other) = FolderLock.system.take(folder) else { return XCTFail("the lock of the test") }
+        defer { other.release() }
+
+        h.model.customText = "1.6"
+        h.model.run()
+        await h.runEnds()
+        XCTAssertNotNil(h.model.runRefusal)
+        XCTAssertEqual(h.saves, [], "the run did not start")
+        XCTAssertNil(h.savedFactor)
+        XCTAssertEqual(h.makeModel().choice, .preset(SqueezeFactor(1.5)!), "the next launch has the factor of before")
+
+        // The other run ended. This click starts a run, and that run saves.
+        other.release()
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.summary?.set, 1)
+        XCTAssertEqual(h.saves, ["1.6"])
+    }
+
+    // A run whose own scan failed tried no file. It saves nothing either.
+    func testARunWhoseFolderCouldNotBeReadSavesNoFactor() async throws {
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        await h.load(try h.folder("Shoot", files: ["a.dng"]))
+        h.tag.failReads(true)
+        h.model.select(SqueezeFactor(2)!)
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.folderMessages, [FolderText.unreadable])
+        XCTAssertEqual(h.saves, [])
+    }
+
+    // Remove has no factor of its own to keep.
+    func testRemoveSavesNoFactor() async throws {
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        await h.load(try h.folder("Shoot", files: ["a.dng"]))
+        h.model.remove()
+        await h.runEnds()
+        XCTAssertEqual(h.model.summary?.set, 1)
+        XCTAssertEqual(h.saves, [])
+    }
+
+    // A run that a quit stopped did start, so its factor is saved, once,
+    // before the quit path returns: the app ends right after it.
+    func testARunThatAQuitStoppedSavesItsFactorBeforeTheQuitPathReturns() async throws {
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        await h.load(try h.folder("Shoot", files: ["a.dng", "b.dng"]))
+        h.tag.writeGate.close()
+        h.model.select(SqueezeFactor(2)!)
+        h.model.run()
+        await h.wait("the first file is in work") { h.tag.writeGate.arrivals == 1 }
+        XCTAssertEqual(h.saves, [], "the run has not said yet that it started")
+
+        XCTAssertEqual(h.model.answerQuit(), .afterRun)
+        let returned = Flag()
+        // What is saved at the moment the quit path returns. Nothing
+        // awaits this task, so a quit path that never returns fails the
+        // bounded wait below.
+        var savedAtTheReturn: [String]?
+        Task {
+            await h.model.stopRunForQuit()
+            savedAtTheReturn = h.saves
+            returned.isSet = true
+        }
+        await h.settle()
+        XCTAssertEqual(h.saves, [], "the job is still in its file")
+        h.tag.writeGate.open()
+        await h.wait("the quit path returns") { returned.isSet }
+        XCTAssertEqual(savedAtTheReturn, ["2"])
+        await h.settle()
+        XCTAssertEqual(h.saves, ["2"], "one run, one save")
     }
 
     // MARK: The tools

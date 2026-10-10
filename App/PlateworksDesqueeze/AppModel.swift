@@ -48,8 +48,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var progress: RunProgress?
     @Published private(set) var summary: RunSummary?
     /// Why the last click on Run or Remove started no run: another run works
-    /// in the folder (design 13.9). The sentence is the core's. Nil after a
-    /// run that started, and after a new folder loads.
+    /// in the folder (design 13.9). The sentence is the core's.
+    ///
+    /// It goes at the next click that starts a run, when another folder
+    /// loads, and when a scan of the folder fails. The last one is the rule
+    /// "one state, one message": a folder that could not be read is the
+    /// newer event, so the window shows that, and VoiceOver hears that.
     @Published private(set) var runRefusal: String?
     @Published private(set) var phase = RunPhase.idle
     /// The box "Move the original ARW files to the Trash" (design 14.4).
@@ -70,6 +74,9 @@ final class AppModel: ObservableObject {
     private let backups: BackupHandling
     /// Keeps the factor of a run for the next launch.
     private let saveFactor: @MainActor (String) -> Void
+    /// The factor of the run in flight, until the job says whether the run
+    /// started. Nil for Remove, and when no run is in flight.
+    private var factorToSave: String?
     /// The time in seconds, from any fixed start.
     private let now: @MainActor () -> TimeInterval
     /// Says one line to VoiceOver.
@@ -178,7 +185,8 @@ final class AppModel: ObservableObject {
     }
 
     /// The messages about the loaded folder. They come from the newest
-    /// scan, and from a click on Run or Remove that started no run.
+    /// scan, and from a click on Run or Remove that started no run. A scan
+    /// that failed is the only message: it has taken `runRefusal` away.
     var folderMessages: [String] {
         if scanFailed { return [FolderText.unreadable] }
         return (runRefusal.map { [$0] } ?? []) + (snapshot?.messages ?? [])
@@ -341,6 +349,9 @@ final class AppModel: ObservableObject {
             guard number == scanNumber else { return }
             snapshot = result
             scanFailed = result == nil
+            // One state, one message. The folder could not be read, and
+            // that is newer than the refusal of an earlier click.
+            if scanFailed { runRefusal = nil }
             isScanning = false
         }
     }
@@ -365,16 +376,27 @@ final class AppModel: ObservableObject {
             return
         }
         customError = nil
-        // The factor is the only thing that the window saves. The box of
-        // design 14.4 is never saved.
-        saveFactor(factor.label)
-        start(factor: factor, convert: true, trashOriginals: trashOriginals, remove: false)
+        // The factor is the only thing that the window saves, and only for
+        // a run that started (`keepTheFactor`). The box of design 14.4 is
+        // never saved.
+        start(factor: factor, convert: true, trashOriginals: trashOriginals, remove: false, saves: factor.label)
+    }
+
+    /// Saves the factor of the run in flight, once, when its job gave a
+    /// result: the run started. A run that did not start saves nothing:
+    /// another run works in the folder, or the folder could not be read, so
+    /// no file was tried. The next launch then has the factor of the last
+    /// run that worked.
+    private func keepTheFactor(of outcome: Result<RunSummary, Error>) {
+        guard let factor = factorToSave else { return }
+        factorToSave = nil
+        if case .success = outcome { saveFactor(factor) }
     }
 
     /// Remove never moves an original, whatever the box says (design 14.2).
     func remove() {
         guard canRemove else { return }
-        start(factor: .noStretch, convert: false, trashOriginals: false, remove: true)
+        start(factor: .noStretch, convert: false, trashOriginals: false, remove: true, saves: nil)
     }
 
     /// Stops the run after its current file. The click is acknowledged at
@@ -440,7 +462,9 @@ final class AppModel: ObservableObject {
         guard let job else { return }
         job.cancel.cancel()
         if phase == .running { phase = .stopping }
-        _ = await job.work.result
+        // The app ends when this returns, so the factor is saved here, and
+        // not left to the task of `start`, which can come too late.
+        keepTheFactor(of: await job.work.result)
     }
 
     /// - Parameters:
@@ -449,8 +473,12 @@ final class AppModel: ObservableObject {
     ///     reach it.
     ///   - remove: the intent of the Remove button. The job does not guess
     ///     it from the factor and `convert`.
-    private func start(factor: SqueezeFactor, convert: Bool, trashOriginals: Bool, remove: Bool) {
+    ///   - saves: the factor to keep for the next launch when the run has
+    ///     started (`keepTheFactor`). Nil for Remove, which has no factor
+    ///     of its own.
+    private func start(factor: SqueezeFactor, convert: Bool, trashOriginals: Bool, remove: Bool, saves: String?) {
         guard let folder, let tag else { return }
+        factorToSave = saves
         let runner = DesqueezeJob(tag: tag, converters: converters, backups: backups)
         let flag = CancelFlag()
         // The job reports progress from its own thread. A stream keeps the
@@ -473,6 +501,7 @@ final class AppModel: ObservableObject {
         Task {
             for await update in updates { progress = update }
             let outcome = await work.result
+            keepTheFactor(of: outcome)
             let result = try? outcome.get()
             // Another run works in the folder: in the command line tool, the
             // MCP server, or a second window. This run did not start.
@@ -500,13 +529,17 @@ final class AppModel: ObservableObject {
             }
             // The result and the new counts arrive together.
             summary = result
-            runRefusal = refused ? FolderLock.busyMessage : nil
+            // The scan after a refusal can fail. The folder could not be
+            // read then, and that is the newer event: the window shows it
+            // alone, so the refusal is not kept behind it.
+            runRefusal = refused && !scanFailed ? FolderLock.busyMessage : nil
             progress = nil
             phase = .idle
             // VoiceOver hears the counts. The result line is new on the
             // screen, and nothing else says so.
             // With no result, the run did not start, or its own scan failed.
-            // The window shows the sentence that VoiceOver hears.
+            // The window shows the sentence that VoiceOver hears: the
+            // refusal, or "could not be read" when the newest scan failed.
             // After a run that was asked to move the originals, it hears
             // the core's line with the two counts too (design 14.4).
             announce(result.map(Self.announcement) ?? runRefusal ?? FolderText.unreadable)
