@@ -170,14 +170,18 @@ public struct RunReport: Codable, Equatable, Sendable {
                               stopped: stopped)
     }
 
-    /// How many ARW files each converter converted, when both did work:
-    /// `Converted with dnglab: 11. With Adobe DNG Converter: 1.` Nil when
-    /// only one converted, or none, and for a dry run: its steps name the
-    /// converter of each ARW.
+    /// The sentence of `RunSummary.convertersLine`: how many ARW files each
+    /// converter converted, when both did work. Nil when only one
+    /// converted, or none, and for a dry run: its steps name the converter
+    /// of each ARW.
     public var convertersLine: String? {
-        guard !dryRun, convertedByDnglab > 0, convertedByAdobe > 0 else { return nil }
-        return "Converted with \(ConverterKind.dnglab.name): \(convertedByDnglab). "
-            + "With \(ConverterKind.adobe.name): \(convertedByAdobe)."
+        RunSummary.convertersLine(dnglab: convertedByDnglab, adobe: convertedByAdobe, dryRun: dryRun)
+    }
+
+    /// The line of `RunSummary.lightroomLine`: shown when the run set at
+    /// least one photo, and never for a dry run (design 4.4).
+    public var lightroomLine: String? {
+        RunSummary.lightroomLine(set: set, dryRun: dryRun)
     }
 
     /// The sentence of `RunSummary.unconvertedARWsLine`. A dry run says

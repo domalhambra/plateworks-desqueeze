@@ -363,6 +363,45 @@ final class RunSummaryTests: XCTestCase {
         XCTAssertNil(RunReport(folder: h.folder, factor: factor, plan: plan).convertersLine)
     }
 
+    // The window shows the summary, and the tool shows the report. One rule
+    // makes the line for both (design 4.4).
+    func testTheSummaryOfARunHasTheLineOfItsReport() {
+        let summary = converted(dnglab: 11, adobe: 1)
+        XCTAssertEqual(summary.convertersLine, "Converted with dnglab: 11. With Adobe DNG Converter: 1.")
+        XCTAssertEqual(RunReport(folder: h.folder, factor: factor, summary: summary).convertersLine,
+                       summary.convertersLine)
+        for (dnglab, adobe) in [(12, 0), (0, 12), (0, 0)] {
+            XCTAssertNil(converted(dnglab: dnglab, adobe: adobe).convertersLine, "dnglab \(dnglab), Adobe \(adobe)")
+        }
+    }
+
+    // MARK: The Lightroom line (design 4.4)
+
+    func testTheLightroomLineShowsWhenTheRunSetAtLeastOnePhoto() {
+        let line = "Photos already in Lightroom: Metadata › Read Metadata from File."
+        var summary = RunSummary()
+        XCTAssertNil(summary.lightroomLine, "a run that set nothing")
+        summary.convertedByDnglab = 2
+        summary.skipped = 3
+        summary.blocked = 1
+        summary.failed = 1
+        XCTAssertNil(summary.lightroomLine, "converted, skipped, blocked and failed are not set")
+        XCTAssertNil(RunReport(folder: h.folder, factor: factor, summary: summary).lightroomLine)
+        summary.set = 1
+        XCTAssertEqual(summary.lightroomLine, line)
+        XCTAssertEqual(RunReport(folder: h.folder, factor: factor, summary: summary).lightroomLine, line,
+                       "the report of the tool follows the same rule as the summary of the window")
+        // Remove sets photos too.
+        XCTAssertEqual(RunReport(folder: h.folder, factor: .noStretch, summary: summary).lightroomLine, line)
+    }
+
+    // The summary of a plan counts what a run would set.
+    func testADryRunNeverShowsTheLightroomLine() {
+        var summary = RunSummary()
+        summary.set = 3
+        XCTAssertNil(RunReport(folder: h.folder, factor: factor, plan: RunPlan(steps: [], summary: summary)).lightroomLine)
+    }
+
     // MARK: The line of a note, and the result that needs a look
 
     func testTheLineOfANoteIsItsNameThenItsSentence() {

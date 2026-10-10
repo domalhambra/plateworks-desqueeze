@@ -57,7 +57,8 @@ public enum TextOutput {
     /// tool's own words below it. A dry run shows its steps first, and a
     /// convert step names the converter that gets the ARW first. When both
     /// converters did work in a run, one line after the counts says how
-    /// many ARW files each converted.
+    /// many ARW files each converted. After a run that set at least one
+    /// photo, the Lightroom line is last.
     ///
     /// - Parameter converterInstalled: true when one converter or the other
     ///   is installed. False adds the reason to the line about the ARW files
@@ -83,8 +84,10 @@ public enum TextOutput {
             lines += (note.detail ?? "").split(separator: "\n").map { "    \($0)" }
         }
         if let left = report.unconvertedARWsLine(converterAvailable: converterInstalled) { lines.append(left) }
-        // Lightroom reads the tag at import, and keeps what it read.
-        if !report.dryRun, report.set > 0 { lines.append(RunSummary.lightroomHint) }
+        // Lightroom reads the tag at import, and keeps what it read. The
+        // core decides when the line shows, so the window shows it for the
+        // same runs.
+        if let lightroom = report.lightroomLine { lines.append(lightroom) }
         return lines
     }
 }

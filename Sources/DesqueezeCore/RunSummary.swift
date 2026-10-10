@@ -195,9 +195,44 @@ extension RunSummary {
         return parts.joined(separator: " · ")
     }
 
-    /// The fixed line under the counts (design 4.4). Lightroom reads the tag
-    /// at import, and keeps what it read.
+    /// The words of the line under the counts (design 4.4). Lightroom reads
+    /// the tag at import, and keeps what it read. Whether a front end shows
+    /// the line is `lightroomLine`.
     public static let lightroomHint = "Photos already in Lightroom: Metadata › Read Metadata from File."
+
+    /// `lightroomHint` when this run set the tag on at least one photo, and
+    /// nil when it set none (design 4.4). The window shows it under the
+    /// counts.
+    ///
+    /// This is for the summary of a real run. The summary inside a `RunPlan`
+    /// counts what a run would set, and a dry run never shows the line: ask
+    /// `RunReport.lightroomLine` for a dry run.
+    public var lightroomLine: String? { Self.lightroomLine(set: set, dryRun: false) }
+
+    /// The one rule for the Lightroom line (design 4.4): shown when the run
+    /// set at least one photo, and never for a dry run. Every front end
+    /// follows it, through `RunSummary.lightroomLine` or
+    /// `RunReport.lightroomLine`.
+    static func lightroomLine(set: Int, dryRun: Bool) -> String? {
+        !dryRun && set > 0 ? lightroomHint : nil
+    }
+
+    /// How many ARW files each converter converted, when both did work
+    /// (design 4.4): `Converted with dnglab: 11. With Adobe DNG Converter:
+    /// 1.` Nil when only one converted, or none. The window shows it under
+    /// the counts.
+    ///
+    /// This is for the summary of a real run, as `lightroomLine` is.
+    public var convertersLine: String? {
+        Self.convertersLine(dnglab: convertedByDnglab, adobe: convertedByAdobe, dryRun: false)
+    }
+
+    /// The one rule for the line about the two converters. A dry run has
+    /// none: its steps name the converter of each ARW.
+    static func convertersLine(dnglab: Int, adobe: Int, dryRun: Bool) -> String? {
+        guard !dryRun, dnglab > 0, adobe > 0 else { return nil }
+        return "Converted with \(ConverterKind.dnglab.name): \(dnglab). With \(ConverterKind.adobe.name): \(adobe)."
+    }
 
     /// True when a file failed or was blocked. A front end then marks the
     /// result as one to look at. A stopped run with no such file is not one,
