@@ -6,6 +6,12 @@
 # Give it one Sony ARW of your own. Your photo is copied, never changed.
 # fixtures/ is gitignored, so your photo never enters the repo.
 #
+# The script makes the new pair in a folder of its own inside fixtures/, and
+# moves the two files into place only when both exist. So a run that fails
+# leaves fixtures/ as it was, with the pair of an earlier run. It never
+# writes through a name in fixtures/: when fixtures/sample.ARW is a link to
+# a photo, the link goes, and the photo stays as it is.
+#
 # fixtures/sample.ARW is a copy of your photo. It alone is enough for the
 # tests of dnglab. fixtures/sample.dng is made from it, and the other tests
 # on the real programs need it:
@@ -61,21 +67,36 @@ else
   maker="dnglab"
 fi
 
-mkdir -p "$root/fixtures"
-cp "$src" "$root/fixtures/sample.ARW"
-rm -f "$root/fixtures/sample.dng"
+fixtures="$root/fixtures"
+mkdir -p "$fixtures"
+# The new pair is made here, and not at its names in fixtures/. A new folder
+# has no file and no link in it, so no copy writes over anything.
+work="$(mktemp -d "$fixtures/new.XXXXXX")"
+trap 'rm -rf "$work"' EXIT
+
+cp "$src" "$work/sample.ARW"
 if [ "$maker" = "dnglab" ]; then
   # Never -f: the name is free, and dnglab must not write over a file.
-  "$dnglab" convert --embed-raw false "$root/fixtures/sample.ARW" "$root/fixtures/sample.dng"
-  "$exiftool" -m -overwrite_original -IFD0:OriginalRawFileName=sample.ARW "$root/fixtures/sample.dng"
+  "$dnglab" convert --embed-raw false "$work/sample.ARW" "$work/sample.dng"
+  "$exiftool" -m -overwrite_original -IFD0:OriginalRawFileName=sample.ARW "$work/sample.dng"
 else
   # Never -h: it opens a window and does not return.
-  "$adobe" -c -d "$root/fixtures" "$root/fixtures/sample.ARW"
+  "$adobe" -c -d "$work" "$work/sample.ARW"
 fi
 # Adobe DNG Converter returns 0 for a file that it cannot read.
-if [ ! -s "$root/fixtures/sample.dng" ]; then
+if [ ! -s "$work/sample.dng" ]; then
   echo "$maker made no DNG from this file. It may not support it." >&2
+  echo "fixtures/ is as it was." >&2
   exit 1
 fi
-echo "fixtures ready: $(ls "$root/fixtures" | tr '\n' ' ')"
+
+# Both files exist. Each name in fixtures/ is removed first: rm -f removes
+# the name, so for a link it removes the link, and the file that the link
+# points at stays. Then the move makes a new name, and writes over nothing.
+for name in sample.ARW sample.dng; do
+  rm -f "$fixtures/$name"
+  mv "$work/$name" "$fixtures/$name"
+done
+rmdir "$work"
+echo "fixtures ready: $(ls "$fixtures" | tr '\n' ' ')"
 echo "The DNG was made with $maker."
