@@ -108,8 +108,8 @@ Test files are in `Tests/DesqueezeCoreTests/`.
 | `ConverterChoice.swift` | Which converter gets an ARW, in which order. The names of the converters and the sentences about who converts. | `ConverterChoiceTests.swift` |
 | `RunPlan.swift` | The one decision for a DNG: skip, blocked, or write. The plan of a dry run, with its step for an original that would move. | `PlanTests.swift`, `OriginalsPlanTests.swift` |
 | `Originals.swift` | The rule for one original (design 14.2): the function that decides "move" or "keep", the six sentences of an original that stays, the record of a file (size, modification date, file number) and its compare, and the check of the DNG | `OriginalsTests.swift` |
-| `RunSummary.swift` | The counts of a run, the note for each file with its `kind`, the counts line, the line about the two converters, the rule of the Lightroom line, the line about the originals, the progress value, and the cancel flag | `RunSummaryTests.swift`, `OriginalsTests.swift` |
-| `FolderLock.swift` | One run in a folder at a time: the advisory lock on the folder, what each answer of the system means, and the sentence of a run that did not start | `FolderLockTests.swift`, which also makes an ExFAT disk image. With two processes of the built tool: `TwoRunsTests.swift` in `Tests/DesqueezeCLITests/` |
+| `RunSummary.swift` | The counts of a run, the note for each file with its `kind`, the note of a volume that gives no folder lock, the counts line, the line about the two converters, the rule of the Lightroom line, the line about the originals, the progress value, and the cancel flag | `RunSummaryTests.swift`, `OriginalsTests.swift` |
+| `FolderLock.swift` | One run in a folder at a time: the advisory lock on the folder, what each answer of the system means, the sentence of a run that did not start, the error of a lock call that failed, and the line of `--verbose` for a volume with no lock | `FolderLockTests.swift`. Its test on an ExFAT volume is a part of `ExclusiveRenameVolumeTests`, and `ExclusiveRenameTests.swift` makes and detaches the disk image. With two processes of the built tool: `TwoRunsTests.swift` in `Tests/DesqueezeCLITests/` |
 | `DesqueezeJob.swift` | The run and the dry run, in order, on a fresh scan. The run holds the folder lock. The fifth step of a run that was asked to move the originals. | `DesqueezeJobTests.swift`, `PlanTests.swift`, `FolderLockTests.swift`, `OriginalsJobTests.swift`, `OriginalsPlanTests.swift`. With the real programs: `IntegrationTests.swift`, `DnglabIntegrationTests.swift` |
 | `Reports.swift` | The report types and their JSON: `ScanReport`, `RunReport`, `ErrorReport`, and the one function that prints them | `ReportsTests.swift`, `OriginalsPlanTests.swift` |
 | `Operations.swift` | `DesqueezeOperations`: scan, run, remove, each with a report that is ready to print | `OperationsTests.swift` |
@@ -309,8 +309,16 @@ states it. The window gives the state of its box. The tool gives its flag,
 - **The window scans again** when the app becomes active, and after every
   run. A scan that lands late is discarded.
 - **The window remembers the factor** of the last run in the app's saved
-  settings. The first time, it starts at 1.5. The launch arguments are read
-  from the command line only.
+  settings. The first time, it starts at 1.5. It saves the factor when the
+  job gives a result, so a run that did not start saves nothing: a run that
+  was refused because another run works in the folder, and a run whose
+  folder could not be read. A quit during a run saves the factor before the
+  app ends. The launch arguments are read from the command line only.
+- **One state, one message in the window.** The sentence of a run that was
+  refused goes at the next click that starts a run, when another folder
+  loads, and when a scan of the folder fails. A folder that could not be
+  read is the newer event, so the window shows that alone, and VoiceOver
+  hears the same.
 - **The window never remembers the box for the originals.** It is off at
   every launch, when a folder loads, and after every run, also a run that
   was cancelled or that failed. No launch argument turns it on. A scan of

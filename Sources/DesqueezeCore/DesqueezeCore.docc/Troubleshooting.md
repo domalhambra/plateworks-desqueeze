@@ -227,7 +227,7 @@ installed.
 ## A message about the factor
 
 ```
-The factor must be a number from 1 to 4, with at most four decimal places. It was 1,5. Use a period for the decimal point.
+The factor must be a number from 1 to 4, with at most four decimal places. It was "1,5". Use a period for the decimal point.
 ```
 
 The tool takes a period for the decimal point, and no comma: `1.5`, not

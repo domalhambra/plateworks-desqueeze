@@ -63,6 +63,11 @@ The first version. It is built from source, and there is no download.
   makes no file. A second run in the same folder does not start, from any
   front end, and says: "Another Desqueeze run is working in this folder.
   Wait for it to end, then run again." A scan and a dry run take no lock.
+- When the lock call fails for a reason that says nothing about the lock,
+  the run does not start, and the front end says that the folder could not
+  be read, with the system's words.
+- The window saves the factor only for a run that started. A click that
+  another run refused saves nothing.
 - An ARW whose name is too long for the files that a conversion makes gets
   no converter. The note says: "The file name is too long. Shorten it, then
   run again." The limit is a base name of 222 UTF-16 units, counted in the

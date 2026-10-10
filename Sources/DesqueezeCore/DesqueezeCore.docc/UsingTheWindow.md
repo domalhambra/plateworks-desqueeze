@@ -43,7 +43,7 @@ warning symbol:
 | This folder is read-only. Desqueeze cannot change its files. | Both buttons are off. |
 | `<name>.dng_original`: A backup with no DNG beside it. Rename it to `<name>.dng` to get the photo back. | An earlier write did not complete. <doc:Troubleshooting> says what to do. The window names up to five such files, then gives a count of the others. |
 | This folder could not be read. | The scan failed. No file is tried. |
-| Another Desqueeze run is working in this folder. Wait for it to end, then run again. | A click on a button started no run, and no file was changed. Another run works in this folder: in the command line tool, in the MCP server, or in a second copy of the app. The message goes at the next click on a button, or with the next folder. |
+| Another Desqueeze run is working in this folder. Wait for it to end, then run again. | A click on a button started no run, and no file was changed. Another run works in this folder: in the command line tool, in the MCP server, or in a second copy of the app. The message goes at the next click that starts a run, or when another folder loads. It also goes when the window cannot read the folder: the window then shows "This folder could not be read." alone, and VoiceOver says the same. |
 
 ## Select the squeeze factor
 
@@ -53,7 +53,9 @@ four decimal places. One factor is selected at a time. A click in the field
 selects the factor in the field, and the field then shows a check mark.
 
 The window remembers the factor of the last run. Before the first run, 1.5
-is selected.
+is selected. A click that started no run saves nothing: when another run
+works in the folder, or the folder could not be read, the next launch has
+the factor of the last run that worked.
 
 When the text in the field is not a factor, a click on the run button shows
 "Enter a number from 1 to 4, with at most four decimal places." and starts
@@ -75,7 +77,8 @@ to the Trash, after the DNG of that ARW passed a check.
 
 - While the box is on, a line under it says what the run will do, for
   example "12 original ARW files go to the Trash after their DNG files pass
-  the check." The run button then names the count of the originals too.
+  the check." The run button then names the count of the originals too,
+  for example "Desqueeze 14 photos, move 12 ARW to Trash".
 - The window asks nothing more. The box is the request, and you can put a
   file back from the Trash.
 - The box is off when the app opens, when a folder loads, and after every
