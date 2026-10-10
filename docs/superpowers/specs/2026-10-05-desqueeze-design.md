@@ -736,7 +736,8 @@ conversion, as before, with its own backup and check.
 
 ### 13.4 Which ARW dnglab converts
 
-The app reads these facts for all pending ARW files with one exiftool call:
+The app reads these facts for the pending ARW files with one exiftool call
+for each 200 files:
 the camera model, the ISO, `WB_RGBLevelsDaylight`, and
 `DistortionCorrection`.
 
