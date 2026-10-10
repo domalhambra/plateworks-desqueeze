@@ -68,7 +68,7 @@ public struct DesqueezeJob: Sendable {
     ///   not say. The default asks the volume. Tests inject it.
     public init(
         tag: ScaleTagging, converters: RawConverters, backups: BackupHandling,
-        namesAreCaseSensitive: @escaping @Sendable (URL) -> Bool? = DesqueezeJob.volumeHasCaseSensitiveNames
+        namesAreCaseSensitive: @escaping @Sendable (URL) -> Bool? = { DesqueezeJob.volumeHasCaseSensitiveNames($0) }
     ) {
         self.tag = tag
         self.converters = converters
