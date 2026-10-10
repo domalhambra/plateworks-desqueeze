@@ -96,7 +96,8 @@ until Dom asks for it.
 | Item | Why it waits |
 |---|---|
 | Bundled exiftool | Dom's Mac has exiftool. A shipped app must carry its own. |
-| dnglab as the converter | Adobe DNG Converter cannot be bundled. dnglab can. Its white point clips 0.09 stops of highlight headroom on the A7S III (2.1), so it waits for a release, or for a dnglab fix. `RawConverter` is a protocol so the swap is one type. |
+| A bundled dnglab | dnglab is the first converter since 2026-10-09 (section 13). Version 1 finds the one Homebrew installed. A shipped app must carry its own. |
+| A match table for cameras other than the A7S III | Section 13 has one measured row. Each other camera needs its own. |
 | Code signing and notarization | Needed only for other people's Macs. |
 | Brand marks, accent color, app icon art | `00_Resources/brand-marks.md` and `00_Resources/color-standards.md` govern them. Version 1 uses system colors and the system font. |
 | Register row in `00_Resources/plateworks-principles.md` | A register belongs to a published property. |
@@ -591,4 +592,185 @@ is done only on his yes.
 - The MCP server is tested end to end by starting the built executable and
   speaking MCP to it over its standard input and output: initialize, list the
   tools, call each tool against a temporary folder.
+
+## 13. dnglab first, matched to Adobe
+
+Added 2026-10-09 at Dom's request. dnglab converts. Adobe DNG Converter is an
+optional backup that the app uses when dnglab cannot give the same file.
+Where this section and an earlier one differ (2.1, 3, 4.3 step 1, 6, 8, 11,
+12), this section wins.
+
+### 13.1 Why
+
+- Adobe DNG Converter starts as an app for each ARW: the Dock shows it once
+  for each file, and a test run shows it many times.
+- dnglab takes 0.09 s a file against 0.37 s, opens nothing, and can ship
+  inside an app later.
+- The reason to keep Adobe was the render. The measurements below remove it
+  for Dom's camera.
+
+### 13.2 What was measured
+
+All on scratch copies, 2026-10-09, dnglab 0.8.0, Adobe DNG Converter 18.7,
+Camera Raw through Photoshop with default settings.
+
+**The gap is five tags.** Adobe's DNG holds values that dnglab's does not.
+Written into the dnglab DNG with exiftool, they close the gap:
+
+| Render against Adobe's, ISO 800 frame | Brightness | Pixels that differ by more than 1/255 |
+|---|---|---|
+| dnglab as it comes | 0.055 stops darker | 66% |
+| + `WhiteLevel 16383`, `BaselineExposure 0.15` | 0.007 stops darker | 33% |
+| + `CameraCalibration1` and `2` | 0.002 stops darker | 24% |
+
+| Render against Adobe's, other frames, all tags below | Brightness | Pixels that differ by more than 1/255 |
+|---|---|---|
+| ISO 50 | 0.004 stops darker | 3.5% |
+| ISO 12800, a dark frame | 0.027 stops darker | 0.47% |
+
+Section 2.1 says "no tag fix closes the gap". That test changed
+`BaselineExposure` alone. The white level and the exposure value must change
+together: 16383 against 15360 is 0.096 stops, and 0.15 less 0.096 is the
+0.055 that was measured.
+
+**The values, from one ARW at each of 23 ISO settings** (50, and 80 to 12800
+with no file at 1250). The data file is
+`2026-10-09-ilce-7sm3-adobe-values.json`, beside this document.
+
+| Tag | Adobe's value | Varies with |
+|---|---|---|
+| `SubIFD:WhiteLevel` | 16383 | Nothing. dnglab writes 15360, and the raw data goes above it. |
+| `IFD0:BaselineExposure` | 0.15. At ISO 50: -0.85. | The ISO. |
+| `IFD0:CameraCalibration1` and `2` | The diagonal `r 0 0 0 1 0 0 0 b`, with r = 2568 / the red of the ARW's `WB_RGBLevelsDaylight` and b = 1549 / its blue, each rounded to 4 decimal places. | The lens: the camera changes its daylight levels for a lens that reports itself. The rule gave Adobe's exact numbers for all 23 files, with two lenses. |
+| `IFD0:NoiseProfile` | Six numbers. | The ISO only: four files at ISO 400 and four at ISO 3200, with different lenses and shutter times, gave the same numbers. |
+| `IFD0:BaselineNoise`, `IFD0:BaselineSharpness` | 0.6, 1.25 | Nothing. |
+| `SubIFD:AntiAliasStrength`, `SubIFD:BayerGreenSplit` | 1, 250 | Nothing. |
+
+At ISO 12800 the noise tags matter: without `NoiseProfile`, 5.9% of the
+pixels differ. With it, 0.47%.
+
+`CameraCalibrationSig` and `ProfileCalibrationSig` changed nothing in the
+render and are not written. Adobe's embedded camera profile is not copied:
+Camera Raw uses its own profile for the camera model.
+
+**A lens that reports itself.** For a frame from the Sony FE 24-105mm lens,
+Adobe writes a lens-correction block (`OpcodeList3`, `WarpRectilinear`) from
+data in the ARW. dnglab writes none, and the two renders differ in geometry
+(51% of the pixels). For a frame from an adapted lens, which is every
+anamorphic frame, the ARW says `DistortionCorrection: No correction params
+available`, and neither converter writes a block.
+
+**dnglab's command line.**
+
+| Fact | Consequence |
+|---|---|
+| `dnglab convert <in.ARW> <out.dng>` embeds the whole ARW in the DNG by default. | Pass `--embed-raw false`. |
+| With `--embed-raw false`, dnglab writes no `OriginalRawFileName`. | The app writes it, with the other tags. The pending rule (4.1) needs it. |
+| A file it cannot read: exit code 7, no DNG. An output that exists: exit code 6, the file is not touched. | Unlike Adobe's converter, the exit code is the truth. Never pass `-f`. |
+| Killed in work, it left a DNG of 0 bytes, 4 bytes, or a cut-off 12.1 MB. | The partial-DNG rule of 4.3 holds for dnglab too. |
+| The output is DNG 1.6, lossless, and passes `exiftool -validate`, also after the tags are written. | |
+
+### 13.3 The match
+
+After dnglab made `<base>.dng`, the app writes the tags of 13.2 and
+`IFD0:OriginalRawFileName` with **one** exiftool call, with `-m` and
+`-overwrite_original`: the file is this run's own, a minute old, and has no
+earlier state to keep. Then it reads the tags back and compares them. The
+conversion passes only when dnglab returned 0, the DNG has bytes, and the
+read-back equals what was written.
+
+If any of these fails, the DNG is this run's partial output: the partial-DNG
+rule of 4.3 moves it to the Trash, and the next converter, if there is one,
+gets the ARW.
+
+The tag step of 4.3 (`DefaultScale`) is not changed. It runs after the
+conversion, as before, with its own backup and check.
+
+### 13.4 Which ARW dnglab converts
+
+The app reads these facts for all pending ARW files with one exiftool call:
+the camera model, the ISO, `WB_RGBLevelsDaylight`, and
+`DistortionCorrection`.
+
+A frame has a **full match** when all four hold:
+
+1. The model has a row in the table. Version 1 has one: `ILCE-7SM3`.
+2. The ISO has a row: 50, or one of the 22 measured values from 80 to 12800.
+3. The daylight levels are there, with green 1024.
+4. The ARW says that it has no lens-correction data.
+
+| The ARW | dnglab and Adobe installed | Only dnglab | Only Adobe | Neither |
+|---|---|---|---|---|
+| Full match | dnglab, matched | dnglab, matched | Adobe | Not converted |
+| No full match | Adobe | dnglab, matched as far as the table goes, with a note | Adobe | Not converted |
+| dnglab or its match failed | Adobe, then failed if Adobe fails too | Failed | | |
+
+"Matched as far as the table goes": when rules 1 to 3 hold and only rule 4
+fails, the app writes every tag, and the note says the DNG has no built-in
+lens correction. When rule 1, 2 or 3 fails, the app writes only
+`OriginalRawFileName`, and the note says the levels are dnglab's own. Each
+note ends: "Install Adobe DNG Converter for the same file that Lightroom
+makes." Such a file counts as converted. It is not failed and not blocked,
+and the exit code stays 0. Its note kind is `convertedUnmatched`.
+
+### 13.5 Dependencies and messages
+
+| Tool | How the app finds it | When it is missing |
+|---|---|---|
+| exiftool | As section 6. | As section 6. |
+| dnglab | `/opt/homebrew/bin/dnglab`, then `/usr/local/bin/dnglab`, then each folder in `PATH` | With Adobe installed: Adobe converts every ARW, and one line says "dnglab is faster and opens no window: `brew install dnglab`". With neither: the ARW files are not converted, the DNG files still run, and the message gives `brew install dnglab`. |
+| Adobe DNG Converter | As section 6. It is not part of the app. | One quiet line where the folder summary is, and in the scan text of the command line tool: "Adobe DNG Converter is not installed. It is an optional backup for photos that dnglab cannot match." No error, and no line when no ARW is pending. |
+
+The Run button's N counts the pending ARW files when one converter or the
+other is installed.
+
+### 13.6 Reports
+
+- Scan JSON: a new key `"dnglab"`, the path or `null`, beside `"dngConverter"`
+  (Adobe's path, as before).
+- Run JSON: two new counts, `"convertedByDnglab"` and `"convertedByAdobe"`.
+  Their sum is `"converted"`.
+- Dry-run steps: a `convert` step has a new key `"converter"`: `dnglab` or
+  `adobe`. The plan reads the ARW facts to decide. That read changes no file.
+- A new note kind: `convertedUnmatched`.
+- `--verbose` shows each dnglab command, as it shows the others.
+- The MCP tools print the same JSON. Their descriptions name dnglab first.
+
+### 13.7 Structure
+
+| Unit | Does |
+|---|---|
+| `ARWFacts` | The four facts of 13.4 for one ARW, and the exiftool read that gets them for a list of files. |
+| `AdobeMatch` | Pure: the table (a Swift literal of the data file), and from an `ARWFacts` the tags to write, or the reason there is no full match. No file access. |
+| `DnglabConverter` | A `RawConverter`: the pre-start check, `dnglab convert --embed-raw false`, the match write, the read-back. |
+| `ConverterChoice` | Pure: the table of 13.4, from the facts and what is installed to the ordered list of converters to try. The run and the dry run share it. |
+| `AdobeConverter` | As before. |
+
+`DesqueezeJob` takes both converters, each optional, in place of one.
+
+### 13.8 Testing
+
+- `AdobeMatch` and `ConverterChoice` are pure and unit-tested: every row of
+  both tables, the rounding, ISO 50, an ISO with no row, a lens frame.
+- `DnglabConverter` on fakes: each failure point leaves the partial DNG
+  reported, and the pre-start check never does.
+- With dnglab installed and the fixtures present: a real conversion, then
+  the tags read back.
+- **The drift check.** With both converters installed and the fixtures
+  present, one test converts the fixture ARW with Adobe and with the app's
+  dnglab path, and compares every matched tag. It fails when a new Adobe
+  version, a new dnglab version, or new camera firmware changes a value.
+- The parser of the facts read is pinned with real exiftool output from both
+  kinds of frame, kept as text in the test.
+
+### 13.9 Known limits
+
+- The table is one camera, at firmware 5.00, compressed raw, ISO 50 and 80 to
+  12800 without 1250. Any other frame goes to Adobe, or gets the note.
+- A matched render is not bit-identical to Adobe's. The mean of each colour
+  channel is within 0.7%.
+- The table's numbers come from Adobe DNG Converter's output. Before a public
+  release, decide if a shipped app may carry them.
+- dnglab 0.8.0 is the version tested. The drift check is the guard for a
+  later one.
 
