@@ -129,14 +129,17 @@ public enum DesqueezeTool {
                         environment)
         }
         var runner = environment.runner
+        var verbose: @Sendable (String) -> Void = { _ in }
         if invocation.verbose {
             runner = LoggingProcessRunner(wrapping: runner, sink: environment.standardError)
+            verbose = environment.standardError
         }
         // One runner starts exiftool, dnglab and Adobe DNG Converter, so
-        // `--verbose` shows each command of all three.
+        // `--verbose` shows each command of all three. The same sink gets
+        // the line about a leftover work file that a converter removed.
         let operations = DesqueezeOperations(exiftool: exiftool, dnglab: environment.dnglab,
                                              dngConverter: environment.dngConverter, runner: runner,
-                                             backups: environment.backups)
+                                             backups: environment.backups, verbose: verbose)
         do {
             let result = try work(operations, url)
             environment.standardOutput(result.output)

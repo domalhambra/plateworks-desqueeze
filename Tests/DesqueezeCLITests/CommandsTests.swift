@@ -333,6 +333,38 @@ final class CommandsTests: XCTestCase {
         XCTAssertTrue(h.err.lines.contains("1/2 X.ARW"), "progress is still there")
     }
 
+    // A run that ended hard left the hidden work file of X.ARW. The next run
+    // removes it before the converter starts. `--verbose` says so on
+    // standard error, where the commands are, before the converter's own
+    // command. Without `--verbose` the run says nothing about it.
+    func testVerboseSaysThatALeftoverWorkFileWasRemovedBeforeTheConverterStarts() throws {
+        for withDnglab in [true, false] {
+            try h.touch("X.ARW", ".X.desqueeze-work.dng")
+            h.tools.facts = ["X.ARW": FakeTools.adapted]
+            h.hasDnglab = withDnglab
+            h.discarded.writes = []
+            let line = "Removed a leftover work file: .X.desqueeze-work.dng"
+
+            XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1", "--json", "--verbose"), 0)
+
+            XCTAssertEqual(try h.json()["converted"] as? Int, 1, "standard output is still one object")
+            XCTAssertEqual(h.discarded.writes, [".X.desqueeze-work.dng"], "the leftover went to the Trash")
+            XCTAssertEqual(h.err.lines.filter { $0.hasPrefix("Removed") }, [line], "dnglab \(withDnglab)")
+            let said = try XCTUnwrap(h.err.lines.firstIndex(of: line))
+            let converter = try XCTUnwrap(h.err.lines.firstIndex {
+                $0.hasPrefix(withDnglab ? "$ /fake/bin/dnglab convert" : "$ '/fake/Adobe DNG Converter' -c")
+            }, "\(h.err.lines)")
+            XCTAssertLessThan(said, converter, "the line stands before the command of the converter")
+
+            // The same folder state, without `--verbose`.
+            try FileManager.default.removeItem(at: h.shoot.appendingPathComponent("X.dng"))
+            try h.touch(".X.desqueeze-work.dng")
+            XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1", "--json"), 0)
+            XCTAssertEqual(h.err.lines.filter { $0.contains("leftover") }, [], "dnglab \(withDnglab)")
+            try FileManager.default.removeItem(at: h.shoot.appendingPathComponent("X.dng"))
+        }
+    }
+
     // dnglab alone, and a frame with no full match: converted, with a note.
     // The file is not failed and not blocked, so the exit code stays 0.
     func testWithDnglabAloneAnARWWithNoFullMatchIsConvertedWithANoteAndTheExitCodeIsZero() throws {

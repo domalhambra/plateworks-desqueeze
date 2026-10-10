@@ -271,9 +271,13 @@ final class ScriptedTools: @unchecked Sendable {
 
     /// The real converters on this runner. `backups` gets the leftover work
     /// file, as the job's backups get it in the app.
-    func converters(backups: BackupHandling, withDnglab: Bool = true, withAdobe: Bool = true) -> RawConverters {
+    ///
+    /// - Parameter verbose: gets the lines that `--verbose` shows beside the
+    ///   commands.
+    func converters(backups: BackupHandling, withDnglab: Bool = true, withAdobe: Bool = true,
+                    verbose: @escaping @Sendable (String) -> Void = { _ in }) -> RawConverters {
         RawConverters(exiftool: Self.exiftool, dnglab: withDnglab ? Self.dnglab : nil,
-                      adobe: withAdobe ? Self.adobe : nil, runner: runner, backups: backups)
+                      adobe: withAdobe ? Self.adobe : nil, runner: runner, backups: backups, verbose: verbose)
     }
 }
 

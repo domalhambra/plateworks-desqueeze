@@ -106,9 +106,17 @@ public struct RawConverters: Sendable {
     ///   13.3, step 1). Give the backups of the job, so every discarded file
     ///   goes to one place. There is no default, so no caller reaches the
     ///   Trash by leaving it out.
+    /// - Parameter verbose: gets one line for each leftover that a converter
+    ///   discarded in step 1, after `backups` took it:
+    ///   `Removed a leftover work file: <name>`. Give it the sink of the
+    ///   `LoggingProcessRunner`, so the line stands before the command of
+    ///   the converter. The default says nothing.
     public init(exiftool: URL, dnglab: URL?, adobe: URL?, runner: ProcessRunner = SystemProcessRunner(),
-                backups: BackupHandling) {
-        let discard: @Sendable (URL) throws -> Void = { try backups.trashFile($0) }
+                backups: BackupHandling, verbose: @escaping @Sendable (String) -> Void = { _ in }) {
+        let discard: @Sendable (URL) throws -> Void = {
+            try backups.trashFile($0)
+            verbose(ConverterRules.removedLeftover(named: $0.lastPathComponent))
+        }
         self.init(dnglab: dnglab.map {
                       DnglabConverter(executable: $0, exiftool: exiftool, runner: runner, discardLeftover: discard)
                   },
@@ -263,6 +271,13 @@ struct ConverterRules: Sendable {
     static func leftover(named name: String) -> String {
         "A leftover file, \(name), is beside this photo.\(ConverterOutput.hint(forFileNamed: name)) "
             + "Delete it, then run again."
+    }
+
+    /// What `--verbose` says after step 1 discarded a leftover: the app
+    /// removed a hidden file that the person never saw. The only place that
+    /// makes this line.
+    static func removedLeftover(named name: String) -> String {
+        "Removed a leftover work file: \(name)"
     }
 
     /// The converter, as a sentence names it: `dnglab returned 7.`

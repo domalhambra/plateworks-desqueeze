@@ -30,12 +30,16 @@ public struct DesqueezeOperations: Sendable {
     ///     leftover work file of an earlier run go. There is no default, so
     ///     no caller reaches the Trash by leaving it out. The window and the
     ///     tool name the Trash themselves.
+    ///   - verbose: gets one line for each leftover work file that a
+    ///     converter removed before it started: `Removed a leftover work
+    ///     file: <name>`. Give it the sink of the `LoggingProcessRunner`.
+    ///     The default says nothing.
     public init(exiftool: URL, dnglab: URL?, dngConverter: URL?, runner: ProcessRunner = SystemProcessRunner(),
-                backups: BackupHandling) {
+                backups: BackupHandling, verbose: @escaping @Sendable (String) -> Void = { _ in }) {
         self.init(exiftool: exiftool, dnglab: dnglab, dngConverter: dngConverter,
                   tag: ScaleTag(exiftool: exiftool, runner: runner),
                   converters: RawConverters(exiftool: exiftool, dnglab: dnglab, adobe: dngConverter, runner: runner,
-                                            backups: backups),
+                                            backups: backups, verbose: verbose),
                   backups: backups)
     }
 

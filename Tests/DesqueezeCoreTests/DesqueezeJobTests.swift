@@ -1044,6 +1044,68 @@ final class DesqueezeJobTests: XCTestCase {
         }
     }
 
+    // MARK: What --verbose says about a leftover (design 13.3, step 1)
+
+    // The app removes a hidden file that the person never saw. `--verbose`
+    // says so, with one line for each file, after the Trash took it. For
+    // either converter.
+    func testEachLeftoverThatStepOneRemovesIsOneVerboseLine() throws {
+        for withDnglab in [true, false] {
+            let real = try RealShoot()
+            defer { removeTemporaryFolder(real.shoot) }
+            try Data("cut off".utf8).write(to: real.work)
+            try Data("half a write".utf8).write(to: ConverterOutput.exiftoolLeftoverURL(for: real.work))
+            let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
+            let said = CallLog()
+
+            let summary = DesqueezeJob(
+                tag: tag,
+                converters: real.tools.converters(backups: files, withDnglab: withDnglab,
+                                                  verbose: { said.entries.append($0) }),
+                backups: files).run(real.snapshot, factor: .noStretch, convert: true)
+
+            XCTAssertEqual(summary.converted, 1)
+            XCTAssertEqual(said.entries, [
+                "Removed a leftover work file: .frame 1.desqueeze-work.dng",
+                "Removed a leftover work file: .frame 1.desqueeze-work.dng_exiftool_tmp",
+            ], "dnglab \(withDnglab)")
+            XCTAssertEqual(try real.names(in: real.trash),
+                           [".frame 1.desqueeze-work.dng", ".frame 1.desqueeze-work.dng_exiftool_tmp"])
+        }
+    }
+
+    // No line for a file that was not removed: the Trash refused it, or
+    // there was none. And no line for the partial output of a conversion
+    // that failed in this run: that file is no leftover, and the note of the
+    // ARW says where it went.
+    func testThereIsNoVerboseLineWhenNoLeftoverWasRemoved() throws {
+        let said = CallLog()
+        // The Trash refuses the leftover.
+        var real = try RealShoot()
+        try Data("cut off".utf8).write(to: real.work)
+        let refusing = FileBackups(trash: { _ in throw NamedError(text: "The Trash refused it.") })
+        _ = DesqueezeJob(tag: tag,
+                         converters: real.tools.converters(backups: refusing, verbose: { said.entries.append($0) }),
+                         backups: refusing).run(real.snapshot, factor: .noStretch, convert: true)
+        removeTemporaryFolder(real.shoot)
+        XCTAssertEqual(said.entries, [], "the Trash refused the leftover")
+
+        // No leftover. dnglab ends with a signal, and leaves its work file:
+        // the job sends that file to the Trash.
+        real = try RealShoot()
+        defer { removeTemporaryFolder(real.shoot) }
+        let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
+        real.tools.runner.failure = ProcessSignalError(signal: 15, stdout: "", stderr: "")
+        let summary = DesqueezeJob(
+            tag: tag,
+            converters: real.tools.converters(backups: files, withAdobe: false, verbose: { said.entries.append($0) }),
+            backups: files).run(real.snapshot, factor: .noStretch, convert: true)
+        XCTAssertEqual(try real.names(in: real.trash), [".frame 1.desqueeze-work.dng"], "the partial output moved")
+        XCTAssertEqual(summary.notes.map(\.detail),
+                       ["The program was ended by signal 15. The partial DNG was moved to the Trash."])
+        XCTAssertEqual(said.entries, [], "a partial output of this run is no leftover")
+    }
+
     // MARK: A leftover file of exiftool (design 13.3)
 
     // `<base>.dng_exiftool_tmp` stops the ARW before either converter
