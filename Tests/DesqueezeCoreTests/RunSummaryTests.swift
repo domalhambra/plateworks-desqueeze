@@ -12,10 +12,10 @@ final class RunSummaryTests: XCTestCase {
     // MARK: The kind of each note
 
     // The raw values are the JSON values. A front end reads them.
-    func testTheKindsAreTheSevenNamesOfTheDesignAndTheOneOfSection13() {
+    func testTheKindsAreTheSevenNamesOfTheDesignAndTheOnesOfSections13And14() {
         XCTAssertEqual(FileNote.Kind.allCases.map(\.rawValue), [
             "orphanBackup", "notConverted", "failed", "blockedByBackup", "leftoverBackup", "backupKept",
-            "folderReadOnly", "convertedUnmatched",
+            "folderReadOnly", "convertedUnmatched", "originalKept",
         ])
     }
 
@@ -88,7 +88,7 @@ final class RunSummaryTests: XCTestCase {
     func testADNGWithNoFullMatchCountsAsConvertedAndNeedsNoAttention() {
         h.facts.facts = ["X.ARW": .lens]
         let summary = h.job(withConverter: false, withDnglab: true)
-            .run(h.snapshot(pending: ["X.ARW"]), factor: factor, convert: true)
+            .run(h.snapshot(pending: ["X.ARW"]), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.notes.map(\.kind), [.convertedUnmatched])
         XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.convertedByAdobe], [1, 1, 0])
         XCTAssertEqual([summary.failed, summary.blocked, summary.unconvertedARWs], [0, 0, 0])
@@ -106,13 +106,14 @@ final class RunSummaryTests: XCTestCase {
     }
 
     func testAnOrphanBackupNoteHasItsKind() {
-        let summary = h.job().run(h.snapshot(orphans: ["gone.dng_original"]), factor: factor, convert: true)
+        let summary = h.job().run(h.snapshot(orphans: ["gone.dng_original"]),
+                                  factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.notes.map(\.kind), [.orphanBackup])
     }
 
     func testAFailedConversionNoteHasItsKind() {
         h.converter.fail = ["X.ARW"]
-        let summary = h.job().run(h.snapshot(pending: ["X.ARW"]), factor: factor, convert: true)
+        let summary = h.job().run(h.snapshot(pending: ["X.ARW"]), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.notes.map(\.kind), [.notConverted])
     }
 
@@ -120,7 +121,7 @@ final class RunSummaryTests: XCTestCase {
         h.tag.failWrites = ["write.dng"]
         h.tag.wrongReadBack = ["check.dng"]
         let summary = h.job().run(h.snapshot(dngs: [h.dng("write.dng"), h.dng("check.dng")]),
-                                  factor: factor, convert: true)
+                                  factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.notes.map(\.message), ["Not changed.", "Not changed. The backup was restored."])
         XCTAssertEqual(summary.notes.map(\.kind), [.failed, .failed])
     }
@@ -128,14 +129,16 @@ final class RunSummaryTests: XCTestCase {
     func testAFailedRestoreGivesTheKindFailed() {
         h.tag.wrongReadBack = ["A.dng"]
         h.backups.restoreError = NamedError(text: "The volume refused the rename.")
-        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng")]), factor: factor, convert: true)
+        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng")]),
+                                  factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.notes.map(\.kind), [.failed])
         XCTAssertEqual(summary.failed, 1)
     }
 
     func testABlockedFileNoteHasItsKindAndSaysBlocked() {
         h.backups.existing = ["A.dng"]
-        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng")]), factor: factor, convert: true)
+        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng")]),
+                                  factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.notes, [FileNote(
             name: "A.dng", kind: .blockedByBackup,
             message: "Blocked. An older backup, A.dng_original, is beside this file. Move it away, then run again.",
@@ -144,7 +147,8 @@ final class RunSummaryTests: XCTestCase {
 
     func testALeftoverBackupNoteHasItsKindAndTheExactSentence() {
         h.backups.existing = ["A.dng"]
-        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng", at: 1.5)]), factor: factor, convert: true)
+        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng", at: 1.5)]),
+                                  factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.notes, [FileNote(
             name: "A.dng", kind: .leftoverBackup,
             message: "Already at this value. A backup, A.dng_original, is beside this file.", detail: nil)])
@@ -152,7 +156,8 @@ final class RunSummaryTests: XCTestCase {
 
     func testARefusedTrashNoteHasItsKind() {
         h.backups.trashError = NamedError(text: "The Trash is not here.")
-        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng")]), factor: factor, convert: true)
+        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng")]),
+                                  factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.notes, [FileNote(
             name: "A.dng", kind: .backupKept,
             message: "Done. The backup stayed beside the file, because the Trash refused it.",
@@ -160,7 +165,8 @@ final class RunSummaryTests: XCTestCase {
     }
 
     func testAReadOnlyFolderNoteHasItsKind() {
-        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng")], writable: false), factor: factor, convert: true)
+        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng")], writable: false),
+                                  factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.notes.map(\.kind), [.folderReadOnly])
     }
 
@@ -169,7 +175,7 @@ final class RunSummaryTests: XCTestCase {
     func testABlockedFileIsNotInTheSkippedCount() {
         h.backups.existing = ["old backup.dng"]
         let files = [h.dng("old backup.dng"), h.dng("at value.dng", at: 1.5), h.dng("new.dng")]
-        let summary = h.job().run(h.snapshot(dngs: files), factor: factor, convert: true)
+        let summary = h.job().run(h.snapshot(dngs: files), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.blocked, 1)
         XCTAssertEqual(summary.skipped, 1)
         XCTAssertEqual(summary.set, 1)
@@ -180,7 +186,8 @@ final class RunSummaryTests: XCTestCase {
     // A file at the value with a leftover backup is skipped: it is at the value.
     func testALeftoverBackupFileIsSkippedNotBlocked() {
         h.backups.existing = ["A.dng"]
-        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng", at: 1.5)]), factor: factor, convert: true)
+        let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng", at: 1.5)]),
+                                  factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.skipped, 1)
         XCTAssertEqual(summary.blocked, 0)
     }
@@ -200,25 +207,30 @@ final class RunSummaryTests: XCTestCase {
         for (name, state, empty) in cases {
             for remove in [false, true] {
                 XCTAssertEqual(h.job().run(state, factor: remove ? .noStretch : factor, convert: !remove,
+                                           trashOriginals: false,
                                            remove: remove).folderIsEmpty, empty, "run \(name) \(remove)")
                 XCTAssertEqual(h.job().plan(state, factor: remove ? .noStretch : factor, convert: !remove,
+                                            trashOriginals: false,
                                             remove: remove).summary.folderIsEmpty, empty, "plan \(name) \(remove)")
             }
         }
-        XCTAssertEqual(h.job().run(h.snapshot(writable: false), factor: factor, convert: true).folderIsEmpty, true)
+        XCTAssertEqual(h.job().run(h.snapshot(writable: false),
+                                   factor: factor, convert: true, trashOriginals: false).folderIsEmpty, true)
     }
 
     // MARK: The ARW files a run left
 
     func testARunThatConvertsEveryPendingARWLeavesNone() {
-        let summary = h.job().run(h.snapshot(pending: ["X.ARW", "Y.ARW"]), factor: factor, convert: true)
+        let summary = h.job().run(h.snapshot(pending: ["X.ARW", "Y.ARW"]),
+                                  factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.converted, 2)
         XCTAssertEqual(summary.unconvertedARWs, 0)
     }
 
     func testWithNoConverterARunLeavesEveryPendingARW() {
         let summary = h.job(withConverter: false).run(
-            h.snapshot(dngs: [h.dng("A.dng")], pending: ["X.ARW", "Y.ARW"]), factor: factor, convert: true)
+            h.snapshot(dngs: [h.dng("A.dng")], pending: ["X.ARW", "Y.ARW"]), factor: factor, convert: true,
+            trashOriginals: false)
         XCTAssertEqual(summary.unconvertedARWs, 2)
         XCTAssertEqual(summary.set, 1)
         XCTAssertEqual(summary.failed, 0, "a missing converter is not a failed file")
@@ -227,7 +239,7 @@ final class RunSummaryTests: XCTestCase {
 
     func testARunToldNotToConvertLeavesEveryPendingARW() {
         let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng")], pending: ["X.ARW", "Y.ARW"]),
-                                  factor: factor, convert: false)
+                                  factor: factor, convert: false, trashOriginals: false)
         XCTAssertEqual(summary.unconvertedARWs, 2)
         XCTAssertEqual(summary.converted, 0)
         XCTAssertEqual(h.log.entries, ["write 1.5 1 A.dng", "read A.dng", "trash A.dng"])
@@ -235,7 +247,7 @@ final class RunSummaryTests: XCTestCase {
 
     func testRemoveNeverConvertsAndReportsNoARW() {
         let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng", at: 1.5)], pending: ["X.ARW", "Y.ARW"]),
-                                  factor: .noStretch, convert: false, remove: true)
+                                  factor: .noStretch, convert: false, trashOriginals: false, remove: true)
         XCTAssertEqual(summary.unconvertedARWs, 0)
         XCTAssertEqual(summary.set, 1)
     }
@@ -244,14 +256,14 @@ final class RunSummaryTests: XCTestCase {
     // are a run at factor 1, and it reports the ARW files it left.
     func testARunAtFactorOneWithNoConvertIsNotRemoveAndReportsTheARWFiles() {
         let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng", at: 1.5)], pending: ["X.ARW", "Y.ARW"]),
-                                  factor: .noStretch, convert: false)
+                                  factor: .noStretch, convert: false, trashOriginals: false)
         XCTAssertEqual(summary.unconvertedARWs, 2)
         XCTAssertEqual(summary.set, 1)
     }
 
     func testRemoveNeverConvertsEvenWhenToldToConvert() {
         let summary = h.job().run(h.snapshot(dngs: [h.dng("A.dng", at: 1.5)], pending: ["X.ARW"]),
-                                  factor: .noStretch, convert: true, remove: true)
+                                  factor: .noStretch, convert: true, trashOriginals: false, remove: true)
         XCTAssertEqual(summary.converted, 0)
         XCTAssertEqual(summary.unconvertedARWs, 0)
         XCTAssertEqual(h.log.entries, ["write 1 1 A.dng", "read A.dng", "trash A.dng"])
@@ -260,7 +272,8 @@ final class RunSummaryTests: XCTestCase {
     // The ARW is in `failed`, with a note. It also has no DNG, so it is left.
     func testAFailedConversionIsAlsoAnARWTheRunLeft() {
         h.converter.fail = ["X.ARW"]
-        let summary = h.job().run(h.snapshot(pending: ["X.ARW", "Y.ARW"]), factor: factor, convert: true)
+        let summary = h.job().run(h.snapshot(pending: ["X.ARW", "Y.ARW"]),
+                                  factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.converted, 1)
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(summary.unconvertedARWs, 1)
@@ -270,7 +283,7 @@ final class RunSummaryTests: XCTestCase {
         let flag = CancelFlag()
         h.converter.onConvert = { flag.cancel() }
         let summary = h.job().run(h.snapshot(pending: ["X.ARW", "Y.ARW", "Z.ARW"]), factor: factor,
-                                  convert: true, cancel: flag)
+                                  convert: true, trashOriginals: false, cancel: flag)
         XCTAssertTrue(summary.cancelled)
         XCTAssertEqual(summary.converted, 1)
         XCTAssertEqual(summary.unconvertedARWs, 2)
@@ -278,8 +291,9 @@ final class RunSummaryTests: XCTestCase {
 
     func testAReadOnlyFolderLeavesEveryPendingARWAndRemoveStillReportsNone() {
         let state = h.snapshot(dngs: [h.dng("A.dng")], pending: ["X.ARW"], writable: false)
-        XCTAssertEqual(h.job().run(state, factor: factor, convert: true).unconvertedARWs, 1)
-        XCTAssertEqual(h.job().run(state, factor: .noStretch, convert: false, remove: true).unconvertedARWs, 0)
+        XCTAssertEqual(h.job().run(state, factor: factor, convert: true, trashOriginals: false).unconvertedARWs, 1)
+        XCTAssertEqual(h.job().run(state, factor: .noStretch, convert: false,
+                                   trashOriginals: false, remove: true).unconvertedARWs, 0)
         XCTAssertEqual(h.log.entries, [])
     }
 
@@ -314,7 +328,8 @@ final class RunSummaryTests: XCTestCase {
     // The job with no converter, to the sentence: the count is the job's own.
     func testTheSentenceOfARunWithNoConverter() {
         let summary = h.job(withConverter: false).run(
-            h.snapshot(dngs: [h.dng("A.dng")], pending: ["X.ARW", "Y.ARW"]), factor: factor, convert: true)
+            h.snapshot(dngs: [h.dng("A.dng")], pending: ["X.ARW", "Y.ARW"]), factor: factor, convert: true,
+            trashOriginals: false)
         XCTAssertEqual(summary.unconvertedARWsLine(converterAvailable: false),
                        "2 ARW files were not converted. No converter is installed.")
     }

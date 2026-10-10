@@ -25,6 +25,11 @@ public struct FileNote: Equatable, Sendable, Identifiable, Codable {
         /// Converter is not installed (design 13.4). The file counts as
         /// converted. It is not failed and not blocked.
         case convertedUnmatched
+        /// An ARW that this run converted, and that stays in the folder
+        /// though the run was asked to move the originals to the Trash
+        /// (design 14.3). The name is the ARW's. It is information: the file
+        /// is not failed and not blocked.
+        case originalKept
     }
 
     public let name: String
@@ -125,6 +130,14 @@ extension FileNote {
                         message: "Converted. \(what) \(installAdobeForTheSameFile)", detail: why)
     }
 
+    /// The note for an original that stays (design 14.3). The sentences are
+    /// made at `OriginalDecision.KeepReason.sentence`, and nowhere else.
+    ///
+    /// - Parameter arw: the file name of the ARW.
+    static func originalKept(_ arw: String, because reason: OriginalDecision.KeepReason) -> FileNote {
+        FileNote(name: arw, kind: .originalKept, message: reason.sentence, detail: reason.detail)
+    }
+
     static func failed(_ dng: String, message: String, detail: String) -> FileNote {
         FileNote(name: dng, kind: .failed, message: message, detail: detail)
     }
@@ -164,6 +177,13 @@ public struct RunSummary: Equatable, Sendable {
     /// The pending ARW files of the run's own scan that have no DNG when the
     /// run returns. Remove reports 0. The rule is at `DesqueezeJob`.
     public var unconvertedARWs = 0
+    /// True when the run was asked to move the originals to the Trash
+    /// (design 14). Remove is never asked.
+    public var trashOriginals = false
+    /// The ARW files that the run moved to the Trash. It is 0 when
+    /// `trashOriginals` is false. In the summary of a `RunPlan`: the count
+    /// that a run gives when every step passes.
+    public var originalsInTrash = 0
     public var notes: [FileNote] = []
     public var cancelled = false
     /// True when the folder held no DNG, no ARW and no orphan backup, as
@@ -234,9 +254,28 @@ extension RunSummary {
         return "Converted with \(ConverterKind.dnglab.name): \(dnglab). With \(ConverterKind.adobe.name): \(adobe)."
     }
 
+    /// How many originals the run moved to the Trash, of the ARW files that
+    /// it converted (design 14.3): `Originals moved to the Trash: 11 of 12.`
+    /// Nil when the run was not asked to move them. The window shows it
+    /// under the counts, and VoiceOver hears it.
+    ///
+    /// This is for the summary of a real run, as `lightroomLine` is.
+    public var originalsLine: String? {
+        Self.originalsLine(asked: trashOriginals, moved: originalsInTrash, converted: converted, dryRun: false)
+    }
+
+    /// The one rule for the line about the originals. It exists only when
+    /// the option was on. A dry run has none: it moved nothing, and its
+    /// steps name each ARW that a run would move.
+    static func originalsLine(asked: Bool, moved: Int, converted: Int, dryRun: Bool) -> String? {
+        guard asked, !dryRun else { return nil }
+        return "Originals moved to the Trash: \(moved) of \(converted)."
+    }
+
     /// True when a file failed or was blocked. A front end then marks the
     /// result as one to look at. A stopped run with no such file is not one,
-    /// and a DNG with no full match (`convertedUnmatched`) is not one.
+    /// a DNG with no full match (`convertedUnmatched`) is not one, and an
+    /// original that stays (`originalKept`) is not one.
     public var needsAttention: Bool { failed > 0 || blocked > 0 }
 
     /// The sentence about the ARW files the run left, with the count. Nil
@@ -258,7 +297,9 @@ extension RunSummary {
 }
 
 /// One completed step of a run: how many steps are complete, how many the
-/// run has, and the file of this step.
+/// run has, and the file of this step. A conversion is one step, the tag of
+/// a DNG is one, and so is each ARW that the run handles when it moves the
+/// originals (design 14.3).
 public struct RunProgress: Equatable, Sendable {
     public let completed: Int
     public let total: Int

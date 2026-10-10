@@ -80,13 +80,13 @@ final class OperationsTests: XCTestCase {
     // The same choice in the run and in the dry run, through the entry points.
     func testWithBothConvertersAFullMatchGoesToDnglabInTheRunAndInTheDryRun() throws {
         h.facts.facts = ["X.ARW": .adapted]
-        let dry = try operations(withDnglab: true).run(shoot, factor: factor, dryRun: true)
+        let dry = try operations(withDnglab: true).run(shoot, factor: factor, trashOriginals: false, dryRun: true)
         XCTAssertEqual(h.log.entries, ["readFolder", "facts X.ARW"], "two reads, and no converter")
         XCTAssertEqual(dry.steps?.first, RunPlan.Step(name: "X.ARW", action: .convert, converter: .dnglab))
         XCTAssertEqual([dry.converted, dry.convertedByDnglab, dry.convertedByAdobe], [1, 1, 0])
 
         h.log.entries = []
-        let real = try operations(withDnglab: true).run(shoot, factor: factor)
+        let real = try operations(withDnglab: true).run(shoot, factor: factor, trashOriginals: false)
         XCTAssertEqual(Array(h.log.entries.prefix(3)), ["readFolder", "facts X.ARW", "dnglab X.ARW"])
         XCTAssertFalse(h.log.entries.contains("convert X.ARW"), "Adobe DNG Converter is not started")
         XCTAssertEqual([real.converted, real.convertedByDnglab, real.convertedByAdobe], [1, 1, 0])
@@ -94,7 +94,7 @@ final class OperationsTests: XCTestCase {
     }
 
     func testRunDoesTheRunAndReportsIt() throws {
-        let report = try operations().run(shoot, factor: factor)
+        let report = try operations().run(shoot, factor: factor, trashOriginals: false)
         XCTAssertEqual(h.log.entries, [
             "readFolder", "convert X.ARW",
             "write 1.5 1 A.dng", "read A.dng", "trash A.dng",
@@ -110,7 +110,7 @@ final class OperationsTests: XCTestCase {
     }
 
     func testADryRunChangesNothingAndGivesTheCountsOfTheRunThatFollows() throws {
-        let dry = try operations().run(shoot, factor: factor, dryRun: true)
+        let dry = try operations().run(shoot, factor: factor, trashOriginals: false, dryRun: true)
         XCTAssertEqual(h.log.entries, ["readFolder"], "no conversion, no write, no backup moved")
         XCTAssertTrue(dry.dryRun)
         XCTAssertEqual(dry.steps, [
@@ -119,7 +119,7 @@ final class OperationsTests: XCTestCase {
             RunPlan.Step(name: "B.dng", action: .skip), RunPlan.Step(name: "X.dng", action: .write),
         ])
 
-        let real = try operations().run(shoot, factor: factor)
+        let real = try operations().run(shoot, factor: factor, trashOriginals: false)
         XCTAssertEqual(RunReport(folder: shoot, factor: factor, summary: RunSummary()).dryRun, real.dryRun)
         XCTAssertEqual([dry.converted, dry.set, dry.skipped, dry.blocked, dry.failed, dry.unconvertedARWs],
                        [real.converted, real.set, real.skipped, real.blocked, real.failed, real.unconvertedARWs])
@@ -127,12 +127,13 @@ final class OperationsTests: XCTestCase {
     }
 
     func testRunWithNoConvertOrNoConverterLeavesTheARWAndSaysHowMany() throws {
-        let told = try operations().run(shoot, factor: factor, convert: false)
+        let told = try operations().run(shoot, factor: factor, convert: false, trashOriginals: false)
         XCTAssertEqual(told.converted, 0)
         XCTAssertEqual(told.unconvertedARWs, 1)
         XCTAssertFalse(h.log.entries.contains("convert X.ARW"))
 
-        let missing = try operations(withConverter: false).run(shoot, factor: factor, dryRun: true)
+        let missing = try operations(withConverter: false).run(shoot,
+                                                               factor: factor, trashOriginals: false, dryRun: true)
         XCTAssertEqual(missing.unconvertedARWs, 1)
         XCTAssertEqual(missing.steps?.map(\.action).contains(.convert), false)
     }
@@ -142,11 +143,11 @@ final class OperationsTests: XCTestCase {
     // files it left. Only `remove` leaves that line out.
     func testRunAtFactorOneWithNoConvertReportsTheARWFilesAndRemoveDoesNot() throws {
         let one = SqueezeFactor.noStretch
-        let run = try operations().run(shoot, factor: one, convert: false)
+        let run = try operations().run(shoot, factor: one, convert: false, trashOriginals: false)
         XCTAssertEqual(run.unconvertedARWs, 1)
         XCTAssertEqual(run.converted, 0)
 
-        let dryRun = try operations().run(shoot, factor: one, convert: false, dryRun: true)
+        let dryRun = try operations().run(shoot, factor: one, convert: false, trashOriginals: false, dryRun: true)
         XCTAssertEqual(dryRun.unconvertedARWs, 1)
 
         h.log.entries = []
@@ -176,7 +177,8 @@ final class OperationsTests: XCTestCase {
         var names: [String] = []
         let flag = CancelFlag()
         h.converter.onConvert = { flag.cancel() }
-        let stopped = try operations().run(shoot, factor: factor, cancel: flag) { names.append($0.name) }
+        let stopped = try operations().run(shoot, factor: factor,
+                                           trashOriginals: false, cancel: flag) { names.append($0.name) }
         XCTAssertTrue(stopped.stopped)
         XCTAssertEqual(names, ["X.ARW"])
         XCTAssertEqual(stopped.converted, 1)
@@ -191,8 +193,8 @@ final class OperationsTests: XCTestCase {
     func testEachOperationThrowsWhenTheFolderCannotBeScanned() {
         let missing = shoot.appendingPathComponent("No such folder")
         XCTAssertThrowsError(try operations().scan(missing))
-        XCTAssertThrowsError(try operations().run(missing, factor: factor))
-        XCTAssertThrowsError(try operations().run(missing, factor: factor, dryRun: true))
+        XCTAssertThrowsError(try operations().run(missing, factor: factor, trashOriginals: false))
+        XCTAssertThrowsError(try operations().run(missing, factor: factor, trashOriginals: false, dryRun: true))
         XCTAssertThrowsError(try operations().remove(missing))
         XCTAssertThrowsError(try operations().remove(missing, dryRun: true))
         XCTAssertEqual(h.log.entries, [])
@@ -214,7 +216,7 @@ final class OperationsTests: XCTestCase {
         // It reads the folder, and is ended at the first write.
         let fake = try script(#"case "$*" in *" -T "*) printf 'A.dng\t1 1\t-\n';; *) kill -TERM $$;; esac"#)
         let operations = DesqueezeOperations(exiftool: fake, dnglab: nil, dngConverter: nil, backups: h.backups)
-        let report = try operations.run(shoot, factor: factor)
+        let report = try operations.run(shoot, factor: factor, trashOriginals: false)
         XCTAssertEqual(report.failed, 2, "A.dng, and B.dng whose scale the script does not give")
         XCTAssertEqual(report.set, 0)
         let note = try XCTUnwrap(report.notes.first { $0.kind == .failed && $0.name == "A.dng" })
@@ -229,7 +231,7 @@ final class OperationsTests: XCTestCase {
             exiftool: exiftool, dnglab: nil, dngConverter: fake, tag: h.tag,
             converters: RawConverters(dnglab: nil, adobe: AdobeConverter(executable: fake, discardLeftover: { _ in }), facts: nil),
             backups: h.backups)
-        let report = try operations.run(shoot, factor: factor)
+        let report = try operations.run(shoot, factor: factor, trashOriginals: false)
         let note = try XCTUnwrap(report.notes.first { $0.kind == .notConverted })
         XCTAssertEqual(note.name, "X.ARW")
         XCTAssertEqual(note.detail, "The program was ended by signal 15.")
@@ -246,7 +248,7 @@ final class OperationsTests: XCTestCase {
                 dnglab: DnglabConverter(executable: fake, exiftool: exiftool, discardLeftover: { _ in }), adobe: nil,
                 facts: h.facts),
             backups: h.backups)
-        let report = try operations.run(shoot, factor: factor)
+        let report = try operations.run(shoot, factor: factor, trashOriginals: false)
         let note = try XCTUnwrap(report.notes.first { $0.kind == .notConverted })
         XCTAssertEqual(note.name, "X.ARW")
         XCTAssertEqual(note.detail, "The program was ended by signal 15.")
@@ -279,7 +281,7 @@ final class OperationsTests: XCTestCase {
         }
         let operations = DesqueezeOperations(exiftool: exiftool, dnglab: dnglabTool, dngConverter: converterTool,
                                              runner: runner, backups: h.backups)
-        let report = try operations.run(shoot, factor: factor)
+        let report = try operations.run(shoot, factor: factor, trashOriginals: false)
 
         XCTAssertEqual(runner.calls.map { URL(fileURLWithPath: $0.executable).lastPathComponent }, [
             "exiftool",             // the scan
@@ -314,7 +316,7 @@ final class OperationsTests: XCTestCase {
         }
         let operations = DesqueezeOperations(exiftool: exiftool, dnglab: nil, dngConverter: converterTool,
                                              runner: runner, backups: h.backups)
-        let report = try operations.run(shoot, factor: factor)
+        let report = try operations.run(shoot, factor: factor, trashOriginals: false)
         XCTAssertEqual(runner.calls.map(\.executable), [exiftool.path, converterTool.path])
         // The scan gives each file's path with its links resolved, so the names are compared.
         XCTAssertEqual(runner.calls.last?.arguments.map { URL(fileURLWithPath: $0).lastPathComponent },

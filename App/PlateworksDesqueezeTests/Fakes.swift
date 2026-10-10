@@ -136,6 +136,15 @@ final class FakeTag: ScaleTagging, @unchecked Sendable {
         defer { lock.unlock() }
         return written[file.path].map { Scale(horizontal: $0.value, vertical: 1) }
     }
+
+    /// The DNG names an ARW with its own base name, as each converter
+    /// writes it, and holds the scale that this fake wrote.
+    func readOriginalCheck(_ dng: URL) throws -> OriginalCheckTags {
+        lock.lock()
+        defer { lock.unlock() }
+        return OriginalCheckTags(originalRawFileName: dng.deletingPathExtension().lastPathComponent + ".ARW",
+                                 scale: written[dng.path].map { Scale(horizontal: $0.value, vertical: 1) })
+    }
 }
 
 /// Backups that are only a list. Nothing goes to the Trash.

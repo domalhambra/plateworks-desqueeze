@@ -48,6 +48,7 @@ in the built app. ``ToolLocator`` finds them on the Mac at run time.
 | The converters | ``RawConverter``, ``DnglabConverter``, ``AdobeConverter``, ``ConverterOutput``, ``ExclusiveRename`` | One ARW to one DNG, through a hidden work file and a rename that never replaces. |
 | The match | ``ARWFacts``, ``AdobeMatch``, ``ConverterChoice`` | The facts of an ARW, the tags that make a dnglab DNG render as Adobe's, and which converter gets the ARW. |
 | The job | ``DesqueezeJob``, ``FolderLock``, ``TagDecision``, ``RunPlan``, ``RunSummary``, ``FileNote`` | The run and the dry run, in order, with the counts and one note for each file that has something to say. One run in a folder at a time. |
+| The originals | ``OriginalDecision``, ``FileRecord``, ``OriginalState``, ``DNGCheck``, ``OriginalCheckTags`` | Whether an original ARW moves to the Trash, when the run was asked to move the originals: the function that decides, the record of a file and its compare, and the check of the DNG. |
 | The reports | ``DesqueezeOperations``, ``ScanReport``, ``RunReport``, ``ReportJSON`` | Scan, run and remove, each with a report that is ready to print as JSON. |
 | The text | ``FolderText``, ``ConverterText`` | Each sentence that more than one front end says, made once. |
 | The programs | ``ProcessRunner``, ``LoggingProcessRunner``, ``ToolLocator`` | Start a program with no shell, show each command for `--verbose`, and find the three programs. |
@@ -66,8 +67,8 @@ Three choices shape the code:
 
 ## One run, step by step
 
-``DesqueezeJob/run(folder:factor:convert:remove:cancel:progress:)`` works on
-one file at a time, in this order. <doc:SafetyRulesForCode> has the rule
+``DesqueezeJob/run(folder:factor:convert:trashOriginals:remove:cancel:progress:)``
+works on one file at a time, in this order. <doc:SafetyRulesForCode> has the rule
 behind each step.
 
 1. **Lock, then scan.** The run takes the ``FolderLock`` of the folder and
@@ -103,14 +104,29 @@ behind each step.
    factor.
 7. **Clear the backup, or put it back.** After a good read-back, the backup
    goes to the Trash. After a failed check, one rename puts the backup back.
+8. **Move the originals, only on request.** This step exists only when the
+   caller gave `trashOriginals` as true, and never for Remove. It starts
+   after the tag of the last DNG, and not after a cancel. For each ARW that
+   this run converted, ``OriginalDecision/decide(hasFullMatch:dngIsAtTheFactor:dng:original:)``
+   says "move" or "keep". The check of the DNG is ``DNGCheck``, with one
+   exiftool read (``ScaleTagging/readOriginalCheck(_:)``). The ARW is
+   compared with its ``FileRecord`` from before the conversion, as the last
+   thing before the move. The move is ``BackupHandling/trashFile(_:)``,
+   once. An ARW that stays gets a note of the kind `originalKept`.
 
 A cancel is honored between files, never in the middle of one. The result
 is a ``RunSummary``: the counts, and the notes.
 
-``DesqueezeJob/plan(folder:factor:convert:remove:)`` is the dry run. It
-makes the same scan and asks the same two functions, ``ConverterChoice`` and
-``TagDecision``, and it changes no file. So a dry run and the run that
-follows cannot disagree. It takes no lock.
+``DesqueezeJob/plan(folder:factor:convert:trashOriginals:remove:)`` is the
+dry run. It makes the same scan and asks the same three functions,
+``ConverterChoice``, ``TagDecision`` and ``OriginalDecision``, and it
+changes no file. So a dry run and the run that follows cannot disagree. It
+takes no lock.
+
+`trashOriginals` has no default value, in the job and in
+``DesqueezeOperations``. So each front end states it: the window gives the
+state of its box, the command line tool gives its flag, and the MCP server
+gives false, always.
 
 ## The two packages
 

@@ -191,7 +191,7 @@ final class FolderTextTests: XCTestCase {
     // The folder line and the note of a run are one sentence, made once.
     func testTheFolderLineOfAnOrphanIsTheLineOfTheNoteOfARun() {
         let snapshot = h.snapshot(orphans: ["lost.dng_original"])
-        let summary = h.job().run(snapshot, factor: SqueezeFactor(1.5)!, convert: true)
+        let summary = h.job().run(snapshot, factor: SqueezeFactor(1.5)!, convert: true, trashOriginals: false)
         XCTAssertEqual(snapshot.messages, summary.notes.map(\.line))
         XCTAssertEqual(summary.notes.map(\.line), [
             "lost.dng_original: A backup with no DNG beside it. Rename it to lost.dng to get the photo back.",

@@ -84,6 +84,10 @@ public struct DesqueezeOperations: Sendable {
     ///   - convert: false leaves the ARW files alone. The report still
     ///     counts them in `unconvertedARWs`, also at factor 1. Only `remove`
     ///     leaves that count out.
+    ///   - trashOriginals: true moves each ARW that this run converted to
+    ///     the Trash, when every line of design 14.2 holds for it. There is
+    ///     no default, so every caller states it: the command line tool
+    ///     gives its flag, and the MCP server always gives false.
     ///   - dryRun: true changes no file, and the report has the steps.
     ///   - cancel: stops the run after its current file, when it is set.
     ///   - progress: called after each step of a real run.
@@ -95,36 +99,39 @@ public struct DesqueezeOperations: Sendable {
         _ folder: URL,
         factor: SqueezeFactor,
         convert: Bool = true,
+        trashOriginals: Bool,
         dryRun: Bool = false,
         cancel: CancelFlag = CancelFlag(),
         progress: (RunProgress) -> Void = { _ in }
     ) throws -> RunReport {
-        try perform(folder, factor: factor, convert: convert, remove: false, dryRun: dryRun, cancel: cancel,
-                    progress: progress)
+        try perform(folder, factor: factor, convert: convert, trashOriginals: trashOriginals, remove: false,
+                    dryRun: dryRun, cancel: cancel, progress: progress)
     }
 
     /// Design 4.3 with factor 1 and no conversion. It reports no ARW files
-    /// left: Remove has no ARW work. It throws as `run` does.
+    /// left: Remove has no ARW work. It never moves an original (design
+    /// 14.2), so it takes no such request. It throws as `run` does.
     public func remove(
         _ folder: URL,
         dryRun: Bool = false,
         cancel: CancelFlag = CancelFlag(),
         progress: (RunProgress) -> Void = { _ in }
     ) throws -> RunReport {
-        try perform(folder, factor: .noStretch, convert: false, remove: true, dryRun: dryRun, cancel: cancel,
-                    progress: progress)
+        try perform(folder, factor: .noStretch, convert: false, trashOriginals: false, remove: true,
+                    dryRun: dryRun, cancel: cancel, progress: progress)
     }
 
     private func perform(
-        _ folder: URL, factor: SqueezeFactor, convert: Bool, remove: Bool, dryRun: Bool, cancel: CancelFlag,
-        progress: (RunProgress) -> Void
+        _ folder: URL, factor: SqueezeFactor, convert: Bool, trashOriginals: Bool, remove: Bool, dryRun: Bool,
+        cancel: CancelFlag, progress: (RunProgress) -> Void
     ) throws -> RunReport {
         if dryRun {
-            return RunReport(folder: folder, factor: factor,
-                             plan: try job.plan(folder: folder, factor: factor, convert: convert, remove: remove))
+            let plan = try job.plan(folder: folder, factor: factor, convert: convert,
+                                    trashOriginals: trashOriginals, remove: remove)
+            return RunReport(folder: folder, factor: factor, plan: plan)
         }
-        let summary = try job.run(folder: folder, factor: factor, convert: convert, remove: remove, cancel: cancel,
-                                  progress: progress)
+        let summary = try job.run(folder: folder, factor: factor, convert: convert, trashOriginals: trashOriginals,
+                                  remove: remove, cancel: cancel, progress: progress)
         return RunReport(folder: folder, factor: factor, summary: summary)
     }
 }

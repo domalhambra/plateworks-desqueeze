@@ -166,7 +166,7 @@ final class FolderScannerTests: XCTestCase {
         let job = DesqueezeJob(tag: tag, converters: RawConverters(dnglab: nil, adobe: FakeConverter(log: log),
                                                                    facts: nil), backups: backups)
 
-        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true, trashOriginals: false)
 
         XCTAssertEqual(log.entries, [], "no conversion, and no exiftool call")
         var expected = RunSummary()

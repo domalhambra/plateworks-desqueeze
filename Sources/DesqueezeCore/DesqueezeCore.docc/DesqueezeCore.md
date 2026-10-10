@@ -108,6 +108,14 @@ is no download. The build was tested on macOS 27.2 with Xcode 27 only.
 - ``CancelFlag``
 - ``InterruptWatcher``
 
+### The originals, on request
+
+- ``OriginalDecision``
+- ``OriginalState``
+- ``FileRecord``
+- ``DNGCheck``
+- ``OriginalCheckTags``
+
 ### Reports
 
 - ``DesqueezeOperations``

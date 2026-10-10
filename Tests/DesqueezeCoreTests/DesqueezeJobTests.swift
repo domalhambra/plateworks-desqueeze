@@ -50,7 +50,8 @@ final class DesqueezeJobTests: XCTestCase {
     }
 
     func testConvertsEveryPendingARWFirstThenTagsEveryDNG() {
-        let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]),
+                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, [
             "convert X.ARW",
             "write 1.5 1 A.dng", "read A.dng", "trash A.dng",
@@ -64,7 +65,8 @@ final class DesqueezeJobTests: XCTestCase {
 
     // The names are chosen so that name order (A, Z) is not run order (Z, A).
     func testNewDNGFilesAreTaggedLastNotInNameOrder() {
-        let summary = job().run(snapshot(dngs: [dng("Z.dng")], pending: ["A.ARW"]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [dng("Z.dng")], pending: ["A.ARW"]),
+                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, [
             "convert A.ARW",
             "write 1.5 1 Z.dng", "read Z.dng", "trash Z.dng",
@@ -74,7 +76,8 @@ final class DesqueezeJobTests: XCTestCase {
     }
 
     func testAFileAlreadyAtTheFactorGetsNoCall() {
-        let summary = job().run(snapshot(dngs: [dng("A.dng", at: 1.5)]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [dng("A.dng", at: 1.5)]),
+                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, [])
         XCTAssertEqual(summary.skipped, 1)
         XCTAssertEqual(summary.notes, [])
@@ -82,7 +85,7 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testAFileWithAnExistingBackupIsBlockedWithANote() {
         backups.existing = ["A.dng"]
-        let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, [])
         XCTAssertEqual(summary.blocked, 1)
         XCTAssertEqual(summary.skipped, 0, "skipped means only: already at this value")
@@ -96,7 +99,7 @@ final class DesqueezeJobTests: XCTestCase {
     func testAFileAlreadyAtTheFactorWithALeftoverBackupIsSkippedWithANote() {
         backups.existing = ["A.dng"]
         let summary = job().run(snapshot(dngs: [dng("A.dng", at: 1.5), dng("B.dng", at: 1.5)]),
-                                factor: factor, convert: true)
+                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, [])
         XCTAssertEqual(summary.skipped, 2)
         XCTAssertEqual(summary.failed, 0)
@@ -108,7 +111,8 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testAFailedWriteWithNoBackupDoesNotRestore() {
         tag.failWrites = ["A.dng"]
-        let summary = job().run(snapshot(dngs: [dng("A.dng"), dng("B.dng")]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [dng("A.dng"), dng("B.dng")]),
+                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, [
             "write 1.5 1 A.dng",
             "write 1.5 1 B.dng", "read B.dng", "trash B.dng",
@@ -120,7 +124,7 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testAFailedCheckRestoresTheBackup() {
         tag.wrongReadBack = ["A.dng"]
-        let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["write 1.5 1 A.dng", "read A.dng", "restore A.dng"])
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(summary.set, 0)
@@ -130,7 +134,7 @@ final class DesqueezeJobTests: XCTestCase {
     func testAFailedCheckWithAFailedRestoreSaysSoAndKeepsBothErrors() {
         tag.wrongReadBack = ["A.dng"]
         backups.restoreError = NamedError(text: "The volume refused the rename.")
-        let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["write 1.5 1 A.dng", "read A.dng", "restore A.dng"])
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(summary.set, 0)
@@ -143,7 +147,7 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testAReadBackThatThrowsAfterAGoodWriteCountsAsFailedAndRestores() {
         tag.failReads = ["A.dng"]
-        let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["write 1.5 1 A.dng", "read A.dng", "restore A.dng"])
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(summary.set, 0)
@@ -154,7 +158,7 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testAReadBackWithNoTagAfterAGoodWriteCountsAsFailedAndRestores() {
         tag.noReadBack = ["A.dng"]
-        let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["write 1.5 1 A.dng", "read A.dng", "restore A.dng"])
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(summary.set, 0)
@@ -165,7 +169,7 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testARefusedTrashCountsAsSetAndKeepsTheBackup() {
         backups.trashError = CocoaError(.fileWriteVolumeReadOnly)
-        let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [dng("A.dng")]), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.set, 1)
         XCTAssertEqual(summary.failed, 0)
         XCTAssertEqual(summary.notes.map(\.name), ["A.dng"])
@@ -175,7 +179,8 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testRemoveWritesOneOneAndNeverConverts() {
         let files = [dng("A.dng", at: 1.5), dng("B.dng", at: 1)]
-        let summary = job().run(snapshot(dngs: files, pending: ["X.ARW"]), factor: .noStretch, convert: false,
+        let summary = job().run(snapshot(dngs: files, pending: ["X.ARW"]),
+                                factor: .noStretch, convert: false, trashOriginals: false,
                                 remove: true)
         XCTAssertEqual(log.entries, ["write 1 1 A.dng", "read A.dng", "trash A.dng"])
         XCTAssertEqual(summary.converted, 0)
@@ -187,7 +192,8 @@ final class DesqueezeJobTests: XCTestCase {
     // so no caller can make Remove write a stretch.
     func testRemoveWritesOneOneWhateverFactorItWasGiven() {
         let files = [dng("A.dng", at: 1.5), dng("B.dng", at: 1), dng("C.dng", at: 2)]
-        let summary = job().run(snapshot(dngs: files), factor: factor, convert: false, remove: true)
+        let summary = job().run(snapshot(dngs: files),
+                                factor: factor, convert: false, trashOriginals: false, remove: true)
         XCTAssertEqual(log.entries, [
             "write 1 1 A.dng", "read A.dng", "trash A.dng",
             "write 1 1 C.dng", "read C.dng", "trash C.dng",
@@ -200,7 +206,7 @@ final class DesqueezeJobTests: XCTestCase {
     // "Unknown" is not "1 1". Remove must not skip a file that was never read.
     func testRemoveWritesAFileWhoseScaleIsUnknown() {
         let summary = job().run(snapshot(dngs: [unread("A.dng"), dng("B.dng", at: 1)]),
-                                factor: .noStretch, convert: false)
+                                factor: .noStretch, convert: false, trashOriginals: false)
         XCTAssertEqual(log.entries, ["write 1 1 A.dng", "read A.dng", "trash A.dng"])
         XCTAssertEqual(summary.set, 1)
         XCTAssertEqual(summary.skipped, 1)
@@ -209,7 +215,8 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testRemoveReportsAJunkFileAsFailed() {
         tag.failWrites = ["junk.dng"]
-        let summary = job().run(snapshot(dngs: [unread("junk.dng")]), factor: .noStretch, convert: false)
+        let summary = job().run(snapshot(dngs: [unread("junk.dng")]),
+                                factor: .noStretch, convert: false, trashOriginals: false)
         XCTAssertEqual(log.entries, ["write 1 1 junk.dng"])
         XCTAssertEqual(summary.skipped, 0)
         XCTAssertEqual(summary.failed, 1)
@@ -219,7 +226,8 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testApplyWritesAFileWhoseScaleIsUnknownAndReportsAJunkFileAsFailed() {
         tag.failWrites = ["junk.dng"]
-        let summary = job().run(snapshot(dngs: [unread("A.dng"), unread("junk.dng")]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [unread("A.dng"), unread("junk.dng")]),
+                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, [
             "write 1.5 1 A.dng", "read A.dng", "trash A.dng",
             "write 1.5 1 junk.dng",
@@ -234,7 +242,8 @@ final class DesqueezeJobTests: XCTestCase {
     // The job does not read a DNG that it just converted. The converter
     // writes no stretch, so a run at factor 1 has nothing to write.
     func testADNGTheJobJustConvertedHasAKnownScaleOfNoStretch() {
-        let summary = job().run(snapshot(dngs: [], pending: ["X.ARW"]), factor: .noStretch, convert: true)
+        let summary = job().run(snapshot(dngs: [], pending: ["X.ARW"]),
+                                factor: .noStretch, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["convert X.ARW"])
         XCTAssertEqual(summary.converted, 1)
         XCTAssertEqual(summary.skipped, 1)
@@ -244,7 +253,7 @@ final class DesqueezeJobTests: XCTestCase {
     func testAFailedConversionIsReportedAndTheRunContinues() {
         converter.fail = ["X.ARW"]
         let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW", "Y.ARW"]),
-                                factor: factor, convert: true)
+                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries.filter { $0.hasPrefix("convert") }, ["convert X.ARW", "convert Y.ARW"])
         XCTAssertFalse(log.entries.contains { $0.hasPrefix("trashFile") }, "no partial DNG, nothing to discard")
         XCTAssertFalse(log.entries.contains("write 1.5 1 X.dng"))
@@ -260,7 +269,7 @@ final class DesqueezeJobTests: XCTestCase {
     func testAPartialDNGFromAFailedConversionGoesToTheTrashAndTheNoteSaysSo() {
         converter.failWithPartial = ["X.ARW"]
         let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW", "Y.ARW"]),
-                                factor: factor, convert: true)
+                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries.filter { $0.hasPrefix("convert") || $0.hasPrefix("trashFile") }, [
             "convert X.ARW", "trashFile .X.desqueeze-work.dng", "convert Y.ARW",
         ], "the run continues with the next ARW")
@@ -276,7 +285,8 @@ final class DesqueezeJobTests: XCTestCase {
     func testARefusedTrashForAPartialDNGNamesTheFileToDelete() {
         converter.failWithPartial = ["X.ARW"]
         backups.trashFileError = NamedError(text: "The Trash refused it.")
-        let summary = job().run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [], pending: ["X.ARW"]),
+                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["convert X.ARW", "trashFile .X.desqueeze-work.dng"])
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(summary.unconvertedARWs, 1)
@@ -289,7 +299,7 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testAFailedConversionWithNoPartialDNGDiscardsNothing() {
         converter.fail = ["X.ARW"]
-        _ = job().run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+        _ = job().run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["convert X.ARW"])
     }
 
@@ -319,7 +329,7 @@ final class DesqueezeJobTests: XCTestCase {
 
         let summary = realJob.run(
             FolderSnapshot(folder: shoot, dngs: [], pendingARWs: [arw], orphanBackups: [], isWritable: true),
-            factor: factor, convert: true)
+            factor: factor, convert: true, trashOriginals: false)
 
         XCTAssertEqual(runner.calls.count, 1)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: shoot.path), ["a.ARW"],
@@ -345,7 +355,7 @@ final class DesqueezeJobTests: XCTestCase {
     func testAFullMatchGoesToDnglabAndAdobeIsNotStarted() {
         facts.facts = ["X.ARW": .adapted]
         let summary = job(withDnglab: true).run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]),
-                                                factor: factor, convert: true)
+                                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, [
             "facts X.ARW", "dnglab X.ARW",
             "write 1.5 1 A.dng", "read A.dng", "trash A.dng",
@@ -361,7 +371,7 @@ final class DesqueezeJobTests: XCTestCase {
     func testTheFactsOfAllPendingARWFilesAreReadWithOneCall() {
         facts.facts = ["X.ARW": .adapted, "Y.ARW": .adapted, "Z.ARW": .adapted]
         _ = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW", "Y.ARW", "Z.ARW"]),
-                                      factor: .noStretch, convert: true)
+                                      factor: .noStretch, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["facts X.ARW Y.ARW Z.ARW", "dnglab X.ARW", "dnglab Y.ARW", "dnglab Z.ARW"])
     }
 
@@ -370,7 +380,8 @@ final class DesqueezeJobTests: XCTestCase {
     func testWhenDnglabFailsAdobeConvertsAndTheARWIsNotFailed() {
         facts.facts = ["X.ARW": .adapted]
         dnglab.fail = ["X.ARW"]
-        let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+        let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"]),
+                                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, [
             "facts X.ARW", "dnglab X.ARW", "convert X.ARW",
             "write 1.5 1 X.dng", "read X.dng", "trash X.dng",
@@ -386,7 +397,8 @@ final class DesqueezeJobTests: XCTestCase {
     func testTheWorkFileOfAFailedDnglabIsDiscardedBeforeAdobeGetsTheARW() {
         facts.facts = ["X.ARW": .adapted]
         dnglab.failWithPartial = ["X.ARW"]
-        let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+        let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"]),
+                                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(conversionLog, ["facts X.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng",
                                        "convert X.ARW"])
         XCTAssertEqual([summary.convertedByAdobe, summary.failed], [1, 0])
@@ -400,7 +412,7 @@ final class DesqueezeJobTests: XCTestCase {
         dnglab.failWithPartial = ["X.ARW"]
         converter.fail = ["X.ARW"]
         let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW", "Y.ARW"]),
-                                                factor: factor, convert: true)
+                                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(conversionLog, [
             "facts X.ARW Y.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng", "convert X.ARW", "dnglab Y.ARW",
         ], "the run goes on with the next ARW")
@@ -416,7 +428,8 @@ final class DesqueezeJobTests: XCTestCase {
         facts.facts = ["X.ARW": .adapted]
         dnglab.failWithPartial = ["X.ARW"]
         let summary = job(withConverter: false, withDnglab: true)
-            .run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]), factor: factor, convert: true)
+            .run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]),
+                 factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(conversionLog, ["facts X.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng"])
         XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs, summary.set], [0, 1, 1, 1])
         XCTAssertEqual(summary.notes, [FileNote(
@@ -429,7 +442,8 @@ final class DesqueezeJobTests: XCTestCase {
     func testWithNoFullMatchAndBothInstalledOnlyAdobeIsStarted() {
         facts.facts = ["lens.ARW": .lens, "iso.ARW": .iso1250]
         let summary = job(withDnglab: true).run(
-            snapshot(dngs: [], pending: ["iso.ARW", "lens.ARW", "unread.ARW"]), factor: .noStretch, convert: true)
+            snapshot(dngs: [], pending: ["iso.ARW", "lens.ARW", "unread.ARW"]), factor: .noStretch, convert: true,
+            trashOriginals: false)
         XCTAssertEqual(log.entries, [
             "facts iso.ARW lens.ARW unread.ARW", "convert iso.ARW", "convert lens.ARW", "convert unread.ARW",
         ])
@@ -442,7 +456,7 @@ final class DesqueezeJobTests: XCTestCase {
         facts.facts = ["lens.ARW": .lens]
         converter.fail = ["lens.ARW"]
         let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["lens.ARW"]), factor: factor,
-                                                convert: true)
+                                                convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["facts lens.ARW", "convert lens.ARW"])
         XCTAssertEqual([summary.converted, summary.failed], [0, 1])
         XCTAssertEqual(summary.notes, [FileNote(name: "lens.ARW", kind: .notConverted, message: "Not converted.",
@@ -455,7 +469,7 @@ final class DesqueezeJobTests: XCTestCase {
         facts.facts = ["lens.ARW": .lens, "iso.ARW": .iso1250, "full.ARW": .adapted]
         let summary = job(withConverter: false, withDnglab: true).run(
             snapshot(dngs: [], pending: ["full.ARW", "iso.ARW", "lens.ARW", "unread.ARW"]),
-            factor: factor, convert: true)
+            factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(conversionLog, [
             "facts full.ARW iso.ARW lens.ARW unread.ARW",
             "dnglab full.ARW", "dnglab iso.ARW", "dnglab lens.ARW", "dnglab unread.ARW",
@@ -485,7 +499,7 @@ final class DesqueezeJobTests: XCTestCase {
     func testAnARWThatIsNotCompressedRawGoesToAdobeWhenBothAreInstalled() {
         facts.facts = ["X.ARW": .uncompressed, "Y.ARW": .adapted]
         let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW", "Y.ARW"]), factor: .noStretch,
-                                                convert: true)
+                                                convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["facts X.ARW Y.ARW", "convert X.ARW", "dnglab Y.ARW"])
         XCTAssertEqual([summary.convertedByDnglab, summary.convertedByAdobe], [1, 1])
         XCTAssertEqual(summary.notes, [])
@@ -496,7 +510,7 @@ final class DesqueezeJobTests: XCTestCase {
     func testAnARWThatIsNotCompressedRawConvertsWithANoteWhenDnglabIsAlone() {
         facts.facts = ["X.ARW": .uncompressed]
         let summary = job(withConverter: false, withDnglab: true)
-            .run(snapshot(dngs: [], pending: ["X.ARW"]), factor: .noStretch, convert: true)
+            .run(snapshot(dngs: [], pending: ["X.ARW"]), factor: .noStretch, convert: true, trashOriginals: false)
         XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.failed], [1, 1, 0])
         XCTAssertEqual(summary.notes, [FileNote(
             name: "X.dng", kind: .convertedUnmatched,
@@ -517,7 +531,8 @@ final class DesqueezeJobTests: XCTestCase {
             let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
 
             let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files, withAdobe: false),
-                                       backups: files).run(real.snapshot, factor: .noStretch, convert: true)
+                                       backups: files).run(real.snapshot,
+                                                           factor: .noStretch, convert: true, trashOriginals: false)
 
             XCTAssertEqual(summary.convertedByDnglab, 1, kind)
             let write = try XCTUnwrap(real.tools.runner.calls.first { $0.arguments.contains("-overwrite_original") })
@@ -533,7 +548,7 @@ final class DesqueezeJobTests: XCTestCase {
         facts.facts = ["lens.ARW": .lens]
         tag.failWrites = ["lens.dng"]
         let summary = job(withConverter: false, withDnglab: true)
-            .run(snapshot(dngs: [], pending: ["lens.ARW"]), factor: factor, convert: true)
+            .run(snapshot(dngs: [], pending: ["lens.ARW"]), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.notes.map(\.kind), [.convertedUnmatched, .failed])
         XCTAssertEqual(summary.notes.map(\.name), ["lens.dng", "lens.dng"])
         XCTAssertEqual([summary.converted, summary.failed], [1, 1])
@@ -542,7 +557,8 @@ final class DesqueezeJobTests: XCTestCase {
     // With Adobe alone, no fact changes the choice, so no one reads them.
     func testWithAdobeAloneNoFactsAreReadAndEveryARWGoesToAdobe() {
         facts.facts = ["X.ARW": .adapted]
-        let summary = job().run(snapshot(dngs: [], pending: ["X.ARW"]), factor: .noStretch, convert: true)
+        let summary = job().run(snapshot(dngs: [], pending: ["X.ARW"]),
+                                factor: .noStretch, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["convert X.ARW"])
         XCTAssertEqual([summary.convertedByDnglab, summary.convertedByAdobe], [0, 1])
         XCTAssertEqual(converter.facts, ["X.ARW": ARWFacts.none])
@@ -551,7 +567,7 @@ final class DesqueezeJobTests: XCTestCase {
     func testWithNeitherConverterTheARWFilesWaitAndNoFactsAreRead() {
         facts.facts = ["X.ARW": .adapted]
         let summary = job(withConverter: false).run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]),
-                                                    factor: factor, convert: true)
+                                                    factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["write 1.5 1 A.dng", "read A.dng", "trash A.dng"])
         XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs, summary.set], [0, 0, 1, 1])
         XCTAssertEqual(summary.notes, [], "a missing converter is not a failed file")
@@ -559,11 +575,12 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testARunThatConvertsNothingReadsNoFacts() {
         let state = snapshot(dngs: [dng("A.dng", at: 1.5)], pending: ["X.ARW"])
-        _ = job(withDnglab: true).run(state, factor: factor, convert: false)
-        _ = job(withDnglab: true).run(state, factor: .noStretch, convert: true, remove: true)
-        _ = job(withDnglab: true).run(snapshot(dngs: [dng("A.dng", at: 1.5)]), factor: factor, convert: true)
+        _ = job(withDnglab: true).run(state, factor: factor, convert: false, trashOriginals: false)
+        _ = job(withDnglab: true).run(state, factor: .noStretch, convert: true, trashOriginals: false, remove: true)
+        _ = job(withDnglab: true).run(snapshot(dngs: [dng("A.dng", at: 1.5)]),
+                                      factor: factor, convert: true, trashOriginals: false)
         _ = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"], writable: false), factor: factor,
-                                      convert: true)
+                                      convert: true, trashOriginals: false)
         XCTAssertFalse(log.entries.contains { $0.hasPrefix("facts") || $0.hasPrefix("dnglab") }, "\(log.entries)")
     }
 
@@ -572,7 +589,7 @@ final class DesqueezeJobTests: XCTestCase {
         facts.facts = ["X.ARW": .adapted, "Y.ARW": .lens, "Z.ARW": .adapted]
         dnglab.fail = ["Z.ARW"]
         let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW", "Y.ARW", "Z.ARW"]),
-                                                factor: .noStretch, convert: true)
+                                                factor: .noStretch, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, [
             "facts X.ARW Y.ARW Z.ARW", "dnglab X.ARW", "convert Y.ARW", "dnglab Z.ARW", "convert Z.ARW",
         ])
@@ -586,7 +603,8 @@ final class DesqueezeJobTests: XCTestCase {
         facts.facts = ["X.ARW": .adapted]
         dnglab.refuse = ["X.ARW"]
         converter.refuse = ["X.ARW"]
-        let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+        let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"]),
+                                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["facts X.ARW", "dnglab X.ARW", "convert X.ARW"], "nothing is moved")
         XCTAssertEqual(summary.notes, [FileNote(name: "X.ARW", kind: .notConverted, message: "Not converted.",
                                                 detail: "A DNG with this name exists already. Not converted.")])
@@ -603,7 +621,7 @@ final class DesqueezeJobTests: XCTestCase {
         dnglab.failWithPartial = ["X.ARW"]
         backups.trashFileError = NamedError(text: "The Trash refused it.")
         let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW", "Y.ARW"]), factor: .noStretch,
-                                                convert: true)
+                                                convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["facts X.ARW Y.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng",
                                      "dnglab Y.ARW"], "no Adobe DNG Converter for X.ARW, and the run goes on")
         XCTAssertEqual(summary.notes, [FileNote(
@@ -624,7 +642,7 @@ final class DesqueezeJobTests: XCTestCase {
         facts.facts = ["X.ARW": .adapted, "Y.ARW": .adapted]
         dnglab.nameTakenAtRename = ["X.ARW"]
         let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW", "Y.ARW"]), factor: .noStretch,
-                                                convert: true)
+                                                convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["facts X.ARW Y.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng",
                                      "dnglab Y.ARW"], "no Adobe DNG Converter for X.ARW, and X.dng is not moved")
         XCTAssertEqual(summary.notes, [FileNote(name: "X.ARW", kind: .notConverted, message: "Not converted.",
@@ -637,7 +655,8 @@ final class DesqueezeJobTests: XCTestCase {
         facts.facts = ["X.ARW": .adapted]
         dnglab.nameTakenAtRename = ["X.ARW"]
         backups.trashFileError = NamedError(text: "The Trash refused it.")
-        let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+        let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"]),
+                                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["facts X.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng"])
         XCTAssertEqual(summary.notes.map(\.detail), [
             "A DNG with this name exists already. Not converted. "
@@ -661,7 +680,7 @@ final class DesqueezeJobTests: XCTestCase {
         if nameTaken { fake.nameTakenAtRename = ["X.ARW"] } else { fake.failWithPartial = ["X.ARW"] }
         fake.reportedPartial = reported
         let summary = job(withConverter: kind == .adobe, withDnglab: kind == .dnglab)
-            .run(snapshot(dngs: dngs, pending: ["X.ARW"]), factor: factor, convert: true)
+            .run(snapshot(dngs: dngs, pending: ["X.ARW"]), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.failed, 1, "\(kind)")
         return (log.entries.filter { !$0.hasPrefix("facts") }, summary.notes.last?.detail)
     }
@@ -739,7 +758,7 @@ final class DesqueezeJobTests: XCTestCase {
         converter.fail = ["Y.ARW"]
         var updates: [RunProgress] = []
         _ = job(withDnglab: true).run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW", "Y.ARW"]), factor: factor,
-                                      convert: true) { updates.append($0) }
+                                      convert: true, trashOriginals: false) { updates.append($0) }
         XCTAssertEqual(updates.map(\.name), ["X.ARW", "Y.ARW", "A.dng", "X.dng"])
         XCTAssertEqual(updates.map(\.completed), [1, 2, 3, 4])
         XCTAssertEqual(updates.map(\.total), [5, 4, 4, 4], "Y.ARW made no DNG, so its tag step is gone")
@@ -750,7 +769,7 @@ final class DesqueezeJobTests: XCTestCase {
         let flag = CancelFlag()
         dnglab.onConvert = { flag.cancel() }
         let summary = job(withDnglab: true).run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW", "Y.ARW"]),
-                                                factor: factor, convert: true, cancel: flag)
+                                                factor: factor, convert: true, trashOriginals: false, cancel: flag)
         XCTAssertEqual(log.entries, ["facts X.ARW Y.ARW", "dnglab X.ARW"])
         XCTAssertTrue(summary.cancelled)
         XCTAssertEqual([summary.convertedByDnglab, summary.unconvertedARWs, summary.set], [1, 1, 0])
@@ -767,7 +786,8 @@ final class DesqueezeJobTests: XCTestCase {
         dnglab.onConvert = { flag.cancel() }
         var updates: [RunProgress] = []
         let summary = job(withDnglab: true).run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW", "Y.ARW"]),
-                                                factor: factor, convert: true, cancel: flag) { updates.append($0) }
+                                                factor: factor, convert: true, trashOriginals: false,
+                                                cancel: flag) { updates.append($0) }
         XCTAssertEqual(log.entries, ["facts X.ARW Y.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng"],
                        "no Adobe DNG Converter, no next ARW, no tag")
         XCTAssertTrue(summary.cancelled)
@@ -786,7 +806,7 @@ final class DesqueezeJobTests: XCTestCase {
         dnglab.fail = ["X.ARW"]
         dnglab.onConvert = { flag.cancel() }
         let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor,
-                                                convert: true, cancel: flag)
+                                                convert: true, trashOriginals: false, cancel: flag)
         XCTAssertEqual(log.entries, ["facts X.ARW", "dnglab X.ARW"])
         XCTAssertTrue(summary.cancelled, "Adobe DNG Converter was not tried, so work is left undone")
         XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs], [0, 1, 1])
@@ -801,7 +821,8 @@ final class DesqueezeJobTests: XCTestCase {
         dnglab.fail = ["X.ARW"]
         dnglab.onConvert = { flag.cancel() }
         let summary = job(withConverter: false, withDnglab: true)
-            .run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true, cancel: flag)
+            .run(snapshot(dngs: [], pending: ["X.ARW"]),
+                 factor: factor, convert: true, trashOriginals: false, cancel: flag)
         XCTAssertFalse(summary.cancelled)
         XCTAssertEqual([summary.failed, summary.unconvertedARWs], [1, 1])
     }
@@ -841,7 +862,7 @@ final class DesqueezeJobTests: XCTestCase {
 
         let summary = DesqueezeJob(tag: tag, converters: converters, backups: files).run(
             FolderSnapshot(folder: shoot, dngs: [], pendingARWs: [arw], orphanBackups: [], isWritable: true),
-            factor: .noStretch, convert: true)
+            factor: .noStretch, convert: true, trashOriginals: false)
 
         XCTAssertEqual(dnglabRunner.calls.count, 1, "no match write after a signal")
         XCTAssertEqual(dnglabRunner.calls.first?.arguments.last, shoot.appendingPathComponent(".a.desqueeze-work.dng").path)
@@ -879,7 +900,8 @@ final class DesqueezeJobTests: XCTestCase {
         let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
 
         let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files, withAdobe: false),
-                                   backups: files).run(real.snapshot, factor: factor, convert: true)
+                                   backups: files).run(real.snapshot,
+                                                       factor: factor, convert: true, trashOriginals: false)
 
         XCTAssertEqual(summary.notes, [FileNote(
             name: "frame 1.ARW", kind: .notConverted, message: "Not converted.",
@@ -906,7 +928,7 @@ final class DesqueezeJobTests: XCTestCase {
                                       isWritable: true)
 
         let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files), backups: files)
-            .run(snapshot, factor: .noStretch, convert: true)
+            .run(snapshot, factor: .noStretch, convert: true, trashOriginals: false)
 
         XCTAssertEqual(summary.notes, [FileNote(
             name: longName, kind: .notConverted, message: "Not converted.",
@@ -961,7 +983,7 @@ final class DesqueezeJobTests: XCTestCase {
         let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
 
         let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files), backups: files)
-            .run(real.snapshot, factor: .noStretch, convert: true)
+            .run(real.snapshot, factor: .noStretch, convert: true, trashOriginals: false)
 
         XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.failed], [1, 1, 0])
         XCTAssertEqual(summary.notes, [])
@@ -985,7 +1007,8 @@ final class DesqueezeJobTests: XCTestCase {
         let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
 
         let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files, withDnglab: false),
-                                   backups: files).run(real.snapshot, factor: .noStretch, convert: true)
+                                   backups: files).run(real.snapshot,
+                                                       factor: .noStretch, convert: true, trashOriginals: false)
 
         XCTAssertEqual([summary.converted, summary.convertedByAdobe, summary.failed], [1, 1, 0])
         XCTAssertEqual(summary.notes, [])
@@ -1012,7 +1035,7 @@ final class DesqueezeJobTests: XCTestCase {
 
             let summary = DesqueezeJob(
                 tag: tag, converters: real.tools.converters(backups: files, withDnglab: withDnglab, withAdobe: withAdobe),
-                backups: files).run(real.snapshot, factor: .noStretch, convert: true)
+                backups: files).run(real.snapshot, factor: .noStretch, convert: true, trashOriginals: false)
 
             XCTAssertEqual(summary.notes, [FileNote(
                 name: "frame 1.ARW", kind: .notConverted, message: "Not converted.",
@@ -1056,7 +1079,7 @@ final class DesqueezeJobTests: XCTestCase {
                 let summary = DesqueezeJob(
                     tag: tag,
                     converters: real.tools.converters(backups: files, withDnglab: withDnglab, withAdobe: withAdobe),
-                    backups: files).run(real.snapshot, factor: factor, convert: true)
+                    backups: files).run(real.snapshot, factor: factor, convert: true, trashOriginals: false)
 
                 XCTAssertEqual(summary.notes, [FileNote(
                     name: "frame 1.ARW", kind: .notConverted, message: "Not converted.",
@@ -1095,7 +1118,7 @@ final class DesqueezeJobTests: XCTestCase {
                 tag: tag,
                 converters: real.tools.converters(backups: files, withDnglab: withDnglab,
                                                   verbose: { said.entries.append($0) }),
-                backups: files).run(real.snapshot, factor: .noStretch, convert: true)
+                backups: files).run(real.snapshot, factor: .noStretch, convert: true, trashOriginals: false)
 
             XCTAssertEqual(summary.converted, 1)
             XCTAssertEqual(said.entries, [
@@ -1119,7 +1142,7 @@ final class DesqueezeJobTests: XCTestCase {
         let refusing = FileBackups(trash: { _ in throw NamedError(text: "The Trash refused it.") })
         _ = DesqueezeJob(tag: tag,
                          converters: real.tools.converters(backups: refusing, verbose: { said.entries.append($0) }),
-                         backups: refusing).run(real.snapshot, factor: .noStretch, convert: true)
+                         backups: refusing).run(real.snapshot, factor: .noStretch, convert: true, trashOriginals: false)
         removeTemporaryFolder(real.shoot)
         XCTAssertEqual(said.entries, [], "the Trash refused the leftover")
 
@@ -1132,7 +1155,7 @@ final class DesqueezeJobTests: XCTestCase {
         let summary = DesqueezeJob(
             tag: tag,
             converters: real.tools.converters(backups: files, withAdobe: false, verbose: { said.entries.append($0) }),
-            backups: files).run(real.snapshot, factor: .noStretch, convert: true)
+            backups: files).run(real.snapshot, factor: .noStretch, convert: true, trashOriginals: false)
         XCTAssertEqual(try real.names(in: real.trash), [".frame 1.desqueeze-work.dng"], "the partial output moved")
         XCTAssertEqual(summary.notes.map(\.detail),
                        ["The program was ended by signal 15. The partial DNG was moved to the Trash."])
@@ -1156,7 +1179,7 @@ final class DesqueezeJobTests: XCTestCase {
 
             let summary = DesqueezeJob(
                 tag: tag, converters: real.tools.converters(backups: files, withDnglab: withDnglab, withAdobe: withAdobe),
-                backups: files).run(real.snapshot, factor: factor, convert: true)
+                backups: files).run(real.snapshot, factor: factor, convert: true, trashOriginals: false)
 
             XCTAssertEqual(summary.notes, [FileNote(
                 name: "frame 1.ARW", kind: .notConverted, message: "Not converted.",
@@ -1186,7 +1209,7 @@ final class DesqueezeJobTests: XCTestCase {
 
             let summary = DesqueezeJob(
                 tag: tag, converters: real.tools.converters(backups: files, withDnglab: withDnglab, withAdobe: withAdobe),
-                backups: files).run(real.snapshot, factor: .noStretch, convert: true)
+                backups: files).run(real.snapshot, factor: .noStretch, convert: true, trashOriginals: false)
 
             XCTAssertEqual(summary.notes, [], "dnglab \(withDnglab), Adobe \(withAdobe)")
             XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs], [1, 0, 0])
@@ -1207,7 +1230,8 @@ final class DesqueezeJobTests: XCTestCase {
         let adobe = AdobeConverter(executable: ScriptedTools.adobe, runner: real.tools.runner,
                                    discardLeftover: { _ in XCTFail("there is no leftover work file") })
         let summary = DesqueezeJob(tag: tag, converters: RawConverters(dnglab: nil, adobe: adobe, facts: nil),
-                                   backups: backups).run(real.snapshot, factor: factor, convert: true)
+                                   backups: backups).run(real.snapshot,
+                                                         factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.notes.map(\.detail), [
             "A leftover file, frame 1.dng_exiftool_tmp, is beside this photo. Delete it, then run again.",
         ])
@@ -1221,7 +1245,7 @@ final class DesqueezeJobTests: XCTestCase {
         defer { removeTemporaryFolder(real.shoot) }
         let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
         let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files), backups: files)
-            .run(real.snapshot, factor: .noStretch, convert: true)
+            .run(real.snapshot, factor: .noStretch, convert: true, trashOriginals: false)
         XCTAssertEqual([summary.convertedByDnglab, summary.failed], [1, 0])
         XCTAssertEqual(try real.names(in: real.trash), [])
         XCTAssertEqual(try real.names(in: real.shoot), ["frame 1.ARW", "frame 1.dng"])
@@ -1229,7 +1253,7 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testWithNoConverterTheARWFilesWaitAndTheDNGFilesRun() {
         let summary = job(withConverter: false).run(
-            snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]), factor: factor, convert: true)
+            snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]), factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["write 1.5 1 A.dng", "read A.dng", "trash A.dng"])
         XCTAssertEqual(summary.converted, 0)
         XCTAssertEqual(summary.set, 1)
@@ -1239,7 +1263,7 @@ final class DesqueezeJobTests: XCTestCase {
         let flag = CancelFlag()
         tag.onWrite = { flag.cancel() }
         let summary = job().run(snapshot(dngs: [dng("A.dng"), dng("B.dng")]), factor: factor,
-                                convert: true, cancel: flag)
+                                convert: true, trashOriginals: false, cancel: flag)
         XCTAssertEqual(log.entries, ["write 1.5 1 A.dng", "read A.dng", "trash A.dng"])
         XCTAssertTrue(summary.cancelled)
         XCTAssertEqual(summary.set, 1)
@@ -1249,7 +1273,7 @@ final class DesqueezeJobTests: XCTestCase {
         let flag = CancelFlag()
         converter.onConvert = { flag.cancel() }
         let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW", "Y.ARW"]), factor: factor,
-                                convert: true, cancel: flag)
+                                convert: true, trashOriginals: false, cancel: flag)
         XCTAssertEqual(log.entries, ["convert X.ARW"])
         XCTAssertTrue(summary.cancelled)
         XCTAssertEqual(summary.converted, 1)
@@ -1260,7 +1284,7 @@ final class DesqueezeJobTests: XCTestCase {
         let flag = CancelFlag()
         converter.onConvert = { flag.cancel() }
         let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]), factor: factor,
-                                convert: true, cancel: flag)
+                                convert: true, trashOriginals: false, cancel: flag)
         XCTAssertEqual(log.entries, ["convert X.ARW"])
         XCTAssertTrue(summary.cancelled)
         XCTAssertEqual(summary.converted, 1)
@@ -1273,7 +1297,7 @@ final class DesqueezeJobTests: XCTestCase {
         let flag = CancelFlag()
         tag.onWrite = { if self.log.entries.contains("write 1.5 1 B.dng") { flag.cancel() } }
         let summary = job().run(snapshot(dngs: [dng("A.dng"), dng("B.dng")]), factor: factor,
-                                convert: true, cancel: flag)
+                                convert: true, trashOriginals: false, cancel: flag)
         XCTAssertTrue(flag.isCancelled, "the cancel did arrive, during the last file")
         XCTAssertFalse(summary.cancelled)
         XCTAssertEqual(summary.set, 2)
@@ -1288,7 +1312,7 @@ final class DesqueezeJobTests: XCTestCase {
         let flag = CancelFlag()
         tag.onWrite = { if self.log.entries.contains("write 1.5 1 X.dng") { flag.cancel() } }
         let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]), factor: factor,
-                                convert: true, cancel: flag)
+                                convert: true, trashOriginals: false, cancel: flag)
         XCTAssertFalse(summary.cancelled)
         XCTAssertEqual([summary.converted, summary.set, summary.failed, summary.unconvertedARWs], [1, 2, 0, 0])
     }
@@ -1297,7 +1321,7 @@ final class DesqueezeJobTests: XCTestCase {
         let flag = CancelFlag()
         converter.onConvert = { if self.log.entries.contains("convert Y.ARW") { flag.cancel() } }
         let summary = job().run(snapshot(dngs: [dng("A.dng"), dng("B.dng")], pending: ["X.ARW", "Y.ARW"]),
-                                factor: factor, convert: true, cancel: flag)
+                                factor: factor, convert: true, trashOriginals: false, cancel: flag)
         XCTAssertTrue(summary.cancelled)
         XCTAssertEqual(summary.converted, 2)
         XCTAssertEqual(summary.set, 0, "every DNG was still to tag")
@@ -1306,7 +1330,7 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testTheJobDoesNotTouchAnOrphanBackup() {
         let summary = job().run(snapshot(dngs: [dng("A.dng")], orphans: ["gone.dng_original"]),
-                                factor: factor, convert: true)
+                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, ["write 1.5 1 A.dng", "read A.dng", "trash A.dng"])
         XCTAssertEqual(summary.set, 1)
         XCTAssertEqual(summary.skipped, 0)
@@ -1315,14 +1339,15 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testAReadOnlyFolderChangesNothing() {
         let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"], writable: false),
-                                factor: factor, convert: true)
+                                factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(log.entries, [])
         XCTAssertEqual(summary.notes.map(\.message), ["This folder is read-only. No file was changed."])
     }
 
     func testProgressCountsEveryStepUpToTheTotal() {
         var updates: [RunProgress] = []
-        _ = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]), factor: factor, convert: true) {
+        _ = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]),
+                      factor: factor, convert: true, trashOriginals: false) {
             updates.append($0)
         }
         XCTAssertEqual(updates.map(\.completed), [1, 2, 3])
@@ -1334,7 +1359,8 @@ final class DesqueezeJobTests: XCTestCase {
     func testAFailedConversionTakesItsTagStepOutOfTheTotal() {
         converter.fail = ["X.ARW"]
         var updates: [RunProgress] = []
-        _ = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW", "Y.ARW"]), factor: factor, convert: true) {
+        _ = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW", "Y.ARW"]),
+                      factor: factor, convert: true, trashOriginals: false) {
             updates.append($0)
         }
         XCTAssertEqual(updates.map(\.completed), [1, 2, 3, 4])
@@ -1355,7 +1381,7 @@ final class DesqueezeJobTests: XCTestCase {
         let summary = job().run(
             snapshot(dngs: [dng("A.dng"), dng("B.dng")], pending: ["X.ARW"],
                      orphans: ["gone.dng_original", "LOUD.DNG_ORIGINAL"]),
-            factor: factor, convert: true)
+            factor: factor, convert: true, trashOriginals: false)
 
         XCTAssertEqual(summary.notes, [
             orphanNote("gone.dng_original", dng: "gone.dng"),
@@ -1376,7 +1402,7 @@ final class DesqueezeJobTests: XCTestCase {
 
     func testARemoveRunReportsAnOrphanBackupAndCountsNothingForIt() {
         let summary = job().run(snapshot(dngs: [dng("A.dng", at: 1)], orphans: ["gone.dng_original"]),
-                                factor: .noStretch, convert: false)
+                                factor: .noStretch, convert: false, trashOriginals: false)
         XCTAssertEqual(summary.notes, [orphanNote("gone.dng_original", dng: "gone.dng")])
         XCTAssertEqual(log.entries, [])
         XCTAssertEqual(summary.converted, 0)
@@ -1386,7 +1412,8 @@ final class DesqueezeJobTests: XCTestCase {
     }
 
     func testAFolderWithOnlyAnOrphanBackupStillReportsIt() {
-        let summary = job().run(snapshot(dngs: [], orphans: ["gone.dng_original"]), factor: factor, convert: true)
+        let summary = job().run(snapshot(dngs: [], orphans: ["gone.dng_original"]),
+                                factor: factor, convert: true, trashOriginals: false)
         var expected = RunSummary()
         expected.notes = [orphanNote("gone.dng_original", dng: "gone.dng")]
         XCTAssertEqual(summary, expected)
@@ -1398,7 +1425,7 @@ final class DesqueezeJobTests: XCTestCase {
         let flag = CancelFlag()
         flag.cancel()
         let summary = job().run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"], orphans: ["gone.dng_original"]),
-                                factor: factor, convert: true, cancel: flag)
+                                factor: factor, convert: true, trashOriginals: false, cancel: flag)
         XCTAssertTrue(summary.cancelled)
         XCTAssertEqual(summary.notes, [orphanNote("gone.dng_original", dng: "gone.dng")])
         XCTAssertEqual(log.entries, [])
@@ -1407,7 +1434,7 @@ final class DesqueezeJobTests: XCTestCase {
     func testAReadOnlyFolderKeepsItsOneNoteAndNamesNoOrphan() {
         let summary = job().run(
             snapshot(dngs: [dng("A.dng")], orphans: ["gone.dng_original"], writable: false),
-            factor: factor, convert: true)
+            factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.notes, [FileNote(name: "Shoot 1", kind: .folderReadOnly,
                                                 message: "This folder is read-only. No file was changed.",
                                                 detail: nil)])
@@ -1439,7 +1466,7 @@ final class DesqueezeJobTests: XCTestCase {
         ]
         log.entries = []
 
-        let summary = try job().run(folder: shoot, factor: factor, convert: true)
+        let summary = try job().run(folder: shoot, factor: factor, convert: true, trashOriginals: false)
 
         XCTAssertEqual(log.entries, [
             "readFolder",
@@ -1460,13 +1487,13 @@ final class DesqueezeJobTests: XCTestCase {
         try Data("x".utf8).write(to: shoot.appendingPathComponent("A.dng"))
         tag.rows = [TagRow(fileName: "A.dng", scale: .noStretch, originalRawFileName: nil)]
 
-        let applied = try job().run(folder: shoot, factor: factor, convert: true)
+        let applied = try job().run(folder: shoot, factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(applied.set, 1)
 
         // What a real scan reads after that run.
         tag.rows = [TagRow(fileName: "A.dng", scale: Scale(horizontal: 1.5, vertical: 1), originalRawFileName: nil)]
         log.entries = []
-        let removed = try job().run(folder: shoot, factor: .noStretch, convert: false)
+        let removed = try job().run(folder: shoot, factor: .noStretch, convert: false, trashOriginals: false)
 
         XCTAssertEqual(log.entries, ["readFolder", "write 1 1 A.dng", "read A.dng", "trash A.dng"])
         XCTAssertEqual(removed.set, 1)
@@ -1482,7 +1509,8 @@ final class DesqueezeJobTests: XCTestCase {
         tag.onWrite = { flag.cancel() }
         var updates: [RunProgress] = []
 
-        let summary = try job().run(folder: shoot, factor: factor, convert: true, cancel: flag) { updates.append($0) }
+        let summary = try job().run(folder: shoot, factor: factor, convert: true,
+                                    trashOriginals: false, cancel: flag) { updates.append($0) }
 
         XCTAssertTrue(summary.cancelled)
         XCTAssertEqual(summary.set, 1)
@@ -1493,11 +1521,11 @@ final class DesqueezeJobTests: XCTestCase {
         let shoot = try makeTemporaryFolder()
         defer { removeTemporaryFolder(shoot) }
         let missing = shoot.appendingPathComponent("No such folder")
-        XCTAssertThrowsError(try job().run(folder: missing, factor: factor, convert: true))
+        XCTAssertThrowsError(try job().run(folder: missing, factor: factor, convert: true, trashOriginals: false))
 
         try Data("x".utf8).write(to: shoot.appendingPathComponent("A.dng"))
         tag.readFolderError = TagError.toolFailed("Error: exiftool did not start")
-        XCTAssertThrowsError(try job().run(folder: shoot, factor: factor, convert: true)) {
+        XCTAssertThrowsError(try job().run(folder: shoot, factor: factor, convert: true, trashOriginals: false)) {
             XCTAssertEqual($0 as? TagError, .toolFailed("Error: exiftool did not start"))
         }
         XCTAssertEqual(log.entries, ["readFolder"], "no write after a scan that failed")

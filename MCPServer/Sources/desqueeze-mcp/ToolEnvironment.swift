@@ -47,8 +47,9 @@ struct ToolEnvironment: Sendable {
             return try ReportJSON.text(try scanned(folder) { try operations.scan(folder) })
         case .run(_, let factor, let convert, let dryRun):
             return try ReportJSON.text(try scanned(folder) {
-                try operations.run(folder, factor: factor, convert: convert, dryRun: dryRun, cancel: cancel,
-                                   progress: progress)
+                // The server never moves an original (design 14.1).
+                try operations.run(folder, factor: factor, convert: convert, trashOriginals: false, dryRun: dryRun,
+                                   cancel: cancel, progress: progress)
             })
         case .remove(_, let dryRun):
             return try ReportJSON.text(try scanned(folder) {

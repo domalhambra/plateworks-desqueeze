@@ -73,6 +73,34 @@ public enum FolderText {
         }
     }
 
+    /// The label of the run button when the run also moves the originals
+    /// (design 14.4): `Desqueeze 14 photos, move 12 originals to the Trash`.
+    /// With no original to move, it is `runLabel(count:)`.
+    ///
+    /// - Parameters:
+    ///   - count: the photos that the run works on.
+    ///   - originalsToTrash: the pending ARW files that can convert, when
+    ///     the box of the window is on. 0 when it is off.
+    public static func runLabel(count: Int, originalsToTrash: Int) -> String {
+        guard originalsToTrash > 0 else { return runLabel(count: count) }
+        let originals = originalsToTrash == 1 ? "1 original" : "\(originalsToTrash) originals"
+        return "\(runLabel(count: count)), move \(originals) to the Trash"
+    }
+
+    /// The label of the checkbox of the window (design 14.4). The only
+    /// place that makes it.
+    public static let trashOriginalsLabel = "Move the original ARW files to the Trash"
+
+    /// The line under the checkbox while it is on (design 14.4): what the
+    /// run will do with the originals.
+    ///
+    /// - Parameter count: the pending ARW files that can convert.
+    public static func trashOriginalsLine(count: Int) -> String {
+        count == 1
+            ? "1 original ARW file goes to the Trash after its DNG file passes the check."
+            : "\(count) original ARW files go to the Trash after their DNG files pass the check."
+    }
+
     /// The messages about a folder: the read-only sentence, then one line
     /// for each orphan backup, with the name to rename it to.
     ///
@@ -123,7 +151,14 @@ extension FolderSnapshot {
     /// The photos a run works on: the DNG files, plus the pending ARW files
     /// that can convert. With neither converter the ARW files are not in it.
     public func runCount(converterAvailable: Bool) -> Int {
-        dngs.count + (converterAvailable ? pendingARWs.count : 0)
+        dngs.count + convertibleARWs(converterAvailable: converterAvailable)
+    }
+
+    /// The pending ARW files that a run can convert, and so the originals
+    /// that a run can move to the Trash (design 14.4): every pending ARW
+    /// when one converter or the other is installed, and 0 with neither.
+    public func convertibleARWs(converterAvailable: Bool) -> Int {
+        converterAvailable ? pendingARWs.count : 0
     }
 
     /// The messages about this folder, as the window shows them: at most

@@ -51,6 +51,10 @@ extension RunSummary {
 public struct RunPlan: Equatable, Sendable {
     public enum Action: String, Codable, Sendable, CaseIterable {
         case convert, write, skip, blocked
+        /// The run would move this ARW to the Trash (design 14.3). The name
+        /// of the step is the ARW's. Only a plan that was asked to move the
+        /// originals has such a step.
+        case trashOriginal
     }
 
     public struct Step: Equatable, Sendable, Codable {
@@ -68,7 +72,8 @@ public struct RunPlan: Equatable, Sendable {
         }
     }
 
-    /// In run order: each conversion, then each DNG, the new ones last.
+    /// In run order: each conversion, then each DNG, the new ones last,
+    /// then each original that the run would move to the Trash.
     public var steps: [Step]
     /// The counts and the notes that a real run gives when every step
     /// passes, each conversion with the first converter of its list.

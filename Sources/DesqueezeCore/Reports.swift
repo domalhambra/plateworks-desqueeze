@@ -102,7 +102,7 @@ public struct ScanReport: Codable, Equatable, Sendable {
 }
 
 /// The result of a run or of a dry run, in the JSON shape of design 12.1,
-/// with the two counts of design 13.6.
+/// with the two counts of design 13.6 and the two keys of design 14.3.
 public struct RunReport: Codable, Equatable, Sendable {
     public let folder: String
     /// The factor as text, with no trailing zeros: `1.5`, `2`, `1`.
@@ -118,6 +118,13 @@ public struct RunReport: Codable, Equatable, Sendable {
     public let failed: Int
     public let stopped: Bool
     public let unconvertedARWs: Int
+    /// True when the run was asked to move the originals to the Trash
+    /// (design 14.3). The key is always there.
+    public let trashOriginals: Bool
+    /// The ARW files that the run moved to the Trash. In a dry run: the
+    /// count that a run gives when every step passes. The key is always
+    /// there, and it is 0 when `trashOriginals` is false.
+    public let originalsInTrash: Int
     public let notes: [FileNote]
     /// Only a dry run has steps. A real run has no `steps` key.
     public let steps: [RunPlan.Step]?
@@ -133,7 +140,7 @@ public struct RunReport: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case folder, factor, dryRun, converted, convertedByDnglab, convertedByAdobe, set, skipped, blocked, failed,
-             stopped, unconvertedARWs, notes, steps
+             stopped, unconvertedARWs, trashOriginals, originalsInTrash, notes, steps
     }
 
     init(folder: URL, factor: SqueezeFactor, summary: RunSummary, steps: [RunPlan.Step]?) {
@@ -149,6 +156,8 @@ public struct RunReport: Codable, Equatable, Sendable {
         failed = summary.failed
         stopped = summary.cancelled
         unconvertedARWs = summary.unconvertedARWs
+        trashOriginals = summary.trashOriginals
+        originalsInTrash = summary.originalsInTrash
         notes = summary.notes
         self.steps = steps
         folderIsEmpty = summary.folderIsEmpty
@@ -176,6 +185,15 @@ public struct RunReport: Codable, Equatable, Sendable {
     /// of each ARW.
     public var convertersLine: String? {
         RunSummary.convertersLine(dnglab: convertedByDnglab, adobe: convertedByAdobe, dryRun: dryRun)
+    }
+
+    /// The sentence of `RunSummary.originalsLine`: how many originals the
+    /// run moved to the Trash, of the ARW files that it converted. Nil when
+    /// the run was not asked to move them, and for a dry run: it moved
+    /// nothing, and its steps name each ARW that a run would move.
+    public var originalsLine: String? {
+        RunSummary.originalsLine(asked: trashOriginals, moved: originalsInTrash, converted: converted,
+                                 dryRun: dryRun)
     }
 
     /// The line of `RunSummary.lightroomLine`: shown when the run set at

@@ -64,6 +64,9 @@ final class FakeBackups: BackupHandling, @unchecked Sendable {
     var restoreError: Error?
     /// Set when `trashFile` must fail, as when the Trash refuses.
     var trashFileError: Error?
+    /// Each file that `trashFile` got, in order, also the ones it refused.
+    var filesGiven: [URL] = []
+    var onTrashFile: (() -> Void)?
 
     init(log: CallLog) { self.log = log }
 
@@ -77,6 +80,8 @@ final class FakeBackups: BackupHandling, @unchecked Sendable {
 
     func trashFile(_ file: URL) throws {
         log.entries.append("trashFile \(file.lastPathComponent)")
+        filesGiven.append(file)
+        onTrashFile?()
         if let trashFileError { throw trashFileError }
     }
 
@@ -101,6 +106,14 @@ final class FakeTag: ScaleTagging, @unchecked Sendable {
     /// File names whose read-back finds no tag.
     var noReadBack: Set<String> = []
     var onWrite: (() -> Void)?
+    /// What `readOriginalCheck` gives, by DNG name. A name with no entry
+    /// gets the tags of a DNG that the run made and tagged: the name of an
+    /// ARW with its base name, and the scale that was written, or no
+    /// stretch when nothing was.
+    var originalCheck: [String: OriginalCheckTags] = [:]
+    /// DNG names for which `readOriginalCheck` throws, as when exiftool
+    /// prints no row.
+    var failOriginalChecks: Set<String> = []
     private var written: [String: SqueezeFactor] = [:]
 
     init(log: CallLog, backups: FakeBackups) {
@@ -130,6 +143,50 @@ final class FakeTag: ScaleTagging, @unchecked Sendable {
         if noReadBack.contains(name) { return nil }
         if wrongReadBack.contains(name) { return .noStretch }
         return written[name].map { Scale(horizontal: $0.value, vertical: 1) }
+    }
+
+    func readOriginalCheck(_ dng: URL) throws -> OriginalCheckTags {
+        let name = dng.lastPathComponent
+        log.entries.append("check \(name)")
+        if failOriginalChecks.contains(name) { throw TagError.toolFailed("Error: File not found") }
+        if let tags = originalCheck[name] { return tags }
+        return OriginalCheckTags(
+            originalRawFileName: dng.deletingPathExtension().lastPathComponent + ".ARW",
+            scale: written[name].map { Scale(horizontal: $0.value, vertical: 1) } ?? .noStretch)
+    }
+}
+
+/// What the disk says about each file, for the fifth step of a run (design
+/// 14.2). It reads no disk.
+final class FakeFiles: @unchecked Sendable {
+    /// A regular file with bytes. Two calls give equal records.
+    static func file(size: Int64 = 100, modified: Int = 1_000, nanoseconds: Int = 0,
+                     number: UInt64 = 7) -> FileRecord {
+        FileRecord(isRegularFile: true, size: size, modifiedSeconds: modified, modifiedNanoseconds: nanoseconds,
+                   fileNumber: number)
+    }
+
+    /// A folder, or a link: anything that is no regular file.
+    static let notAFile = FileRecord(isRegularFile: false, size: 64, modifiedSeconds: 1_000,
+                                     modifiedNanoseconds: 0, fileNumber: 8)
+
+    let log: CallLog
+    /// The answers for one file name, in the order of the reads. The last
+    /// one is given again for each later read. A name with no entry is a
+    /// regular file with bytes that never changes. `nil` in the list says
+    /// that nothing has the name.
+    var records: [String: [FileRecord?]] = [:]
+    private var reads: [String: Int] = [:]
+
+    init(log: CallLog) { self.log = log }
+
+    func record(atPath path: String) -> FileRecord? {
+        let name = URL(fileURLWithPath: path).lastPathComponent
+        log.entries.append("record \(name)")
+        guard let answers = records[name], !answers.isEmpty else { return Self.file() }
+        let index = min(reads[name, default: 0], answers.count - 1)
+        reads[name, default: 0] += 1
+        return answers[index]
     }
 }
 

@@ -152,7 +152,7 @@ final class ReportsTests: XCTestCase {
         let json = try object(RunReport(folder: folder, factor: factor, summary: summary()))
         XCTAssertEqual(keys(json), ["folder", "factor", "dryRun", "converted", "convertedByDnglab",
                                     "convertedByAdobe", "set", "skipped", "blocked", "failed", "stopped",
-                                    "unconvertedARWs", "notes"])
+                                    "unconvertedARWs", "trashOriginals", "originalsInTrash", "notes"])
         for note in try XCTUnwrap(json["notes"] as? [NSDictionary]) {
             XCTAssertEqual(keys(note), ["name", "kind", "message", "detail"])
         }
@@ -192,6 +192,7 @@ final class ReportsTests: XCTestCase {
               "converted": 1, "convertedByDnglab": 1, "convertedByAdobe": 0,
               "set": 2, "skipped": 3, "blocked": 4, "failed": 5,
               "stopped": false, "unconvertedARWs": 6,
+              "trashOriginals": false, "originalsInTrash": 0,
               "notes": [
                 { "name": "x.dng", "kind": "failed", "message": "Not changed.", "detail": "Error: no" },
                 { "name": "held.dng", "kind": "blockedByBackup",
@@ -218,7 +219,8 @@ final class ReportsTests: XCTestCase {
         XCTAssertEqual([dry.converted, dry.convertedByDnglab, dry.convertedByAdobe], [7, 5, 2])
     }
 
-    // The example in design 12.1, with the two counts of design 13.6.
+    // The example in design 12.1, with the two counts of design 13.6 and the
+    // two keys of design 14.3.
     func testTheRunExampleOfTheDesign() throws {
         var summary = RunSummary()
         summary.convertedByAdobe = 1
@@ -230,6 +232,7 @@ final class ReportsTests: XCTestCase {
               "converted": 1, "convertedByDnglab": 0, "convertedByAdobe": 1,
               "set": 2, "skipped": 0, "blocked": 0, "failed": 0,
               "stopped": false, "unconvertedARWs": 0,
+              "trashOriginals": false, "originalsInTrash": 0,
               "notes": [ { "name": "x.dng", "kind": "failed", "message": "…", "detail": null } ] }
             """))
     }
@@ -249,7 +252,7 @@ final class ReportsTests: XCTestCase {
         let json = try object(RunReport(folder: folder, factor: factor, summary: summary))
         XCTAssertEqual((json["notes"] as? [NSDictionary])?.map { $0["kind"] as? String }, [
             "orphanBackup", "notConverted", "failed", "blockedByBackup", "leftoverBackup", "backupKept",
-            "folderReadOnly", "convertedUnmatched",
+            "folderReadOnly", "convertedUnmatched", "originalKept",
         ])
     }
 
@@ -272,7 +275,7 @@ final class ReportsTests: XCTestCase {
 
         XCTAssertEqual(keys(json), ["folder", "factor", "dryRun", "converted", "convertedByDnglab",
                                     "convertedByAdobe", "set", "skipped", "blocked", "failed", "stopped",
-                                    "unconvertedARWs", "notes", "steps"])
+                                    "unconvertedARWs", "trashOriginals", "originalsInTrash", "notes", "steps"])
         XCTAssertEqual(json["dryRun"] as? Bool, true)
         // A `convert` step names its converter. No other step has the key.
         XCTAssertEqual(json["steps"] as? NSArray, try parsed("""
@@ -327,6 +330,7 @@ final class ReportsTests: XCTestCase {
               "failed" : 0,
               "folder" : "/path",
               "notes" : [],
+              "originalsInTrash" : 0,
               "set" : 0,
               "skipped" : 0,
               "steps" : [
@@ -337,6 +341,7 @@ final class ReportsTests: XCTestCase {
                 }
               ],
               "stopped" : false,
+              "trashOriginals" : false,
               "unconvertedARWs" : 0
             }
             """)

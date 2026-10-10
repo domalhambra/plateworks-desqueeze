@@ -279,7 +279,10 @@ final class ServerEndToEndTests: ServerTestCase {
         let json = try run.json()
         XCTAssertEqual(Set(json.keys), ["folder", "factor", "dryRun", "converted", "convertedByDnglab",
                                         "convertedByAdobe", "set", "skipped", "blocked", "failed", "stopped",
-                                        "unconvertedARWs", "notes"])
+                                        "unconvertedARWs", "trashOriginals", "originalsInTrash", "notes"])
+        // The server never moves an original (design 14.1).
+        XCTAssertEqual(json["trashOriginals"] as? Bool, false)
+        XCTAssertEqual(json["originalsInTrash"] as? Int, 0)
         XCTAssertEqual([json["convertedByDnglab"], json["convertedByAdobe"]] as? [Int],
                        dnglabConvertsTheFixture() ? [1, 0] : [0, 1])
         XCTAssertEqual(json["folder"] as? String, folder.path)

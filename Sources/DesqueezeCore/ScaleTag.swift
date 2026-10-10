@@ -57,6 +57,12 @@ public protocol ScaleTagging: Sendable {
     func write(_ factor: SqueezeFactor, to file: URL) throws
     /// Nil when the file gives no value.
     func read(_ file: URL) throws -> Scale?
+    /// The two tags of the check before an original moves to the Trash
+    /// (design 14.2, line 5), from one read of one DNG. It changes no file.
+    ///
+    /// - Throws: when the read gave no row for the file. The error has the
+    ///   tool's own words.
+    func readOriginalCheck(_ dng: URL) throws -> OriginalCheckTags
 }
 
 /// The exiftool implementation.
@@ -100,6 +106,37 @@ public struct ScaleTag: ScaleTagging {
     public func read(_ file: URL) throws -> Scale? {
         let result = try runner.run(exiftool, ["-s3", Self.tagName, file.path])
         return Self.parseScale(result.stdout)
+    }
+
+    /// The tags of `readOriginalCheck`, in the order of the columns that
+    /// `parseOriginalCheck` reads.
+    static let originalCheckTags = ["-IFD0:OriginalRawFileName", tagName]
+
+    /// One call (design 14.2, line 5):
+    ///
+    /// ```
+    /// exiftool -m -n -T -IFD0:OriginalRawFileName -SubIFD:DefaultScale <file.dng>
+    /// ```
+    ///
+    /// exiftool prints one row for a file that it opened, also for a file
+    /// that is no DNG: that row has `-` for each tag. For a file that is not
+    /// there it prints no row, and this throws with its words.
+    public func readOriginalCheck(_ dng: URL) throws -> OriginalCheckTags {
+        let result = try runner.run(exiftool, ["-m", "-n", "-T"] + Self.originalCheckTags + [dng.path])
+        guard let tags = Self.parseOriginalCheck(result.stdout) else {
+            throw TagError.toolFailed(Self.detail(result))
+        }
+        return tags
+    }
+
+    /// Parses the one tab-separated row of `readOriginalCheck`: the name,
+    /// then the scale. exiftool prints `-` for a tag that the file does not
+    /// have. Nil when the first line is no such row.
+    static func parseOriginalCheck(_ text: String) -> OriginalCheckTags? {
+        let line = text.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
+        let cells = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+        guard cells.count == originalCheckTags.count else { return nil }
+        return OriginalCheckTags(originalRawFileName: cells[0] == "-" ? nil : cells[0], scale: parseScale(cells[1]))
     }
 
     /// Parses `1.5 1`. Returns nil for `-`, an empty string, or anything else.

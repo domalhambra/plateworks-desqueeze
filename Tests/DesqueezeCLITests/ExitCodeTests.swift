@@ -125,7 +125,8 @@ final class ExitCodeTests: XCTestCase {
         let json = try h.json()
         XCTAssertEqual(Set(json.allKeys.compactMap { $0 as? String }),
                        ["folder", "factor", "dryRun", "converted", "convertedByDnglab", "convertedByAdobe", "set",
-                        "skipped", "blocked", "failed", "stopped", "unconvertedARWs", "notes"])
+                        "skipped", "blocked", "failed", "stopped", "unconvertedARWs", "trashOriginals",
+                        "originalsInTrash", "notes"])
         XCTAssertFalse(h.out.text.contains("No DNG or ARW"))
     }
 

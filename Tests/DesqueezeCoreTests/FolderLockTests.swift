@@ -211,7 +211,7 @@ final class FolderLockJobTests: XCTestCase {
     func testARunDoesNotStartWhileAnotherRunHoldsTheLock() throws {
         try makeShoot()
         system.lockCode = EWOULDBLOCK
-        XCTAssertThrowsError(try job().run(folder: shoot, factor: factor, convert: true)) {
+        XCTAssertThrowsError(try job().run(folder: shoot, factor: factor, convert: true, trashOriginals: false)) {
             XCTAssertEqual($0 as? FolderLock.Busy, FolderLock.Busy())
             XCTAssertEqual($0.localizedDescription, folderBusySentence)
         }
@@ -223,7 +223,8 @@ final class FolderLockJobTests: XCTestCase {
     func testRemoveDoesNotStartWhileAnotherRunHoldsTheLock() throws {
         try makeShoot()
         system.lockCode = EWOULDBLOCK
-        XCTAssertThrowsError(try job().run(folder: shoot, factor: .noStretch, convert: false, remove: true)) {
+        XCTAssertThrowsError(try job().run(folder: shoot,
+                                           factor: .noStretch, convert: false, trashOriginals: false, remove: true)) {
             XCTAssertTrue($0 is FolderLock.Busy)
         }
         XCTAssertEqual(h.log.entries, ["open Shoot 1", "flock 7", "close 7"])
@@ -231,7 +232,7 @@ final class FolderLockJobTests: XCTestCase {
 
     func testTheLockIsTakenBeforeTheScanAndHeldToTheLastFile() throws {
         try makeShoot()
-        let summary = try job().run(folder: shoot, factor: factor, convert: true)
+        let summary = try job().run(folder: shoot, factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.set, 2)
         XCTAssertEqual(h.log.entries, [
             "open Shoot 1", "flock 7",
@@ -247,7 +248,7 @@ final class FolderLockJobTests: XCTestCase {
         for code in [ENOTSUP, EOPNOTSUPP, ENOLCK, EISDIR] {
             h.log.entries = []
             system.lockCode = code
-            let summary = try job().run(folder: shoot, factor: factor, convert: false)
+            let summary = try job().run(folder: shoot, factor: factor, convert: false, trashOriginals: false)
             XCTAssertEqual(summary.set, 1, "errno \(code)")
             XCTAssertEqual(h.log.entries, [
                 "open Shoot 1", "flock 7", "close 7",
@@ -259,7 +260,7 @@ final class FolderLockJobTests: XCTestCase {
     func testTheLockIsReleasedAfterARunWithAFileThatFailed() throws {
         try makeShoot()
         h.tag.failWrites = ["A.dng"]
-        let summary = try job().run(folder: shoot, factor: factor, convert: false)
+        let summary = try job().run(folder: shoot, factor: factor, convert: false, trashOriginals: false)
         XCTAssertEqual(summary.failed, 1)
         XCTAssertEqual(system.calls, ["open Shoot 1", "flock 7", "close 7"])
         XCTAssertEqual(h.log.entries.last, "close 7", "released after the last file, not before")
@@ -269,7 +270,7 @@ final class FolderLockJobTests: XCTestCase {
         try makeShoot()
         let flag = CancelFlag()
         h.converter.onConvert = { flag.cancel() }
-        let summary = try job().run(folder: shoot, factor: factor, convert: true, cancel: flag)
+        let summary = try job().run(folder: shoot, factor: factor, convert: true, trashOriginals: false, cancel: flag)
         XCTAssertTrue(summary.cancelled)
         XCTAssertEqual(system.calls, ["open Shoot 1", "flock 7", "close 7"])
         XCTAssertEqual(h.log.entries.last, "close 7")
@@ -278,7 +279,7 @@ final class FolderLockJobTests: XCTestCase {
     func testTheLockIsReleasedAfterARunWhoseScanThrows() throws {
         try makeShoot()
         h.tag.readFolderError = TagError.toolFailed("Error: exiftool did not start")
-        XCTAssertThrowsError(try job().run(folder: shoot, factor: factor, convert: true)) {
+        XCTAssertThrowsError(try job().run(folder: shoot, factor: factor, convert: true, trashOriginals: false)) {
             XCTAssertEqual($0 as? TagError, .toolFailed("Error: exiftool did not start"))
         }
         XCTAssertEqual(h.log.entries, ["open Shoot 1", "flock 7", "readFolder", "close 7"])
@@ -290,7 +291,7 @@ final class FolderLockJobTests: XCTestCase {
         let missing = shoot.appendingPathComponent("No such folder")
         var scanError: Error?
         XCTAssertThrowsError(try FolderScanner(tag: h.tag, backups: h.backups).snapshot(of: missing)) { scanError = $0 }
-        XCTAssertThrowsError(try realJob().run(folder: missing, factor: factor, convert: true)) {
+        XCTAssertThrowsError(try realJob().run(folder: missing, factor: factor, convert: true, trashOriginals: false)) {
             XCTAssertEqual($0.localizedDescription, scanError?.localizedDescription)
         }
         XCTAssertEqual(h.log.entries, [])
@@ -301,7 +302,7 @@ final class FolderLockJobTests: XCTestCase {
     func testAFolderThatCannotBeOpenedStopsTheRunAlsoWhenTheScanPasses() throws {
         try makeShoot()
         system.openCode = EMFILE
-        XCTAssertThrowsError(try job().run(folder: shoot, factor: factor, convert: true)) {
+        XCTAssertThrowsError(try job().run(folder: shoot, factor: factor, convert: true, trashOriginals: false)) {
             XCTAssertEqual(($0 as? POSIXError)?.code, .EMFILE)
         }
         XCTAssertEqual(h.log.entries, ["open Shoot 1", "readFolder"], "a scan, and no write and no converter")
@@ -311,7 +312,7 @@ final class FolderLockJobTests: XCTestCase {
     func testADryRunTakesNoLock() throws {
         try makeShoot()
         system.lockCode = EWOULDBLOCK
-        let plan = try job().plan(folder: shoot, factor: factor, convert: true)
+        let plan = try job().plan(folder: shoot, factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(plan.summary.set, 2)
         XCTAssertEqual(system.calls, [], "a dry run changes no file, so it asks for no lock")
     }
@@ -324,31 +325,33 @@ final class FolderLockJobTests: XCTestCase {
     func testWithTheSystemsLockARunIsRefusedWhileTheFolderIsLockedAndPassesAfterTheRelease() throws {
         try makeShoot()
         guard case .held(let other) = FolderLock.system.take(shoot) else { return XCTFail("the take") }
-        XCTAssertThrowsError(try realJob().run(folder: shoot, factor: factor, convert: true)) {
+        XCTAssertThrowsError(try realJob().run(folder: shoot, factor: factor, convert: true, trashOriginals: false)) {
             XCTAssertTrue($0 is FolderLock.Busy, "\($0)")
         }
         XCTAssertEqual(h.log.entries, [], "no call to exiftool and none to a converter")
         // A scan and a dry run are allowed while a run works.
         XCTAssertEqual(try FolderScanner(tag: h.tag, backups: h.backups).snapshot(of: shoot).dngs.count, 1)
-        XCTAssertEqual(try realJob().plan(folder: shoot, factor: factor, convert: true).summary.set, 2)
+        XCTAssertEqual(try realJob().plan(folder: shoot,
+                                          factor: factor, convert: true, trashOriginals: false).summary.set, 2)
         h.log.entries = []
 
         other.release()
-        XCTAssertEqual(try realJob().run(folder: shoot, factor: factor, convert: false).set, 1)
+        XCTAssertEqual(try realJob().run(folder: shoot, factor: factor, convert: false, trashOriginals: false).set, 1)
     }
 
     func testTwoRunsInARowBothPass() throws {
         try makeShoot()
-        let first = try realJob().run(folder: shoot, factor: factor, convert: false)
+        let first = try realJob().run(folder: shoot, factor: factor, convert: false, trashOriginals: false)
         XCTAssertEqual(first.set, 1)
         // The first run released the lock. What a real scan reads now:
         h.tag.rows = [TagRow(fileName: "A.dng", scale: Scale(horizontal: 1.5, vertical: 1), originalRawFileName: nil)]
-        let second = try realJob().run(folder: shoot, factor: factor, convert: false)
+        let second = try realJob().run(folder: shoot, factor: factor, convert: false, trashOriginals: false)
         XCTAssertEqual(second.skipped, 1)
         // And after a run that threw.
         h.tag.readFolderError = TagError.toolFailed("Error: exiftool did not start")
-        XCTAssertThrowsError(try realJob().run(folder: shoot, factor: factor, convert: false))
+        XCTAssertThrowsError(try realJob().run(folder: shoot, factor: factor, convert: false, trashOriginals: false))
         h.tag.readFolderError = nil
-        XCTAssertEqual(try realJob().run(folder: shoot, factor: factor, convert: false).skipped, 1)
+        XCTAssertEqual(try realJob().run(folder: shoot,
+                                         factor: factor, convert: false, trashOriginals: false).skipped, 1)
     }
 }

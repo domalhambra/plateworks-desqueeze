@@ -23,7 +23,7 @@ import Foundation
 /// or names the file to delete when the Trash refuses (design 4.3). For
 /// either converter that file is the hidden work file of the ARW (design
 /// 13.3). The job moves only that file, and never a `<base>.dng`
-/// (`discard`). The ARW is never touched.
+/// (`discard`). A failed conversion never touches the ARW.
 ///
 /// **When the next converter is not tried.** A converter can say that its
 /// failure holds for every converter (`ConvertError.failedForAll`): another
@@ -54,6 +54,19 @@ import Foundation
 /// `convert`: `run` at factor 1 with `convert` false is not Remove, and it
 /// reports the ARW files it left (design 12.1).
 ///
+/// **The originals, on request** (design 14). A caller can ask a run to
+/// move each original ARW to the Trash. `run` and `plan` take the request as
+/// `trashOriginals`, with no default value, so every caller states it.
+/// Remove never moves an original, whatever it is given. With the request,
+/// the run has a fifth step, after the tag of the last DNG: for each ARW
+/// that this run converted, `OriginalDecision.decide` says "move" or "keep".
+/// The ARW moves through `BackupHandling.trashFile`, the function that takes
+/// a backup, so no test reaches the Trash. An ARW that stays gets an
+/// `originalKept` note. A refusal of the Trash keeps the ARW with that note:
+/// the job never deletes one, and it tries no second way. The step does not
+/// start after a cancel, and it reads the cancel flag between two ARW
+/// files. `RunSummary.originalsInTrash` counts the files that moved.
+///
 /// **One run in a folder at a time.** `run(folder:)` takes the lock of
 /// `FolderLock` on the folder before its scan, and holds it until it returns
 /// or throws (design 13.9). When another run holds the lock, it throws
@@ -64,6 +77,7 @@ public struct DesqueezeJob: Sendable {
     private let converters: RawConverters
     private let backups: BackupHandling
     private let lock: FolderLock
+    private let fileRecord: @Sendable (String) -> FileRecord?
 
     /// - Parameter tag: reads and writes the `DefaultScale` tag.
     /// - Parameter converters: dnglab and Adobe DNG Converter, each nil when
@@ -77,11 +91,19 @@ public struct DesqueezeJob: Sendable {
     /// - Parameter lock: the lock that keeps a second run out of the folder.
     ///   The default is the system's. It makes no file and reaches nothing
     ///   outside the folder, so every front end takes it by leaving it out.
-    public init(tag: ScaleTagging, converters: RawConverters, backups: BackupHandling, lock: FolderLock = .system) {
+    /// - Parameter fileRecord: what the disk says about the file at a path,
+    ///   read without following a link. The run asks it about an ARW before
+    ///   the conversion and before the move, and about the DNG before the
+    ///   move (design 14.2, lines 4 and 5), and only when it was asked to
+    ///   move the originals. The default is `FileRecord.read`, which changes
+    ///   no file. Tests inject it to drive each outcome.
+    public init(tag: ScaleTagging, converters: RawConverters, backups: BackupHandling, lock: FolderLock = .system,
+                fileRecord: @escaping @Sendable (String) -> FileRecord? = { FileRecord.read(atPath: $0) }) {
         self.tag = tag
         self.converters = converters
         self.backups = backups
         self.lock = lock
+        self.fileRecord = fileRecord
     }
 
     /// Scans `folder`, then runs on what that scan found.
@@ -93,13 +115,19 @@ public struct DesqueezeJob: Sendable {
     ///   - folder: the folder to scan and to run on. Its top level only.
     ///   - factor: the stretch to set.
     ///   - convert: false leaves the ARW files alone.
+    ///   - trashOriginals: true moves each ARW that this run converted to
+    ///     the Trash, when every line of design 14.2 holds for it. There is
+    ///     no default, so no caller moves an original by leaving it out, and
+    ///     none forgets to say that it does not.
     ///   - remove: true for Remove. Remove writes `.noStretch` whatever
     ///     `factor` says, so a factor given beside it never reaches a file.
-    ///     It never converts, whatever `convert` says, and it reports no ARW
+    ///     It never converts, whatever `convert` says, it never moves an
+    ///     original, whatever `trashOriginals` says, and it reports no ARW
     ///     files left.
     ///   - cancel: stops the run after its current file, when it is set.
-    ///   - progress: called after each step: one for each conversion, and
-    ///     one for each DNG.
+    ///   - progress: called after each step: one for each conversion, one
+    ///     for each DNG, and one for each original that the fifth step
+    ///     handles.
     /// - Throws: `FolderLock.Busy` when another run works in the folder, and
     ///   any other error only when the scan fails. No file is changed then. A
     ///   file that fails during the run is a note in the summary, not an
@@ -108,6 +136,7 @@ public struct DesqueezeJob: Sendable {
         folder: URL,
         factor: SqueezeFactor,
         convert: Bool,
+        trashOriginals: Bool,
         remove: Bool = false,
         cancel: CancelFlag = CancelFlag(),
         progress: (RunProgress) -> Void = { _ in }
@@ -115,10 +144,12 @@ public struct DesqueezeJob: Sendable {
         // Before the scan, so nothing is read for a run that does not start.
         let held = try takeLock(on: folder)
         // Also when the scan throws. The lock is not left to the end of
-        // `held`: the run must hold it to its last file.
+        // `held`: the run must hold it to its last file, and the last file
+        // can be an original on its way to the Trash (design 14.2).
         defer { held?.release() }
         let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
-        return run(snapshot, factor: factor, convert: convert, remove: remove, cancel: cancel, progress: progress)
+        return run(snapshot, factor: factor, convert: convert, trashOriginals: trashOriginals, remove: remove,
+                   cancel: cancel, progress: progress)
     }
 
     /// The lock on `folder` for one run (design 13.9).
@@ -149,21 +180,28 @@ public struct DesqueezeJob: Sendable {
     /// read of the ARW facts when dnglab is installed and an ARW would
     /// convert. No converter starts.
     ///
-    /// `convert` and `remove` mean what they mean for `run`.
+    /// `convert`, `trashOriginals` and `remove` mean what they mean for
+    /// `run`. With `trashOriginals`, the plan has one `trashOriginal` step
+    /// for each ARW that the run would move, after the steps of the DNG
+    /// files. It reads no ARW and no DNG for them: it plans a run in which
+    /// every step passes.
     ///
     /// - Throws: only when the scan fails.
-    public func plan(folder: URL, factor: SqueezeFactor, convert: Bool, remove: Bool = false) throws -> RunPlan {
+    public func plan(folder: URL, factor: SqueezeFactor, convert: Bool, trashOriginals: Bool,
+                     remove: Bool = false) throws -> RunPlan {
         let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
-        return plan(snapshot, factor: factor, convert: convert, remove: remove)
+        return plan(snapshot, factor: factor, convert: convert, trashOriginals: trashOriginals, remove: remove)
     }
 
     // MARK: What the run and the dry run share
 
-    /// The summary before the first file: the ARW files to account for, and
-    /// the notes about the folder itself.
-    private func opening(_ snapshot: FolderSnapshot, remove: Bool) -> RunSummary {
+    /// The summary before the first file: the ARW files to account for,
+    /// whether the run moves the originals, and the notes about the folder
+    /// itself.
+    private func opening(_ snapshot: FolderSnapshot, remove: Bool, movesOriginals: Bool) -> RunSummary {
         var summary = RunSummary()
         summary.folderIsEmpty = snapshot.isEmpty
+        summary.trashOriginals = movesOriginals
         summary.unconvertedARWs = remove ? 0 : snapshot.pendingARWs.count
         guard snapshot.isWritable else {
             summary.notes = [.folderReadOnly(snapshot.folder)]
@@ -223,6 +261,25 @@ public struct DesqueezeJob: Sendable {
         dngs.append(Self.converted(pending.arw, to: dng))
     }
 
+    /// Whether this run has the fifth step (design 14.2). Remove never has
+    /// it. The run and the dry run both ask here.
+    private static func movesOriginals(_ trashOriginals: Bool, remove: Bool) -> Bool {
+        trashOriginals && !remove
+    }
+
+    /// One ARW that this run converted, with what the fifth step needs to
+    /// know about it (design 14.2).
+    private struct Original {
+        let arw: URL
+        let dng: URL
+        /// Line 2: false when the conversion has a `convertedUnmatched`
+        /// note.
+        let hasFullMatch: Bool
+        /// Line 4: the record from before the conversion. Nil when the disk
+        /// gave none, and in a plan, which reads no ARW.
+        let recorded: FileRecord?
+    }
+
     /// Remove writes `.noStretch` and nothing else. The wrong state, Remove
     /// with a stretch, cannot reach a file.
     private static func factor(_ factor: SqueezeFactor, remove: Bool) -> SqueezeFactor {
@@ -247,28 +304,62 @@ public struct DesqueezeJob: Sendable {
     ///
     /// It walks the files in the order of `run`, and asks the same questions.
     /// It assumes that each write passes, and that each conversion passes
-    /// with the first converter of its list.
-    func plan(_ snapshot: FolderSnapshot, factor: SqueezeFactor, convert: Bool, remove: Bool = false) -> RunPlan {
+    /// with the first converter of its list. One conversion is known to
+    /// fail before any program starts: an ARW whose work file would have a
+    /// name that is too long (design 13.9). The plan gives it no `convert`
+    /// step, and the note of the run.
+    func plan(_ snapshot: FolderSnapshot, factor: SqueezeFactor, convert: Bool, trashOriginals: Bool,
+              remove: Bool = false) -> RunPlan {
         let factor = Self.factor(factor, remove: remove)
-        var plan = RunPlan(steps: [], summary: opening(snapshot, remove: remove))
+        let movesOriginals = Self.movesOriginals(trashOriginals, remove: remove)
+        var plan = RunPlan(steps: [], summary: opening(snapshot, remove: remove, movesOriginals: movesOriginals))
         guard snapshot.isWritable else { return plan }
 
         var dngs = snapshot.dngs
+        var originals: [Original] = []
         for pending in arwsToConvert(snapshot, convert: convert && !remove) {
+            // The rule of `ConverterRules`, rule 0, which every converter
+            // follows: no program starts, and the ARW is failed.
+            guard !ConverterOutput.workNameIsTooLong(for: pending.arw) else {
+                plan.summary.failed += 1
+                plan.summary.notes.append(.notConverted(pending.arw.lastPathComponent,
+                                                        detail: ConverterRules.nameTooLong))
+                continue
+            }
             let first = pending.order[0]
             plan.steps.append(RunPlan.Step(name: pending.arw.lastPathComponent, action: .convert, converter: first))
             // The DNG is not there yet. The run will tag it, so the plan
             // must decide for it too. Only dnglab makes a DNG with no full
             // match, and it says the rule that `AdobeMatch` says here.
-            Self.count(pending, to: ConverterOutput.url(for: pending.arw), by: first,
-                       unmatched: first == .dnglab ? AdobeMatch.match(pending.facts).failed : nil,
-                       &plan.summary, &dngs)
+            let dng = ConverterOutput.url(for: pending.arw)
+            let unmatched = first == .dnglab ? AdobeMatch.match(pending.facts).failed : nil
+            Self.count(pending, to: dng, by: first, unmatched: unmatched, &plan.summary, &dngs)
+            originals.append(Original(arw: pending.arw, dng: dng, hasFullMatch: unmatched == nil, recorded: nil))
         }
+        // The path of each DNG whose tag step ends with the DNG at the
+        // factor: a write that passes, or a skip.
+        var atTheFactor = Set<String>()
         for dng in dngs {
             let (decision, hasBackup) = decide(dng, factor)
             plan.steps.append(RunPlan.Step(name: dng.name, action: RunPlan.Action(decision)))
             plan.summary.count(decision, for: dng.name, hasBackup: hasBackup)
             if decision == .write { plan.summary.set += 1 }
+            if decision != .blocked { atTheFactor.insert(dng.url.path) }
+        }
+        guard movesOriginals else { return plan }
+        for original in originals {
+            // The function of the run. The plan reads no file for lines 4
+            // and 5: it plans a run in which they hold.
+            let decision = OriginalDecision.decide(
+                hasFullMatch: original.hasFullMatch, dngIsAtTheFactor: atTheFactor.contains(original.dng.path),
+                dng: { .passed }, original: { .same })
+            switch decision {
+            case .move:
+                plan.steps.append(RunPlan.Step(name: original.arw.lastPathComponent, action: .trashOriginal))
+                plan.summary.originalsInTrash += 1
+            case .keep(let reason):
+                plan.summary.notes.append(.originalKept(original.arw.lastPathComponent, because: reason))
+            }
         }
         return plan
     }
@@ -285,24 +376,35 @@ public struct DesqueezeJob: Sendable {
         _ snapshot: FolderSnapshot,
         factor: SqueezeFactor,
         convert: Bool,
+        trashOriginals: Bool,
         remove: Bool = false,
         cancel: CancelFlag = CancelFlag(),
         progress: (RunProgress) -> Void = { _ in }
     ) -> RunSummary {
         let factor = Self.factor(factor, remove: remove)
-        var summary = opening(snapshot, remove: remove)
+        let movesOriginals = Self.movesOriginals(trashOriginals, remove: remove)
+        var summary = opening(snapshot, remove: remove, movesOriginals: movesOriginals)
         guard snapshot.isWritable else { return summary }
 
         let arws = arwsToConvert(snapshot, convert: convert && !remove)
         var dngs = snapshot.dngs
-        var total = arws.count * 2 + dngs.count
+        // An ARW that converts has a conversion, the tag of its DNG, and,
+        // when the run moves the originals, the step of its original.
+        let stepsOfAnARW = movesOriginals ? 3 : 2
+        var total = arws.count * stepsOfAnARW + dngs.count
         var completed = 0
+        // Only a run that moves the originals fills this list. With the
+        // option off it stays empty, so the fifth step has no file.
+        var originals: [Original] = []
 
         for pending in arws {
             if cancel.isCancelled {
                 summary.cancelled = true
                 return summary
             }
+            // Line 4 of design 14.2: the ARW as it is before any converter
+            // starts. Not asked when the originals stay.
+            let recorded = movesOriginals ? fileRecord(pending.arw.path) : nil
             // Each converter's own words, in the order of the tries.
             var words: [String] = []
             var made: (conversion: Conversion, converter: ConverterKind)?
@@ -354,10 +456,15 @@ public struct DesqueezeJob: Sendable {
             if let made {
                 Self.count(pending, to: made.conversion.dng, by: made.converter,
                            unmatched: made.conversion.unmatched, &summary, &dngs)
+                if movesOriginals {
+                    originals.append(Original(arw: pending.arw, dng: made.conversion.dng,
+                                              hasFullMatch: made.conversion.unmatched == nil, recorded: recorded))
+                }
             } else {
                 summary.failed += 1
-                // This ARW made no DNG, so its tag step will not happen.
-                total -= 1
+                // This ARW made no DNG, so its tag step will not happen, and
+                // its original has no step: it stays, and its note says why.
+                total -= stepsOfAnARW - 1
                 summary.notes.append(.notConverted(pending.arw.lastPathComponent,
                                                    detail: words.joined(separator: "\n")))
             }
@@ -371,16 +478,66 @@ public struct DesqueezeJob: Sendable {
             }
         }
 
+        // The path of each DNG whose tag step ended with the DNG at the
+        // factor (design 14.2, line 3).
+        var atTheFactor = Set<String>()
         for dng in dngs {
             if cancel.isCancelled {
                 summary.cancelled = true
                 return summary
             }
-            tagOne(dng, factor, &summary)
+            if tagOne(dng, factor, &summary) { atTheFactor.insert(dng.url.path) }
             completed += 1
             progress(RunProgress(completed: completed, total: total, name: dng.name))
         }
+
+        // The fifth step (design 14.2): the originals. It comes after the
+        // tag of the last DNG, so no ARW moves while a DNG still waits for
+        // its tag. A cancel before an ARW leaves that ARW, and every one
+        // after it, where it is, with no note: the result says "stopped".
+        for original in originals {
+            if cancel.isCancelled {
+                summary.cancelled = true
+                return summary
+            }
+            moveOne(original, factor, dngIsAtTheFactor: atTheFactor.contains(original.dng.path), &summary)
+            completed += 1
+            progress(RunProgress(completed: completed, total: total, name: original.arw.lastPathComponent))
+        }
         return summary
+    }
+
+    /// The fifth step for one ARW (design 14.2): the ARW goes to the Trash
+    /// when `OriginalDecision.decide` says so, and it stays with an
+    /// `originalKept` note in every other case.
+    ///
+    /// The two reads of lines 5 and 4 happen here, directly before the move,
+    /// and only when the lines before them hold. The second read of the ARW
+    /// is the last thing before the move.
+    ///
+    /// The move is `BackupHandling.trashFile`, once. When it throws, the ARW
+    /// is where it was: it is not deleted, and no other way is tried.
+    private func moveOne(_ original: Original, _ factor: SqueezeFactor, dngIsAtTheFactor: Bool,
+                         _ summary: inout RunSummary) {
+        let name = original.arw.lastPathComponent
+        let decision = OriginalDecision.decide(
+            hasFullMatch: original.hasFullMatch, dngIsAtTheFactor: dngIsAtTheFactor,
+            dng: {
+                DNGCheck.check(original.dng.lastPathComponent, record: fileRecord(original.dng.path), arw: name,
+                               factor: factor, tags: { try tag.readOriginalCheck(original.dng) })
+            },
+            original: { OriginalState(recorded: original.recorded, now: fileRecord(original.arw.path)) })
+        switch decision {
+        case .keep(let reason):
+            summary.notes.append(.originalKept(name, because: reason))
+        case .move:
+            do {
+                try backups.trashFile(original.arw)
+                summary.originalsInTrash += 1
+            } catch {
+                summary.notes.append(.originalKept(name, because: .trashRefused(detail: error.localizedDescription)))
+            }
+        }
     }
 
     /// What `discard` did with a partial output.
@@ -414,10 +571,16 @@ public struct DesqueezeJob: Sendable {
         }
     }
 
-    private func tagOne(_ dng: DNGFile, _ factor: SqueezeFactor, _ summary: inout RunSummary) {
+    /// The tag step for one DNG (design 4.3, steps 2 to 4).
+    ///
+    /// - Returns: true when the step ended with the DNG at the factor: the
+    ///   tag was set and read back, or the DNG was at the factor already
+    ///   (design 14.2, line 3). False for a DNG that was blocked, and for
+    ///   one whose write or check failed.
+    private func tagOne(_ dng: DNGFile, _ factor: SqueezeFactor, _ summary: inout RunSummary) -> Bool {
         let (decision, hasBackup) = decide(dng, factor)
         summary.count(decision, for: dng.name, hasBackup: hasBackup)
-        guard decision == .write else { return }
+        guard decision == .write else { return decision == .skip }
 
         do {
             try tag.write(factor, to: dng.url)
@@ -442,15 +605,17 @@ public struct DesqueezeJob: Sendable {
             }
             summary.failed += 1
             summary.notes.append(.failed(dng.name, message: message, detail: detail))
-            return
+            return false
         }
 
         summary.set += 1
         do {
             try backups.trashBackup(for: dng.url)
         } catch {
+            // The tag is set and read back. Only the backup stayed.
             summary.notes.append(.backupKept(dng.name, detail: error.localizedDescription))
         }
+        return true
     }
 
     static func describe(_ error: Error) -> String {

@@ -180,6 +180,14 @@ public enum ConverterOutput {
     /// (design 13.9).
     public static let longestFileName = 255
 
+    /// True when the name of the work file of `arw` has more bytes than a
+    /// file name can have (design 13.9). No converter starts for such an
+    /// ARW (`ConverterRules`, rule 0), and the dry run plans no conversion
+    /// for it. Both ask here, so the two cannot disagree.
+    public static func workNameIsTooLong(for arw: URL) -> Bool {
+        workURL(for: arw).lastPathComponent.utf8.count > longestFileName
+    }
+
     /// What a note says after it names a file to delete, when that file is
     /// hidden: the work file is. The only place that makes the sentence.
     public static let hiddenFileHint = "It is a hidden file: in Finder, press Command-Shift-Period to see it."
@@ -344,7 +352,7 @@ struct ConverterRules: Sendable {
         let work = ConverterOutput.workURL(for: arw)
         // Rule 0, before any question to the disk: no file can have this
         // name, so no converter could write it.
-        guard work.lastPathComponent.utf8.count <= ConverterOutput.longestFileName else {
+        guard !ConverterOutput.workNameIsTooLong(for: arw) else {
             throw ConvertError.failedForAll(Self.nameTooLong)
         }
         // The scan sends only pending files. This guard holds the rule at the

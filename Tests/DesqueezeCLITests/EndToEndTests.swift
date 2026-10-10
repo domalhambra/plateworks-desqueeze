@@ -195,7 +195,11 @@ final class EndToEndTests: BuiltToolTestCase {
         var json = try first.json()
         XCTAssertEqual(Set(json.allKeys.compactMap { $0 as? String }),
                        ["folder", "factor", "dryRun", "converted", "convertedByDnglab", "convertedByAdobe", "set",
-                        "skipped", "blocked", "failed", "stopped", "unconvertedARWs", "notes"])
+                        "skipped", "blocked", "failed", "stopped", "unconvertedARWs", "trashOriginals",
+                        "originalsInTrash", "notes"])
+        // The option is off unless the flag is given (design 14.5).
+        XCTAssertEqual(json["trashOriginals"] as? Bool, false)
+        XCTAssertEqual(json["originalsInTrash"] as? Int, 0)
         XCTAssertEqual([json["convertedByDnglab"], json["convertedByAdobe"]] as? [Int], oneConversion)
         XCTAssertEqual(json["folder"] as? String, folder.path)
         XCTAssertEqual(json["factor"] as? String, "1.5")

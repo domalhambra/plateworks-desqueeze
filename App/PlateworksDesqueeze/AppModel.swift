@@ -386,7 +386,10 @@ final class AppModel: ObservableObject {
         let work = Task.detached {
             defer { updatesEnd.finish() }
             // The job scans the folder itself. It gets no counts from here.
-            return try runner.run(folder: folder, factor: factor, convert: convert, remove: remove, cancel: flag) {
+            // The window moves no original (design 14): it has no box for
+            // that yet.
+            return try runner.run(folder: folder, factor: factor, convert: convert, trashOriginals: false,
+                                  remove: remove, cancel: flag) {
                 updatesEnd.yield($0)
             }
         }

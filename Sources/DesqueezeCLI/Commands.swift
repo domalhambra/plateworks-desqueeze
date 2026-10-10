@@ -78,7 +78,7 @@ public enum DesqueezeTool {
         case .run(let folder, let factor, let convert, let dryRun):
             return perform(invocation, folder, in: environment) { operations, url in
                 let report = try operations.run(
-                    url, factor: factor, convert: convert, dryRun: dryRun,
+                    url, factor: factor, convert: convert, trashOriginals: false, dryRun: dryRun,
                     cancel: dryRun ? CancelFlag() : environment.interruptFlag(), progress: progress(to: environment))
                 return (try output(report, runText(report, operations), invocation), exitCode(report))
             }

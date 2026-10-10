@@ -12,6 +12,8 @@ final class JobHarness {
     /// dnglab. Its log entries start with "dnglab".
     let dnglab: FakeConverter
     let facts: FakeFacts
+    /// The disk, as the fifth step of a run asks it (design 14.2).
+    let files: FakeFiles
 
     init() {
         backups = FakeBackups(log: log)
@@ -19,6 +21,7 @@ final class JobHarness {
         converter = FakeConverter(log: log)
         dnglab = FakeConverter(log: log, label: "dnglab", name: "dnglab", reportsTheMatch: true)
         facts = FakeFacts(log: log)
+        files = FakeFiles(log: log)
     }
 
     /// - Parameter horizontal: the scale the scan read. Nil is "unknown".
@@ -44,7 +47,8 @@ final class JobHarness {
     }
 
     func job(withConverter: Bool = true, withDnglab: Bool = false) -> DesqueezeJob {
-        DesqueezeJob(tag: tag, converters: converters(withConverter: withConverter, withDnglab: withDnglab),
-                     backups: backups)
+        let files = files
+        return DesqueezeJob(tag: tag, converters: converters(withConverter: withConverter, withDnglab: withDnglab),
+                            backups: backups, fileRecord: { files.record(atPath: $0) })
     }
 }

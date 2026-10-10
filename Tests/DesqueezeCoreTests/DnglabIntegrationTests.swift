@@ -292,7 +292,7 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
             converters: RawConverters(dnglab: dnglabs, adobe: adobes, facts: ARWFactsReader(exiftool: exiftool)),
             backups: backups)
 
-        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true, trashOriginals: false)
 
         XCTAssertEqual(try Data(contentsOf: dng), others, "the DNG of the other program has the same bytes")
         XCTAssertEqual(try names(), ["frame.ARW", "frame.dng"], "no work file stays, hidden files counted")
@@ -549,7 +549,7 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
         let factor = SqueezeFactor(1.5)!
         let job = job(withAdobe: true)
 
-        let plan = try job.plan(folder: folder, factor: factor, convert: true)
+        let plan = try job.plan(folder: folder, factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(try names(), ["already here.dng", "frame.ARW"], "a plan makes no file")
         XCTAssertEqual(plan.steps, [
             RunPlan.Step(name: "frame.ARW", action: .convert, converter: .dnglab),
@@ -557,7 +557,7 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
             RunPlan.Step(name: "frame.dng", action: .write),
         ])
 
-        let summary = try job.run(folder: folder, factor: factor, convert: true)
+        let summary = try job.run(folder: folder, factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary, plan.summary, "the run gives the counts and the notes of the plan")
         XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.convertedByAdobe], [1, 1, 0])
         XCTAssertEqual([summary.set, summary.failed], [2, 0])
@@ -576,10 +576,11 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
         XCTAssertEqual(validate.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "OK", validate.stderr)
 
         // A second run finds the ARW claimed, and both files at the value.
-        let rerun = try job.run(folder: folder, factor: factor, convert: true)
+        let rerun = try job.run(folder: folder, factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual([rerun.converted, rerun.set, rerun.skipped, rerun.unconvertedARWs], [0, 0, 2, 0])
 
-        let removed = try job.run(folder: folder, factor: .noStretch, convert: false, remove: true)
+        let removed = try job.run(folder: folder,
+                                  factor: .noStretch, convert: false, trashOriginals: false, remove: true)
         XCTAssertEqual([removed.set, removed.failed], [2, 0])
         XCTAssertEqual(try tag.read(dng), .noStretch)
         try assertTheMatch(of: ["SubIFD:WhiteLevel"], isIn: dng, for: facts) // Remove keeps the match.
@@ -620,7 +621,7 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
                                       runner: runner, backups: backups),
             backups: backups)
 
-        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true, trashOriginals: false)
 
         XCTAssertEqual(summary.notes, [FileNote(
             name: longName, kind: .notConverted, message: "Not converted.",
@@ -629,6 +630,122 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
         XCTAssertEqual(Set(runner.programs), ["exiftool"], "no converter starts: \(runner.programs)")
         XCTAssertEqual(try names(), [longName], "the folder holds what it held")
         XCTAssertEqual(try Data(contentsOf: arw), arwBefore, "the ARW must not change")
+    }
+
+    // MARK: The originals, on request (design 14)
+
+    /// A folder that stands for the Trash, beside the photo folder, and
+    /// backups that move each discarded file into it. Nothing is removed.
+    func makeTrash() throws -> (folder: URL, backups: FileBackups) {
+        let trash = folder.deletingLastPathComponent().appendingPathComponent("Test trash")
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        return (trash, try FileBackups.fromEnvironment([FileBackups.testFolderVariable: trash.path]).backups)
+    }
+
+    /// dnglab alone, so Adobe DNG Converter is never started here.
+    func job(movingTo backups: FileBackups) -> DesqueezeJob {
+        DesqueezeJob(tag: tag,
+                     converters: RawConverters(exiftool: exiftool, dnglab: dnglab, adobe: nil, backups: backups),
+                     backups: backups)
+    }
+
+    // The real tools, and the real disk for lines 4 and 5: after a run with
+    // the option on, the folder holds the DNG and no ARW of it, and the file
+    // in the injected trash has the bytes of the source ARW.
+    func testARealRunWithTheOptionOnLeavesTheDNGAndMovesItsARWToTheInjectedTrash() throws {
+        let source = IntegrationTests.fixtures.appendingPathComponent("sample.ARW")
+        let sampleDNG = IntegrationTests.fixtures.appendingPathComponent("sample.dng")
+        guard FileManager.default.fileExists(atPath: sampleDNG.path) else {
+            throw XCTSkip("No fixtures. Run scripts/make_fixtures.sh with one ARW file.")
+        }
+        let arw = try copyFixture(as: "frame.ARW")
+        // A full match, so the DNG that dnglab makes is complete (line 2).
+        _ = try factsOfACoveredFrame(arw)
+        // A file that is not the app's: it stays.
+        try Data("sidecar".utf8).write(to: folder.appendingPathComponent("frame.xmp"))
+        // An ARW that an earlier run converted: its DNG claims it, so this
+        // run does not convert it, and it stays (design 14.1).
+        try FileManager.default.copyItem(at: sampleDNG, to: folder.appendingPathComponent("earlier.dng"))
+        try Data("an ARW of an earlier run".utf8).write(to: folder.appendingPathComponent("earlier.ARW"))
+        // An ARW whose conversion fails: it stays.
+        try Data("not a photo".utf8).write(to: folder.appendingPathComponent("junk.ARW"))
+        let (trash, backups) = try makeTrash()
+        let factor = SqueezeFactor(1.5)!
+
+        let plan = try job(movingTo: backups).plan(folder: folder, factor: factor, convert: true,
+                                                   trashOriginals: true)
+        // The junk file has no facts, so the plan gives it a conversion
+        // with no full match, and no step for its original.
+        XCTAssertEqual(plan.steps.filter { $0.action == .trashOriginal }.map(\.name), ["frame.ARW"])
+        XCTAssertEqual(plan.summary.notes.map(\.kind), [.convertedUnmatched, .originalKept])
+        XCTAssertEqual(try names(), ["earlier.ARW", "earlier.dng", "frame.ARW", "frame.xmp", "junk.ARW"],
+                       "a plan moves nothing")
+
+        let summary = try job(movingTo: backups).run(folder: folder, factor: factor, convert: true,
+                                                     trashOriginals: true)
+
+        // `contentsOfDirectory(atPath:)` lists hidden files too.
+        XCTAssertEqual(try names(), ["earlier.ARW", "earlier.dng", "frame.dng", "frame.xmp", "junk.ARW"],
+                       "the DNG, and no ARW of it. Every other file is where it was")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path).sorted(),
+                       ["earlier.dng_original", "frame.ARW", "frame.dng_original"])
+        XCTAssertEqual(try Data(contentsOf: trash.appendingPathComponent("frame.ARW")), try Data(contentsOf: source),
+                       "the file in the trash has the bytes of the source ARW")
+        XCTAssertTrue(summary.trashOriginals)
+        XCTAssertEqual(summary.originalsInTrash, 1)
+        XCTAssertEqual(summary.originalsLine, "Originals moved to the Trash: 1 of 1.")
+        XCTAssertEqual([summary.converted, summary.set, summary.failed], [1, 2, 1])
+        XCTAssertEqual(summary.notes.map(\.kind), [.notConverted], "an ARW that failed gets no second note")
+        XCTAssertEqual(try tag.read(folder.appendingPathComponent("frame.dng")), Scale(horizontal: 1.5, vertical: 1))
+        XCTAssertEqual(try read(["IFD0:OriginalRawFileName"], in: folder.appendingPathComponent("frame.dng")),
+                       ["frame.ARW"])
+    }
+
+    // The same run with the option off: the ARW is where it was, with its
+    // bytes, and only the backups went to the injected trash.
+    func testARealRunWithTheOptionOffLeavesTheARW() throws {
+        let arw = try copyFixture(as: "frame.ARW")
+        let before = try Data(contentsOf: arw)
+        let (trash, backups) = try makeTrash()
+
+        let summary = try job(movingTo: backups).run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true,
+                                                     trashOriginals: false)
+
+        XCTAssertEqual(try names(), ["frame.ARW", "frame.dng"])
+        XCTAssertEqual(try Data(contentsOf: arw), before)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path), ["frame.dng_original"])
+        XCTAssertEqual(summary.originalsInTrash, 0)
+        XCTAssertNil(summary.originalsLine)
+    }
+
+    // The real disk for line 4: the ARW is written again while its DNG is
+    // tagged, after its conversion. It is not the file that was converted,
+    // so it stays.
+    func testARealARWThatChangesAfterItsConversionStays() throws {
+        let arw = try copyFixture(as: "frame.ARW")
+        _ = try factsOfACoveredFrame(arw)
+        let (trash, backups) = try makeTrash()
+        // The backup of the tag step goes to the trash before step 5. At
+        // that moment the ARW gets one byte more.
+        let changing = FileBackups(trash: { file in
+            if file.lastPathComponent == "frame.dng_original" {
+                let handle = try FileHandle(forWritingTo: arw)
+                try handle.seekToEnd()
+                try handle.write(contentsOf: Data([0]))
+                try handle.close()
+            }
+            try backups.trashFile(file)
+        })
+
+        let summary = try job(movingTo: changing).run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true,
+                                                      trashOriginals: true)
+
+        XCTAssertEqual(try names(), ["frame.ARW", "frame.dng"], "the ARW stays")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path), ["frame.dng_original"])
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: "frame.ARW", kind: .originalKept, message: "The original changed during the run, so it stays.",
+            detail: nil)])
+        XCTAssertEqual(summary.originalsLine, "Originals moved to the Trash: 0 of 1.")
     }
 
     // dnglab alone, and a file that is no photo: failed, with dnglab's words.
@@ -641,7 +758,8 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
         let facts = try facts(of: arw)
         try Data("not a photo".utf8).write(to: folder.appendingPathComponent("junk.ARW"))
 
-        let summary = try job(withAdobe: false).run(folder: folder, factor: .noStretch, convert: true)
+        let summary = try job(withAdobe: false).run(folder: folder,
+                                                    factor: .noStretch, convert: true, trashOriginals: false)
 
         XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.failed, summary.unconvertedARWs],
                        [1, 1, 1, 1])

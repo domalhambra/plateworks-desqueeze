@@ -95,7 +95,7 @@ final class IntegrationTests: XCTestCase {
         XCTAssertEqual(first.dngs.map(\.name), ["already here.dng"])
         XCTAssertEqual(first.pendingARWs.map(\.lastPathComponent), ["frame.ARW"])
 
-        let summary = job.run(first, factor: factor, convert: true)
+        let summary = job.run(first, factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary.converted, 1)
         XCTAssertEqual(summary.set, 2)
         XCTAssertEqual(summary.failed, 0)
@@ -115,12 +115,12 @@ final class IntegrationTests: XCTestCase {
                        "Adobe DNG Converter names the ARW, and not the work file")
         XCTAssertEqual(try Data(contentsOf: arw), arwBefore, "the ARW must not change")
 
-        let rerun = job.run(second, factor: factor, convert: true)
+        let rerun = job.run(second, factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(rerun.skipped, 2)
         XCTAssertEqual(rerun.set, 0)
         XCTAssertEqual(rerun.converted, 0)
 
-        let removed = job.run(second, factor: .noStretch, convert: false)
+        let removed = job.run(second, factor: .noStretch, convert: false, trashOriginals: false)
         XCTAssertEqual(removed.set, 2)
         XCTAssertEqual(removed.failed, 0)
         XCTAssertEqual(removed.notes, [])
@@ -139,13 +139,13 @@ final class IntegrationTests: XCTestCase {
         let job = DesqueezeJob(tag: tag, converters: .none, backups: backups)
         let factor = SqueezeFactor(1.5)!
 
-        let first = try job.run(folder: folder, factor: factor, convert: false)
+        let first = try job.run(folder: folder, factor: factor, convert: false, trashOriginals: false)
         XCTAssertEqual([first.set, first.skipped, first.failed], [1, 0, 0], "\(first.notes)")
         XCTAssertEqual(try scaleOnDisk(name), Scale(horizontal: 1.5, vertical: 1))
         XCTAssertEqual(try scanner.snapshot(of: folder).dngs.map(\.scale), [Scale(horizontal: 1.5, vertical: 1)],
                        "the scan finds the row by the printed name")
 
-        let second = try job.run(folder: folder, factor: factor, convert: false)
+        let second = try job.run(folder: folder, factor: factor, convert: false, trashOriginals: false)
         XCTAssertEqual([second.set, second.skipped, second.failed], [0, 1, 0], "\(second.notes)")
         XCTAssertEqual(try names(withSuffix: "_original"), [])
     }
@@ -166,8 +166,8 @@ final class IntegrationTests: XCTestCase {
         _ = try copyFixture("sample.dng", as: "already here.dng")
         _ = try copyFixture("sample.ARW", as: "frame.ARW")
 
-        let applied = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
-        let removed = try job.run(folder: folder, factor: .noStretch, convert: false)
+        let applied = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true, trashOriginals: false)
+        let removed = try job.run(folder: folder, factor: .noStretch, convert: false, trashOriginals: false)
 
         XCTAssertEqual(applied.converted, 1)
         XCTAssertEqual(applied.set, 2)
@@ -202,7 +202,7 @@ final class IntegrationTests: XCTestCase {
         let plantedBefore = try Data(contentsOf: planted)
         let hashBefore = try imageDataHash(good)
 
-        let applied = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+        let applied = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true, trashOriginals: false)
 
         XCTAssertEqual(applied.converted, 0)
         XCTAssertEqual(applied.set, 1)
@@ -231,7 +231,7 @@ final class IntegrationTests: XCTestCase {
 
         // Remove, on the same folder. exiftool cannot read the junk file, so
         // its scale is unknown, and it must fail aloud. It must not be skipped.
-        let removed = try job.run(folder: folder, factor: .noStretch, convert: false)
+        let removed = try job.run(folder: folder, factor: .noStretch, convert: false, trashOriginals: false)
 
         XCTAssertEqual(removed.set, 1)
         XCTAssertEqual(removed.failed, 1)
@@ -261,14 +261,14 @@ final class IntegrationTests: XCTestCase {
             name: "lost.dng_original", kind: .orphanBackup,
             message: "A backup with no DNG beside it. Rename it to lost.dng to get the photo back.", detail: nil)
 
-        let applied = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+        let applied = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true, trashOriginals: false)
         XCTAssertEqual(applied.notes, [note])
         XCTAssertEqual(applied.set, 1)
         XCTAssertEqual(applied.converted, 0)
         XCTAssertEqual(applied.skipped, 0)
         XCTAssertEqual(applied.failed, 0)
 
-        let removed = try job.run(folder: folder, factor: .noStretch, convert: false)
+        let removed = try job.run(folder: folder, factor: .noStretch, convert: false, trashOriginals: false)
         XCTAssertEqual(removed.notes, [note])
         XCTAssertEqual(removed.set, 1)
         XCTAssertEqual(removed.failed, 0)
@@ -288,7 +288,7 @@ final class IntegrationTests: XCTestCase {
         let orphanBefore = try Data(contentsOf: orphan)
         let arwBefore = try Data(contentsOf: arw)
 
-        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true, trashOriginals: false)
 
         var expected = RunSummary()
         expected.notes = [FileNote(
@@ -324,7 +324,7 @@ final class IntegrationTests: XCTestCase {
         XCTAssertEqual(before.count, 5)
         let factor = SqueezeFactor(1.5)!
 
-        let plan = try job.plan(folder: folder, factor: factor, convert: true)
+        let plan = try job.plan(folder: folder, factor: factor, convert: true, trashOriginals: false)
 
         XCTAssertEqual(try folderState(), before, "a plan must change no byte, no date, and no name")
         XCTAssertEqual(plan.steps, [
@@ -335,7 +335,7 @@ final class IntegrationTests: XCTestCase {
         ])
         XCTAssertEqual(plan.summary.notes.map(\.kind), [.orphanBackup, .blockedByBackup])
 
-        let summary = try job.run(folder: folder, factor: factor, convert: true)
+        let summary = try job.run(folder: folder, factor: factor, convert: true, trashOriginals: false)
         XCTAssertEqual(summary, plan.summary, "the run that follows gives the counts and notes of the plan")
         XCTAssertNotEqual(try folderState(), before, "the premise: a real run does change the folder")
         try assertTheDNGHasItsNameAndNoHiddenFileIsLeft("frame.dng")
