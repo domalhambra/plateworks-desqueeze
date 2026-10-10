@@ -117,6 +117,15 @@ class ServerTestCase: XCTestCase {
     /// the product's own reader. Adobe DNG Converter gets every other
     /// frame: `requireFixturesAndTools` skips without it. The read changes
     /// no file.
+    ///
+    /// This expectation is taken from the product: `ARWFactsReader` reads
+    /// the facts, and `AdobeMatch` says whether they are a full match. So a
+    /// test that uses it pins the choice and the wiring: the built server
+    /// gives the ARW to the converter that the core's rule names, and its
+    /// report says so. It does not pin the match itself. That is pinned in
+    /// the core's tests: the table test,
+    /// `AdobeMatchTests.testTheTableIsTheDataFile`, and the drift check,
+    /// `AdobeDriftTests`.
     func dnglabConvertsTheFixture() -> Bool {
         let locator = ToolLocator()
         guard locator.dnglab() != nil, let exiftool = locator.exiftool() else { return false }

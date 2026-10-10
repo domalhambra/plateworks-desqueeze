@@ -19,6 +19,14 @@ final class EndToEndTests: BuiltToolTestCase {
     }
 
     /// True when dnglab gets the fixture ARW on this Mac.
+    ///
+    /// This expectation is taken from the product: `AdobeMatch` says whether
+    /// the frame is a full match. So a test that uses it pins the choice
+    /// and the wiring: the built tool gives the ARW to the converter that
+    /// the core's rule names, and its report and its commands say so. It
+    /// does not pin the match itself. That is pinned in the core's tests:
+    /// the table test, `AdobeMatchTests.testTheTableIsTheDataFile`, and the
+    /// drift check, `AdobeDriftTests`.
     var dnglabConverts: Bool { ToolLocator().dnglab() != nil && AdobeMatch.match(fixtureFacts).isFull }
 
     /// The converter that gets the fixture ARW on this Mac.
@@ -313,6 +321,10 @@ final class EndToEndTests: BuiltToolTestCase {
                     && $0.contains("/Shoot with spaces/frame.ARW' '/")
                     && $0.hasSuffix("/Shoot with spaces/.frame.desqueeze-work.dng'")
             }, result.stderr)
+            // The values are taken from the product (`AdobeMatch`). This
+            // pins the wiring: the tool writes the tags that the core's
+            // match gives for this frame. That those values are Adobe's is
+            // pinned by the core's table test and by the drift check.
             let match = AdobeMatch.match(facts).tags
             XCTAssertEqual(match.prefix(3).map(\.name),
                            ["SubIFD:WhiteLevel", "IFD0:BaselineExposure", "IFD0:CameraCalibration1"])
