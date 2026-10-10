@@ -22,10 +22,14 @@ final class FolderTextTests: XCTestCase {
         XCTAssertEqual(h.snapshot(dngs: dngs(3)).countsLine(converterAvailable: false), "3 DNG")
     }
 
+    // With neither converter. The reason names no converter: dnglab converts,
+    // and Adobe DNG Converter is only the backup (design 13.5).
     func testTheCountsLineSaysWhyTheARWFilesCannotConvert() {
         let snapshot = h.snapshot(dngs: dngs(2), pending: arws(12))
         XCTAssertEqual(snapshot.countsLine(converterAvailable: false),
-                       "2 DNG · 12 ARW cannot be converted: Adobe DNG Converter is not installed")
+                       "2 DNG · 12 ARW cannot be converted: no converter is installed")
+        XCTAssertEqual(h.snapshot(pending: arws(1)).countsLine(converterAvailable: false),
+                       "0 DNG · 1 ARW cannot be converted: no converter is installed")
     }
 
     func testAFolderWithOnlyARWFilesCountsZeroDNG() {
@@ -41,6 +45,65 @@ final class FolderTextTests: XCTestCase {
     // hide it, so the counts show.
     func testAFolderWithOnlyAnOrphanBackupIsNotEmpty() {
         XCTAssertEqual(h.snapshot(orphans: orphans(1)).countsLine(converterAvailable: true), "0 DNG")
+    }
+
+    // MARK: The line of advice about the converters (design 13.5)
+
+    func advice(pending: Int, dnglab: Bool, adobe: Bool) -> String? {
+        FolderText.converterAdvice(pendingARWs: pending, dnglabInstalled: dnglab, adobeInstalled: adobe)
+    }
+
+    func testWithBothConvertersThereIsNoAdvice() {
+        XCTAssertNil(advice(pending: 12, dnglab: true, adobe: true))
+    }
+
+    func testWithDnglabAloneTheAdviceSaysThatAdobeIsAnOptionalBackup() {
+        XCTAssertEqual(advice(pending: 12, dnglab: true, adobe: false),
+                       "Adobe DNG Converter is not installed. It is an optional backup for photos that dnglab "
+                           + "cannot match.")
+    }
+
+    func testWithAdobeAloneTheAdviceSaysThatDnglabIsFasterAndHowToInstallIt() {
+        XCTAssertEqual(advice(pending: 12, dnglab: false, adobe: true),
+                       "dnglab is faster and opens no window. Install it with: brew install dnglab")
+    }
+
+    func testWithNeitherConverterTheAdviceIsTheInstallCommandOfDnglab() {
+        XCTAssertEqual(advice(pending: 1, dnglab: false, adobe: false), "Install dnglab with: brew install dnglab")
+    }
+
+    // The advice is about the ARW files that wait. With none, nothing shows.
+    func testWithNoPendingARWThereIsNoAdviceInAnyState() {
+        for (dnglab, adobe) in [(true, true), (true, false), (false, true), (false, false)] {
+            XCTAssertNil(advice(pending: 0, dnglab: dnglab, adobe: adobe), "dnglab \(dnglab), Adobe \(adobe)")
+        }
+    }
+
+    // The install command is one constant, as the one of exiftool is.
+    func testTheInstallCommandOfDnglabIsOneConstant() {
+        XCTAssertEqual(ToolLocator.dnglabInstallCommand, "brew install dnglab")
+        for (dnglab, adobe) in [(false, true), (false, false)] {
+            XCTAssertEqual(advice(pending: 1, dnglab: dnglab, adobe: adobe)?.hasSuffix(": brew install dnglab"), true)
+        }
+    }
+
+    // The window asks a snapshot, and the command line tool asks a scan
+    // report. Both get the line of the one function.
+    func testASnapshotAndAScanReportGiveTheSameAdvice() {
+        let exiftool = URL(fileURLWithPath: "/opt/homebrew/bin/exiftool")
+        let dnglab = URL(fileURLWithPath: "/opt/homebrew/bin/dnglab")
+        let adobe = URL(fileURLWithPath: "/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter")
+        for pending in [0, 3] {
+            let snapshot = h.snapshot(dngs: dngs(1), pending: arws(pending))
+            for (hasDnglab, hasAdobe) in [(true, true), (true, false), (false, true), (false, false)] {
+                let expected = advice(pending: pending, dnglab: hasDnglab, adobe: hasAdobe)
+                XCTAssertEqual(snapshot.converterAdvice(dnglabInstalled: hasDnglab, adobeInstalled: hasAdobe), expected)
+                let report = ScanReport(snapshot: snapshot, exiftool: exiftool, dnglab: hasDnglab ? dnglab : nil,
+                                        dngConverter: hasAdobe ? adobe : nil)
+                XCTAssertEqual(report.converterAdvice, expected)
+            }
+        }
+        XCTAssertNotNil(h.snapshot(pending: arws(3)).converterAdvice(dnglabInstalled: true, adobeInstalled: false))
     }
 
     // MARK: The run count and the run button

@@ -5,8 +5,9 @@ import Foundation
 ///
 /// Each one is a pure function of a `FolderSnapshot` and of whether a
 /// converter is there: dnglab, or Adobe DNG Converter, or both
-/// (`RawConverters.canConvert`). The window and the command line tool only show them,
-/// so the two cannot say different things about one folder. The sentence
+/// (`RawConverters.canConvert`), or of which of the two is there. The window
+/// and the command line tool only show them, so the two cannot say different
+/// things about one folder. The sentence
 /// about an orphan backup is made at `FileNote.orphanBackup`, and nowhere
 /// else: a front end and a run both show that note's `line`.
 public enum FolderText {
@@ -22,6 +23,34 @@ public enum FolderText {
     /// it: `This folder could not be read: /Volumes/Card/Shoot 1`.
     public static func unreadable(path: String) -> String {
         "\(unreadable.dropLast()): \(path)"
+    }
+
+    /// The one line of advice about the converters, for a folder with a
+    /// pending ARW (design 13.5). Nil when both converters are installed,
+    /// and when no ARW is pending: the advice is about the files that wait.
+    ///
+    /// | Installed | The line |
+    /// |---|---|
+    /// | dnglab and Adobe | none |
+    /// | dnglab only | Adobe DNG Converter is an optional backup. |
+    /// | Adobe only | dnglab is faster, with its install command. |
+    /// | Neither | The install command of dnglab. |
+    ///
+    /// With one converter the line is a quiet one: every ARW still converts.
+    /// With neither, `FolderSnapshot.countsLine` says that the ARW files
+    /// cannot be converted, and this line says what to do.
+    public static func converterAdvice(pendingARWs: Int, dnglabInstalled: Bool, adobeInstalled: Bool) -> String? {
+        guard pendingARWs > 0 else { return nil }
+        switch (dnglabInstalled, adobeInstalled) {
+        case (true, true):
+            return nil
+        case (true, false):
+            return "Adobe DNG Converter is not installed. It is an optional backup for photos that dnglab cannot match."
+        case (false, true):
+            return "dnglab is faster and opens no window. Install it with: \(ToolLocator.dnglabInstallCommand)"
+        case (false, false):
+            return "Install dnglab with: \(ToolLocator.dnglabInstallCommand)"
+        }
     }
 
     /// The label of the run button for `count` photos.
@@ -59,16 +88,24 @@ extension FolderSnapshot {
     /// show, and `messages` names the backup.
     ///
     /// - Parameter converterAvailable: true when one converter or the other
-    ///   is installed. False says why the ARW files wait.
+    ///   is installed. False says why the ARW files wait: `12 ARW cannot be
+    ///   converted: no converter is installed`. `converterAdvice` then gives
+    ///   the install command.
     public func countsLine(converterAvailable: Bool) -> String {
         if isEmpty { return FolderText.noPhotos }
         var parts = ["\(dngs.count) DNG"]
         if !pendingARWs.isEmpty {
             parts.append(converterAvailable
                 ? "\(pendingARWs.count) ARW to convert"
-                : "\(pendingARWs.count) ARW cannot be converted: Adobe DNG Converter is not installed")
+                : "\(pendingARWs.count) ARW cannot be converted: no converter is installed")
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// `FolderText.converterAdvice` for the pending ARW files of this folder.
+    public func converterAdvice(dnglabInstalled: Bool, adobeInstalled: Bool) -> String? {
+        FolderText.converterAdvice(pendingARWs: pendingARWs.count, dnglabInstalled: dnglabInstalled,
+                                   adobeInstalled: adobeInstalled)
     }
 
     /// The photos a run works on: the DNG files, plus the pending ARW files

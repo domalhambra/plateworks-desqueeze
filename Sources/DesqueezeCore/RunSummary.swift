@@ -197,7 +197,8 @@ extension RunSummary {
     /// when it left none.
     ///
     /// - Parameter converterAvailable: true when one converter or the other
-    ///   is installed (`RawConverters.canConvert`). False adds the reason.
+    ///   is installed (`RawConverters.canConvert`). False adds the reason,
+    ///   "No converter is installed."
     public func unconvertedARWsLine(converterAvailable: Bool) -> String? {
         Self.unconvertedARWsLine(count: unconvertedARWs, dryRun: false, converterAvailable: converterAvailable)
     }
@@ -206,7 +207,7 @@ extension RunSummary {
         guard count > 0 else { return nil }
         let files = count == 1 ? "1 ARW file" : "\(count) ARW files"
         let verb = dryRun ? "would not be" : (count == 1 ? "was not" : "were not")
-        return "\(files) \(verb) converted." + (converterAvailable ? "" : " Adobe DNG Converter is not installed.")
+        return "\(files) \(verb) converted." + (converterAvailable ? "" : " No converter is installed.")
     }
 }
 

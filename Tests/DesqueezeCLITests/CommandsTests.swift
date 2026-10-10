@@ -204,7 +204,7 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5"), 0)
         XCTAssertEqual(h.out.lines, [
             "1 set · 0 skipped · 0 failed",
-            "2 ARW files were not converted. Adobe DNG Converter is not installed.",
+            "2 ARW files were not converted. No converter is installed.",
             "Photos already in Lightroom: Metadata › Read Metadata from File.",
         ])
     }

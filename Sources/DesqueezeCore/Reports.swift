@@ -70,6 +70,13 @@ public struct ScanReport: Codable, Equatable, Sendable {
             orphanBackups: snapshot.orphanBackups.map(\.lastPathComponent))
     }
 
+    /// `FolderText.converterAdvice` for this scan: the one line about the
+    /// converters, or nil.
+    public var converterAdvice: String? {
+        FolderText.converterAdvice(pendingARWs: pendingARWs.count, dnglabInstalled: dnglab != nil,
+                                   adobeInstalled: dngConverter != nil)
+    }
+
     /// True when the folder holds nothing to report.
     public var isEmpty: Bool { dngs.isEmpty && pendingARWs.isEmpty && orphanBackups.isEmpty }
 
@@ -153,6 +160,16 @@ public struct RunReport: Codable, Equatable, Sendable {
     public var countsLine: String {
         RunSummary.countsLine(converted: converted, set: set, skipped: skipped, blocked: blocked, failed: failed,
                               stopped: stopped)
+    }
+
+    /// How many ARW files each converter converted, when both did work:
+    /// `Converted with dnglab: 11. With Adobe DNG Converter: 1.` Nil when
+    /// only one converted, or none, and for a dry run: its steps name the
+    /// converter of each ARW.
+    public var convertersLine: String? {
+        guard !dryRun, convertedByDnglab > 0, convertedByAdobe > 0 else { return nil }
+        return "Converted with \(ConverterKind.dnglab.name): \(convertedByDnglab). "
+            + "With \(ConverterKind.adobe.name): \(convertedByAdobe)."
     }
 
     /// The sentence of `RunSummary.unconvertedARWsLine`. A dry run says

@@ -7,6 +7,14 @@ final class ConverterChoiceTests: XCTestCase {
         ConverterChoice.order(fullMatch: fullMatch, dnglabInstalled: dnglab, adobeInstalled: adobe)
     }
 
+    // The name that a sentence gives each converter. The JSON has the raw
+    // values, `dnglab` and `adobe`.
+    func testEachConverterHasTheNameThatASentenceGivesIt() {
+        XCTAssertEqual(ConverterKind.dnglab.name, "dnglab")
+        XCTAssertEqual(ConverterKind.adobe.name, "Adobe DNG Converter")
+        XCTAssertEqual(ConverterKind.allCases.map(\.rawValue), ["dnglab", "adobe"])
+    }
+
     // "dnglab, matched", and "Adobe, then failed if Adobe fails too" when
     // dnglab or its match failed: Adobe is second in the list.
     func testAFullMatchWithBothInstalledGoesToDnglabThenToAdobe() {

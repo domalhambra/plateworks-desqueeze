@@ -14,6 +14,9 @@ public struct ToolLocator: Sendable {
     /// and 8). The install command follows it, in the front end's own layout.
     public static let exiftoolMissing = "Desqueeze needs exiftool, and it is not installed."
     public static let exiftoolInstallCommand = "brew install exiftool"
+    /// For the advice about the converters (`FolderText.converterAdvice`,
+    /// design 13.5).
+    public static let dnglabInstallCommand = "brew install dnglab"
 
     public let exiftoolCandidates: [String]
     /// dnglab is looked for where exiftool is (design 13.5).

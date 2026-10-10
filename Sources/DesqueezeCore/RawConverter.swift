@@ -210,7 +210,7 @@ public struct AdobeConverter: RawConverter {
     ) {
         self.executable = executable
         self.runner = runner
-        rules = ConverterRules(name: "Adobe DNG Converter", exists: fileExists, size: fileSize)
+        rules = ConverterRules(name: ConverterKind.adobe.name, exists: fileExists, size: fileSize)
     }
 
     /// `ConverterOutput.url(for:)`, under its first name.

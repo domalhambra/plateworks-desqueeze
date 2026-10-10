@@ -4,6 +4,14 @@ import Foundation
 public enum ConverterKind: String, Codable, Sendable, CaseIterable {
     case dnglab
     case adobe
+
+    /// The converter as a sentence names it: `dnglab`, `Adobe DNG Converter`.
+    public var name: String {
+        switch self {
+        case .dnglab: return "dnglab"
+        case .adobe: return "Adobe DNG Converter"
+        }
+    }
 }
 
 /// Which converters get one ARW, and in which order (design 13.4). Pure: the

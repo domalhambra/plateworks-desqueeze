@@ -50,7 +50,7 @@ public struct DnglabConverter: RawConverter {
         self.executable = executable
         self.exiftool = exiftool
         self.runner = runner
-        rules = ConverterRules(name: "dnglab", exists: fileExists, size: fileSize,
+        rules = ConverterRules(name: ConverterKind.dnglab.name, exists: fileExists, size: fileSize,
                                reason: { Self.reason(inStandardError: $0.stderr) })
     }
 

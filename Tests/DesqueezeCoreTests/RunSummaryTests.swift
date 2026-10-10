@@ -278,11 +278,13 @@ final class RunSummaryTests: XCTestCase {
         XCTAssertEqual(left(12).unconvertedARWsLine(converterAvailable: true), "12 ARW files were not converted.")
     }
 
-    func testTheSentenceSaysWhyWhenTheConverterIsMissing() {
+    // With neither converter. The reason does not name Adobe DNG Converter
+    // alone: dnglab converts, and Adobe's converter is the backup.
+    func testTheSentenceSaysWhyWhenNoConverterIsInstalled() {
         XCTAssertEqual(left(1).unconvertedARWsLine(converterAvailable: false),
-                       "1 ARW file was not converted. Adobe DNG Converter is not installed.")
+                       "1 ARW file was not converted. No converter is installed.")
         XCTAssertEqual(left(12).unconvertedARWsLine(converterAvailable: false),
-                       "12 ARW files were not converted. Adobe DNG Converter is not installed.")
+                       "12 ARW files were not converted. No converter is installed.")
     }
 
     // The job with no converter, to the sentence: the count is the job's own.
@@ -290,7 +292,7 @@ final class RunSummaryTests: XCTestCase {
         let summary = h.job(withConverter: false).run(
             h.snapshot(dngs: [h.dng("A.dng")], pending: ["X.ARW", "Y.ARW"]), factor: factor, convert: true)
         XCTAssertEqual(summary.unconvertedARWsLine(converterAvailable: false),
-                       "2 ARW files were not converted. Adobe DNG Converter is not installed.")
+                       "2 ARW files were not converted. No converter is installed.")
     }
 
     func testTheReportOfARunHasTheSameSentence() {
@@ -304,9 +306,37 @@ final class RunSummaryTests: XCTestCase {
         let report = RunReport(folder: h.folder, factor: factor, plan: plan)
         XCTAssertEqual(report.unconvertedARWsLine(converterAvailable: true), "2 ARW files would not be converted.")
         XCTAssertEqual(report.unconvertedARWsLine(converterAvailable: false),
-                       "2 ARW files would not be converted. Adobe DNG Converter is not installed.")
+                       "2 ARW files would not be converted. No converter is installed.")
         let one = RunReport(folder: h.folder, factor: factor, plan: RunPlan(steps: [], summary: left(1)))
         XCTAssertEqual(one.unconvertedARWsLine(converterAvailable: true), "1 ARW file would not be converted.")
+    }
+
+    // MARK: The line about the two converters (design 13.6)
+
+    func converted(dnglab: Int, adobe: Int) -> RunSummary {
+        var summary = RunSummary()
+        summary.convertedByDnglab = dnglab
+        summary.convertedByAdobe = adobe
+        return summary
+    }
+
+    func testARunInWhichBothConvertersWorkedSaysHowManyEachConverted() {
+        let report = RunReport(folder: h.folder, factor: factor, summary: converted(dnglab: 11, adobe: 1))
+        XCTAssertEqual(report.convertersLine, "Converted with dnglab: 11. With Adobe DNG Converter: 1.")
+    }
+
+    func testARunInWhichOneConverterWorkedHasNoSuchLine() {
+        for (dnglab, adobe) in [(12, 0), (0, 12), (0, 0)] {
+            XCTAssertNil(RunReport(folder: h.folder, factor: factor, summary: converted(dnglab: dnglab, adobe: adobe))
+                .convertersLine, "dnglab \(dnglab), Adobe \(adobe)")
+        }
+    }
+
+    // The steps of a dry run name the converter of each ARW, and nothing is
+    // converted yet.
+    func testADryRunHasNoSuchLine() {
+        let plan = RunPlan(steps: [], summary: converted(dnglab: 11, adobe: 1))
+        XCTAssertNil(RunReport(folder: h.folder, factor: factor, plan: plan).convertersLine)
     }
 
     // MARK: The line of a note, and the result that needs a look

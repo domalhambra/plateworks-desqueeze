@@ -148,7 +148,7 @@ final class TextOutputTests: XCTestCase {
         let many = RunReport(folder: folder, factor: SqueezeFactor(2)!, summary: summary { $0.unconvertedARWs = 12 })
         XCTAssertEqual(TextOutput.run(many, converterInstalled: false), [
             "0 set · 0 skipped · 0 failed",
-            "12 ARW files were not converted. Adobe DNG Converter is not installed.",
+            "12 ARW files were not converted. No converter is installed.",
         ])
     }
 
