@@ -19,6 +19,13 @@ final class BackupTestFolderTests: XCTestCase {
 
     override func tearDown() { removeTemporaryFolder(folder) }
 
+    // The tool and the MCP server both say this on standard error. The
+    // sentence is made once, here.
+    func testTheTestModeNoticeNamesTheFolder() {
+        XCTAssertEqual(FileBackups.testModeNotice(folder: URL(fileURLWithPath: "/tmp/Discarded backups")),
+                       "Test mode: backups go to /tmp/Discarded backups, not to the Trash.")
+    }
+
     func environment(_ value: String) -> [String: String] {
         ["PATH": "/usr/bin", FileBackups.testFolderVariable: value]
     }

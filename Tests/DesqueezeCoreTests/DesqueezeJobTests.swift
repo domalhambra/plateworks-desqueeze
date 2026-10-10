@@ -695,7 +695,8 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(summary.notes, [FileNote(
             name: "X.ARW", kind: .notConverted, message: "Not converted.",
             detail: "dnglab returned 1. "
-                + "A partial DNG, .X.desqueeze-work.dng, is beside the ARW. Delete it, then run again.")])
+                + "A partial DNG, .X.desqueeze-work.dng, is beside the ARW. \(hiddenFileSentence) "
+                + "Delete it, then run again.")])
         XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs], [1, 1, 1])
         XCTAssertFalse(summary.cancelled)
     }
@@ -726,7 +727,8 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(log.entries, ["facts X.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng"])
         XCTAssertEqual(summary.notes.map(\.detail), [
             "A DNG with this name exists already. Not converted. "
-                + "A partial DNG, .X.desqueeze-work.dng, is beside the ARW. Delete it, then run again.",
+                + "A partial DNG, .X.desqueeze-work.dng, is beside the ARW. \(hiddenFileSentence) "
+                + "Delete it, then run again.",
         ])
     }
 
@@ -975,7 +977,8 @@ final class DesqueezeJobTests: XCTestCase {
 
         XCTAssertEqual(summary.notes, [FileNote(
             name: "frame 1.ARW", kind: .notConverted, message: "Not converted.",
-            detail: "A leftover file, .frame 1.desqueeze-work.dng, is beside this photo. Delete it, then run again.")])
+            detail: "A leftover file, .frame 1.desqueeze-work.dng, is beside this photo. \(hiddenFileSentence) "
+                + "Delete it, then run again.")])
         XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs], [0, 1, 1])
         XCTAssertEqual(real.tools.calls(to: ScriptedTools.dnglab), [], "dnglab did not start")
         XCTAssertEqual(real.tools.calls(to: ScriptedTools.adobe), [], "Adobe DNG Converter did not start")
@@ -1002,7 +1005,9 @@ final class DesqueezeJobTests: XCTestCase {
 
             XCTAssertEqual(summary.notes, [FileNote(
                 name: "frame 1.ARW", kind: .notConverted, message: "Not converted.",
-                detail: "A leftover file, \(leftover), is beside this photo. Delete it, then run again.")], leftover)
+                detail: "A leftover file, \(leftover), is beside this photo."
+                    + (leftover.hasPrefix(".") ? " \(hiddenFileSentence)" : "") + " Delete it, then run again.")],
+                leftover)
             XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs, summary.set], [0, 1, 1, 0])
             XCTAssertEqual(real.tools.calls(to: ScriptedTools.dnglab), [], "dnglab did not start")
             XCTAssertEqual(real.tools.calls(to: ScriptedTools.adobe), [], "Adobe DNG Converter did not start")

@@ -205,7 +205,9 @@ final class RawConverterTests: XCTestCase {
             disk.paths = ["/tmp/Shoot 1/" + leftover]
             XCTAssertThrowsError(try converter().convert(arw), leftover) {
                 XCTAssertEqual($0 as? ConvertError, .failedForAll(
-                    "A leftover file, \(leftover), is beside this photo. Delete it, then run again.", partial: nil))
+                    "A leftover file, \(leftover), is beside this photo."
+                        + (leftover.hasPrefix(".") ? " \(hiddenFileSentence)" : "") + " Delete it, then run again.",
+                    partial: nil))
             }
             XCTAssertEqual(runner.calls, [], "\(leftover): the converter never started")
         }

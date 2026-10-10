@@ -85,7 +85,7 @@ final class TextOutputTests: XCTestCase {
             "exiftool: /opt/homebrew/bin/exiftool",
             "dnglab: /opt/homebrew/bin/dnglab",
             "Adobe DNG Converter: not installed (optional backup)",
-            "Adobe DNG Converter is not installed. It is an optional backup for photos that dnglab cannot match.",
+            "Adobe DNG Converter is not installed. Adobe DNG Converter is an optional backup for photos that dnglab cannot match.",
         ])
     }
 

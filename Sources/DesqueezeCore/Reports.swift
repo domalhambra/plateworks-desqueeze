@@ -77,6 +77,14 @@ public struct ScanReport: Codable, Equatable, Sendable {
                                    adobeInstalled: dngConverter != nil)
     }
 
+    /// With neither converter and an ARW that waits: the sentence that the
+    /// ARW files cannot be converted (`FolderText.arwsCannotConvert`). The
+    /// scan text shows it before the install line. Nil in every other state.
+    public var arwsCannotConvertLine: String? {
+        guard dnglab == nil, dngConverter == nil, !pendingARWs.isEmpty else { return nil }
+        return FolderText.arwsCannotConvert(count: pendingARWs.count)
+    }
+
     /// True when the folder holds nothing to report.
     public var isEmpty: Bool { dngs.isEmpty && pendingARWs.isEmpty && orphanBackups.isEmpty }
 

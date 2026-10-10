@@ -14,6 +14,16 @@ public struct SqueezeFactor: Equatable, Hashable, Sendable {
     /// period after it. `init?(text:)` holds the four decimal places.
     public static let ruleText = "a number from \(SqueezeFactor(range.lowerBound)!.label) to "
         + "\(SqueezeFactor(range.upperBound)!.label), with at most four decimal places"
+    /// What a front end says about text that is no factor. The tool and the
+    /// MCP server both say it.
+    ///
+    /// It is a whole sentence: the MCP server gives it to a model as it is.
+    ///
+    /// - Parameter got: the text as it was given.
+    public static func errorMessage(got text: String) -> String {
+        "The factor must be \(ruleText). It was \(text)."
+    }
+
     public static let presets: [SqueezeFactor] = [1.33, 1.5, 1.8, 2].compactMap { SqueezeFactor($0) }
     /// No stretch. Remove writes this. Not named `none`: on a `SqueezeFactor?`,
     /// `.none` would mean nil.

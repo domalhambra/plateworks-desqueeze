@@ -80,6 +80,22 @@ final class ConverterChoiceTests: XCTestCase {
         XCTAssertEqual(order(.none), [.adobe], "a file with no facts has no full match")
     }
 
+    // The sentences about who converts are made once, here. The help of the
+    // tool, the MCP descriptions and the advice line say them (design 13.5).
+    func testTheSentencesAboutWhoConvertsAreMadeOnce() {
+        XCTAssertEqual(ConverterText.whoConverts,
+                       "dnglab converts each photo that it can match. "
+                           + "Adobe DNG Converter, when it is installed, converts the others.")
+        XCTAssertEqual(ConverterText.matchedValues,
+                       "Each DNG that dnglab makes gets the values that Adobe DNG Converter writes, "
+                           + "so Lightroom shows the same photo.")
+        XCTAssertEqual(ConverterText.adobeIsAnOptionalBackup,
+                       "Adobe DNG Converter is an optional backup for photos that dnglab cannot match.")
+        // The short form is not the rule: the table sends a photo with no
+        // full match to Adobe, and dnglab is not tried.
+        XCTAssertFalse(ConverterText.whoConverts.contains("first"))
+    }
+
     func testTheJSONNamesOfTheTwoConverters() {
         XCTAssertEqual(ConverterKind.allCases.map(\.rawValue), ["dnglab", "adobe"])
     }

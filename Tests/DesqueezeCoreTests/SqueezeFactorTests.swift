@@ -39,6 +39,14 @@ final class SqueezeFactorTests: XCTestCase {
         XCTAssertEqual(SqueezeFactor.ruleText, "a number from 1 to 4, with at most four decimal places")
     }
 
+    // The tool and the MCP server refuse a factor with this one sentence.
+    func testTheMessageForAFactorThatBreaksTheRule() {
+        XCTAssertEqual(SqueezeFactor.errorMessage(got: "5"),
+                       "The factor must be a number from 1 to 4, with at most four decimal places. It was 5.")
+        XCTAssertEqual(SqueezeFactor.errorMessage(got: "1.23456"),
+                       "The factor must be \(SqueezeFactor.ruleText). It was 1.23456.")
+    }
+
     func testMatchesTellsAdjacentFactorsApart() {
         let factor = SqueezeFactor(1.5)!
         XCTAssertTrue(factor.matches(horizontal: 1.5, vertical: 1))

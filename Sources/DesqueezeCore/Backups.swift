@@ -81,6 +81,12 @@ extension FileBackups {
     /// The environment variable that names the folder.
     public static let testFolderVariable = "DESQUEEZE_TEST_BACKUP_FOLDER"
 
+    /// The notice that a front end gives on standard error when it takes the
+    /// folder. The tool and the MCP server both say it.
+    public static func testModeNotice(folder: URL) -> String {
+        "Test mode: backups go to \(folder.path), not to the Trash."
+    }
+
     /// The variable is set, and its value is not an absolute path to a folder.
     public struct TestFolderError: Error, Equatable {
         public let value: String

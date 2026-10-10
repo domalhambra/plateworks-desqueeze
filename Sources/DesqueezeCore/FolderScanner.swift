@@ -40,12 +40,16 @@ public struct FolderScanner: Sendable {
 
     public func snapshot(of folder: URL) throws -> FolderSnapshot {
         let contents = try FolderScan.contents(of: folder)
-        var rows: [String: TagRow] = [:]
+        // exiftool prints a control character of a file name as a period,
+        // so a row is found by the printed name (`ExiftoolText.pair`). A file
+        // with no row has an unknown scale, and a run tries to write it.
+        var rows: [String: [TagRow]] = [:]
         if !contents.dngs.isEmpty {
-            for row in try tag.readFolder(folder) { rows[row.fileName] = row }
+            for row in try tag.readFolder(folder) { rows[row.fileName, default: []].append(row) }
         }
+        let paired = ExiftoolText.pair(files: contents.dngs.map(\.lastPathComponent), rows: rows)
         let dngs = contents.dngs.map { url -> DNGFile in
-            let row = rows[url.lastPathComponent]
+            let row = paired[url.lastPathComponent]
             return DNGFile(
                 url: url,
                 scale: row?.scale,

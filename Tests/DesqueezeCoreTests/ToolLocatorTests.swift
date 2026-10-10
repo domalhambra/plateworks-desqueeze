@@ -76,6 +76,13 @@ final class ToolLocatorTests: XCTestCase {
                        "\(ToolLocator.exiftoolMissing) Install it with: \(ToolLocator.exiftoolInstallCommand)")
     }
 
+    // The install line of dnglab is made once. The advice, the help of the
+    // tool and the MCP descriptions say it.
+    func testTheInstallLineOfDnglabIsTheSentenceThenTheInstallCommand() {
+        XCTAssertEqual(ToolLocator.dnglabInstallLine, "Install dnglab with: brew install dnglab")
+        XCTAssertEqual(ToolLocator.dnglabInstallLine, "Install dnglab with: \(ToolLocator.dnglabInstallCommand)")
+    }
+
     func testTheStandardConverterAppIsListedOnce() {
         let registered = URL(fileURLWithPath: "/Applications/Adobe DNG Converter.app/")
         XCTAssertEqual(locator(registered: registered, present: []).converterApps,

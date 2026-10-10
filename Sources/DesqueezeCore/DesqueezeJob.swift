@@ -299,8 +299,9 @@ public struct DesqueezeJob: Sendable {
                             // these words would read as if that DNG moved.
                             if !stop { text += " The partial DNG was moved to the Trash." }
                         case .refused:
-                            text += " A partial DNG, \(partial.lastPathComponent), is beside the ARW. "
-                                + "Delete it, then run again."
+                            text += " A partial DNG, \(partial.lastPathComponent), is beside the ARW."
+                                + ConverterOutput.hint(forFileNamed: partial.lastPathComponent)
+                                + " Delete it, then run again."
                             // The file is still there. When it is dnglab's
                             // work file, the next run would stop at it too
                             // (design 13.3, step 1), so this one stops here.

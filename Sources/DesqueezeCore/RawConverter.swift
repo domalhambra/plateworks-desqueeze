@@ -147,6 +147,18 @@ public enum ConverterOutput {
         return arw.deletingLastPathComponent().appendingPathComponent(".\(base).desqueeze-work.dng")
     }
 
+    /// What a note says after it names a file to delete, when that file is
+    /// hidden: the work file of dnglab is. The only place that makes the
+    /// sentence.
+    public static let hiddenFileHint = "It is a hidden file: in Finder, press Command-Shift-Period to see it."
+
+    /// `hiddenFileHint` with a space before it when `name` starts with a
+    /// period, and an empty string for any other name. A note puts it after
+    /// the sentence that names the file.
+    static func hint(forFileNamed name: String) -> String {
+        name.hasPrefix(".") ? " " + hiddenFileHint : ""
+    }
+
     /// The file that exiftool makes beside `file` while it writes it:
     /// `<name>_exiftool_tmp`. exiftool that ends hard leaves it there, and
     /// refuses every later write of `file`.
@@ -210,7 +222,8 @@ struct ConverterRules: Sendable {
     /// exiftool left, and that the app does not remove. The only place that
     /// makes this sentence.
     static func leftover(named name: String) -> String {
-        "A leftover file, \(name), is beside this photo. Delete it, then run again."
+        "A leftover file, \(name), is beside this photo.\(ConverterOutput.hint(forFileNamed: name)) "
+            + "Delete it, then run again."
     }
 
     /// The converter, as a sentence names it: `dnglab returned 7.`

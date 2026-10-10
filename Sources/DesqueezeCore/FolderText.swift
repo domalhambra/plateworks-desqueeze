@@ -32,7 +32,7 @@ public enum FolderText {
     /// | Installed | The line |
     /// |---|---|
     /// | dnglab and Adobe | none |
-    /// | dnglab only | Adobe DNG Converter is an optional backup. |
+    /// | dnglab only | Adobe is not installed, and is an optional backup. |
     /// | Adobe only | dnglab is faster, with its install command. |
     /// | Neither | The install command of dnglab. |
     ///
@@ -45,12 +45,19 @@ public enum FolderText {
         case (true, true):
             return nil
         case (true, false):
-            return "Adobe DNG Converter is not installed. It is an optional backup for photos that dnglab cannot match."
+            return "\(ConverterKind.adobe.name) is not installed. \(ConverterText.adobeIsAnOptionalBackup)"
         case (false, true):
             return "dnglab is faster and opens no window. Install it with: \(ToolLocator.dnglabInstallCommand)"
         case (false, false):
-            return "Install dnglab with: \(ToolLocator.dnglabInstallCommand)"
+            return ToolLocator.dnglabInstallLine
         }
+    }
+
+    /// The sentence about the ARW files that wait, with neither converter:
+    /// `12 ARW cannot be converted: no converter is installed`. The counts
+    /// line and the scan text of the tool both say it.
+    public static func arwsCannotConvert(count: Int) -> String {
+        "\(count) ARW cannot be converted: no converter is installed"
     }
 
     /// The label of the run button for `count` photos.
@@ -97,7 +104,7 @@ extension FolderSnapshot {
         if !pendingARWs.isEmpty {
             parts.append(converterAvailable
                 ? "\(pendingARWs.count) ARW to convert"
-                : "\(pendingARWs.count) ARW cannot be converted: no converter is installed")
+                : FolderText.arwsCannotConvert(count: pendingARWs.count))
         }
         return parts.joined(separator: " · ")
     }

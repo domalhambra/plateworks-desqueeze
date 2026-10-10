@@ -23,6 +23,11 @@ final class FakeRunner: ProcessRunner, @unchecked Sendable {
     }
 }
 
+/// What a note says after it names a hidden file (design 13.3). The tests
+/// hold the text here, not through the core's constant, so a change of the
+/// constant fails them.
+let hiddenFileSentence = "It is a hidden file: in Finder, press Command-Shift-Period to see it."
+
 /// Makes an empty temporary folder inside a new `desqueeze-tests-<id>` folder.
 /// The test removes it in `tearDown` with `removeTemporaryFolder`.
 func makeTemporaryFolder(named name: String = "Shoot 1") throws -> URL {

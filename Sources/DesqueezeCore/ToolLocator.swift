@@ -21,6 +21,9 @@ public struct ToolLocator: Sendable {
     /// For the advice about the converters (`FolderText.converterAdvice`,
     /// design 13.5).
     public static let dnglabInstallCommand = "brew install dnglab"
+    /// The command as a line of advice. The only place that joins the two:
+    /// the advice, the help of the tool and the MCP descriptions say it.
+    public static let dnglabInstallLine = "Install dnglab with: \(dnglabInstallCommand)"
 
     public let exiftoolCandidates: [String]
     /// dnglab is looked for where exiftool is (design 13.5).

@@ -14,6 +14,25 @@ public enum ConverterKind: String, Codable, Sendable, CaseIterable {
     }
 }
 
+/// The sentences about who converts, made once. The help of the tool, the
+/// descriptions of the MCP server and the advice line say them, so no front
+/// end words them again (design 13.5).
+///
+/// "dnglab converts first" is short for the table of `ConverterChoice`, and
+/// it is not the rule: with both installed, an ARW with no full match goes
+/// to Adobe DNG Converter, and dnglab is not tried. So a text for a person
+/// or a model says `whoConverts`.
+public enum ConverterText {
+    public static let whoConverts = "\(ConverterKind.dnglab.name) converts each photo that it can match. "
+        + "\(ConverterKind.adobe.name), when it is installed, converts the others."
+    /// Why a photo from dnglab shows in Lightroom as one from Adobe does.
+    public static let matchedValues = "Each DNG that \(ConverterKind.dnglab.name) makes gets the values that "
+        + "\(ConverterKind.adobe.name) writes, so Lightroom shows the same photo."
+    /// In the advice line it follows "Adobe DNG Converter is not installed."
+    public static let adobeIsAnOptionalBackup = "\(ConverterKind.adobe.name) is an optional backup for photos that "
+        + "\(ConverterKind.dnglab.name) cannot match."
+}
+
 /// Which converters get one ARW, and in which order (design 13.4). Pure: the
 /// run and the dry run both ask here, so the two cannot disagree.
 ///

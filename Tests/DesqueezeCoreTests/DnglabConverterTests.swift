@@ -178,6 +178,17 @@ final class DnglabConverterTests: XCTestCase {
 
     // MARK: The name of the work file
 
+    // The sentence is made once, and a note adds it after a name that starts
+    // with a period, and only then.
+    func testTheHintAboutAHiddenFileIsOneSentenceThatOnlyAHiddenNameGets() {
+        XCTAssertEqual(ConverterOutput.hiddenFileHint,
+                       "It is a hidden file: in Finder, press Command-Shift-Period to see it.")
+        XCTAssertEqual(ConverterOutput.hint(forFileNamed: ".X.desqueeze-work.dng"),
+                       " It is a hidden file: in Finder, press Command-Shift-Period to see it.")
+        XCTAssertEqual(ConverterOutput.hint(forFileNamed: "X.dng"), "")
+        XCTAssertEqual(ConverterOutput.hint(forFileNamed: "X.dng_exiftool_tmp"), "")
+    }
+
     // One function makes the name: a period, the base name, and the suffix,
     // in the folder of the ARW. The period hides it from the scan, Finder
     // and Lightroom.
@@ -561,7 +572,8 @@ final class DnglabConverterTests: XCTestCase {
         disk.paths = [workPath]
         tools.discardError = NamedError(text: "The Trash refused it.")
         assertFails(.failedForAll(
-            "A leftover file, .DSC05680.desqueeze-work.dng, is beside this photo. Delete it, then run again.",
+            "A leftover file, .DSC05680.desqueeze-work.dng, is beside this photo. \(hiddenFileSentence) "
+                + "Delete it, then run again.",
             partial: nil))
         XCTAssertEqual(tools.discarded, [workPath])
         XCTAssertEqual(runner.calls, [], "no program started")
@@ -588,7 +600,9 @@ final class DnglabConverterTests: XCTestCase {
             // conversion could not pass, so nothing is touched.
             disk.paths = ["/tmp/Shoot 1/" + leftover, workPath]
             assertFails(.failedForAll(
-                "A leftover file, \(leftover), is beside this photo. Delete it, then run again.", partial: nil),
+                "A leftover file, \(leftover), is beside this photo."
+                    + (leftover.hasPrefix(".") ? " \(hiddenFileSentence)" : "") + " Delete it, then run again.",
+                partial: nil),
                 nil, leftover)
             XCTAssertEqual(runner.calls, [], leftover)
             XCTAssertEqual(tools.discarded, [], leftover)

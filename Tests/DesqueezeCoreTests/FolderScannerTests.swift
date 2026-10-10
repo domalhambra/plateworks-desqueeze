@@ -54,6 +54,54 @@ final class FolderScannerTests: XCTestCase {
         XCTAssertEqual(snapshot.dngs.map(\.scale), [nil, nil, .noStretch])
     }
 
+    // exiftool prints a control character of a file name as a period
+    // (`ExiftoolText.printed`), so the row of `tab<TAB>here.dng` is named
+    // `tab.here.dng`. The file takes the row that has its printed name.
+    func testADNGWithAControlCharacterInItsNameTakesTheRowOfItsPrintedName() throws {
+        for name in ["tab\there.dng", "line\nend.dng", "plain.dng"] { try touch(name) }
+        tag.rows = [
+            TagRow(fileName: "tab.here.dng", scale: Scale(horizontal: 1.5, vertical: 1), originalRawFileName: "a.ARW"),
+            TagRow(fileName: "line.end.dng", scale: .noStretch, originalRawFileName: nil),
+            TagRow(fileName: "plain.dng", scale: Scale(horizontal: 2, vertical: 1), originalRawFileName: nil),
+        ]
+        let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
+        let byName = Dictionary(uniqueKeysWithValues: snapshot.dngs.map { ($0.name, $0) })
+        XCTAssertEqual(byName["tab\there.dng"]?.scale, Scale(horizontal: 1.5, vertical: 1))
+        XCTAssertEqual(byName["tab\there.dng"]?.originalRawFileName, "a.ARW")
+        XCTAssertEqual(byName["line\nend.dng"]?.scale, .noStretch)
+        XCTAssertEqual(byName["plain.dng"]?.scale, Scale(horizontal: 2, vertical: 1))
+    }
+
+    // Two files print as one name, so no one can say which row is whose. Both
+    // stay unknown: the safe direction, since a write is tried for an
+    // unknown scale. That holds with two rows, and with one.
+    func testTwoDNGFilesThatPrintAsOneNameBothStayUnknown() throws {
+        for name in ["a\tb.dng", "a.b.dng", "other.dng"] { try touch(name) }
+        tag.rows = [
+            TagRow(fileName: "a.b.dng", scale: .noStretch, originalRawFileName: nil),
+            TagRow(fileName: "a.b.dng", scale: Scale(horizontal: 2, vertical: 1), originalRawFileName: nil),
+            TagRow(fileName: "other.dng", scale: .noStretch, originalRawFileName: nil),
+        ]
+        var snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
+        XCTAssertEqual(snapshot.dngs.map { $0.name + ($0.scale == nil ? " unknown" : " known") }.sorted(),
+                       ["a\tb.dng unknown", "a.b.dng unknown", "other.dng known"])
+
+        tag.rows = [TagRow(fileName: "a.b.dng", scale: .noStretch, originalRawFileName: nil)]
+        snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
+        XCTAssertEqual(snapshot.dngs.map(\.scale), [nil, nil, nil], "one row for two files is no row for either")
+    }
+
+    // Two rows for one file are not one row either.
+    func testTwoRowsForOneDNGLeaveItUnknown() throws {
+        try touch("one.dng")
+        tag.rows = [
+            TagRow(fileName: "one.dng", scale: .noStretch, originalRawFileName: nil),
+            TagRow(fileName: "one.dng", scale: .noStretch, originalRawFileName: nil),
+        ]
+        let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)
+        XCTAssertEqual(snapshot.dngs.map(\.scale), [nil])
+    }
+
     func testAFolderWithNoDNGCallsExiftoolZeroTimes() throws {
         try touch("DSC1.ARW")
         let snapshot = try FolderScanner(tag: tag, backups: backups).snapshot(of: folder)

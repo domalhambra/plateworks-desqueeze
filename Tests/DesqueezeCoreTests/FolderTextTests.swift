@@ -59,8 +59,10 @@ final class FolderTextTests: XCTestCase {
 
     func testWithDnglabAloneTheAdviceSaysThatAdobeIsAnOptionalBackup() {
         XCTAssertEqual(advice(pending: 12, dnglab: true, adobe: false),
-                       "Adobe DNG Converter is not installed. It is an optional backup for photos that dnglab "
-                           + "cannot match.")
+                       "Adobe DNG Converter is not installed. "
+                           + "Adobe DNG Converter is an optional backup for photos that dnglab cannot match.")
+        XCTAssertEqual(advice(pending: 12, dnglab: true, adobe: false),
+                       "Adobe DNG Converter is not installed. \(ConverterText.adobeIsAnOptionalBackup)")
     }
 
     func testWithAdobeAloneTheAdviceSaysThatDnglabIsFasterAndHowToInstallIt() {
@@ -70,6 +72,34 @@ final class FolderTextTests: XCTestCase {
 
     func testWithNeitherConverterTheAdviceIsTheInstallCommandOfDnglab() {
         XCTAssertEqual(advice(pending: 1, dnglab: false, adobe: false), "Install dnglab with: brew install dnglab")
+        XCTAssertEqual(advice(pending: 1, dnglab: false, adobe: false), ToolLocator.dnglabInstallLine)
+    }
+
+    // The sentence about the ARW files that wait, with neither converter. The
+    // counts line and the scan text of the tool both say it.
+    func testTheSentenceAboutARWFilesThatCannotConvert() {
+        XCTAssertEqual(FolderText.arwsCannotConvert(count: 1), "1 ARW cannot be converted: no converter is installed")
+        XCTAssertEqual(FolderText.arwsCannotConvert(count: 12),
+                       "12 ARW cannot be converted: no converter is installed")
+        XCTAssertTrue(h.snapshot(dngs: dngs(2), pending: arws(12)).countsLine(converterAvailable: false)
+            .hasSuffix(FolderText.arwsCannotConvert(count: 12)))
+    }
+
+    // The scan text says that the ARW files cannot convert, and then what to
+    // do. Only with neither converter and a pending ARW.
+    func testAScanReportSaysThatARWFilesCannotConvertOnlyWithNeitherConverter() {
+        let exiftool = URL(fileURLWithPath: "/opt/homebrew/bin/exiftool")
+        let any = URL(fileURLWithPath: "/fake/converter")
+        func line(pending: Int, dnglab: Bool, adobe: Bool) -> String? {
+            ScanReport(snapshot: h.snapshot(dngs: dngs(1), pending: arws(pending)), exiftool: exiftool,
+                       dnglab: dnglab ? any : nil, dngConverter: adobe ? any : nil).arwsCannotConvertLine
+        }
+        XCTAssertEqual(line(pending: 3, dnglab: false, adobe: false),
+                       "3 ARW cannot be converted: no converter is installed")
+        XCTAssertNil(line(pending: 0, dnglab: false, adobe: false))
+        for (dnglab, adobe) in [(true, true), (true, false), (false, true)] {
+            XCTAssertNil(line(pending: 3, dnglab: dnglab, adobe: adobe), "dnglab \(dnglab), Adobe \(adobe)")
+        }
     }
 
     // The advice is about the ARW files that wait. With none, nothing shows.

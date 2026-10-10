@@ -111,6 +111,28 @@ final class IntegrationTests: XCTestCase {
         XCTAssertEqual(try names(withSuffix: "_original"), [])
     }
 
+    // exiftool prints the tab of a file name as a period, so the folder read
+    // has no row named `tab<TAB>here.dng`. The scan finds the row by the
+    // printed name. Without that, its scale is unknown, and every run writes
+    // the file again and never skips it. No converter is needed: the folder
+    // holds no ARW.
+    func testADNGWithATabInItsNameIsSkippedOnTheSecondRun() throws {
+        let name = "tab\there.dng"
+        _ = try copyFixture("sample.dng", as: name)
+        let job = DesqueezeJob(tag: tag, converters: .none, backups: backups)
+        let factor = SqueezeFactor(1.5)!
+
+        let first = try job.run(folder: folder, factor: factor, convert: false)
+        XCTAssertEqual([first.set, first.skipped, first.failed], [1, 0, 0], "\(first.notes)")
+        XCTAssertEqual(try scaleOnDisk(name), Scale(horizontal: 1.5, vertical: 1))
+        XCTAssertEqual(try scanner.snapshot(of: folder).dngs.map(\.scale), [Scale(horizontal: 1.5, vertical: 1)],
+                       "the scan finds the row by the printed name")
+
+        let second = try job.run(folder: folder, factor: factor, convert: false)
+        XCTAssertEqual([second.set, second.skipped, second.failed], [0, 1, 0], "\(second.notes)")
+        XCTAssertEqual(try names(withSuffix: "_original"), [])
+    }
+
     func testARenamedDNGStillClaimsItsARW() throws {
         // The fixture DNG was converted from a file named sample.ARW, so its
         // OriginalRawFileName tag is "sample.ARW".

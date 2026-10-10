@@ -100,6 +100,27 @@ enum ExiftoolText {
         }
         return String(scalars)
     }
+
+    /// The row of each file, found by the name that exiftool printed. A file
+    /// takes a row only when exactly one row, and exactly one file of
+    /// `names`, have its printed name. When two rows or two files share a
+    /// printed name, no one can say which row is whose: those files get no
+    /// row. The facts of the ARW files (`ARWFactsReader.read`) and the scale
+    /// of the DNG files (`FolderScanner`) are both read by this rule.
+    ///
+    /// - Parameters:
+    ///   - names: the file names of the files, as the disk has them.
+    ///   - rows: the rows by the file name that exiftool printed.
+    /// - Returns: the row of each file that has one, by its file name.
+    static func pair<Row>(files names: [String], rows: [String: [Row]]) -> [String: Row] {
+        var files: [String: [String]] = [:]
+        for name in names { files[printed(name), default: []].append(name) }
+        var paired: [String: Row] = [:]
+        for (printedName, same) in files where same.count == 1 {
+            if let found = rows[printedName], found.count == 1 { paired[same[0]] = found[0] }
+        }
+        return paired
+    }
 }
 
 /// The exiftool implementation.
@@ -153,13 +174,7 @@ public struct ARWFactsReader: ARWFactsReading {
             else { continue }
             for row in Self.rows(result.stdout) { rows[row.name, default: []].append(row.facts) }
         }
-        var files: [String: [String]] = [:]
-        for arw in arws { files[ExiftoolText.printed(arw.lastPathComponent), default: []].append(arw.lastPathComponent) }
-        var facts: [String: ARWFacts] = [:]
-        for (printed, names) in files where names.count == 1 {
-            if let found = rows[printed], found.count == 1 { facts[names[0]] = found[0] }
-        }
-        return facts
+        return ExiftoolText.pair(files: arws.map(\.lastPathComponent), rows: rows)
     }
 
     /// The facts by the file name that exiftool printed. A name that two
