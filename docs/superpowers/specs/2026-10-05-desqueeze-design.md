@@ -3,10 +3,12 @@
 Date: 2026-10-05. Red-teamed 2026-10-09; section 2.1 holds the findings and
 each one's fix is in the body. Revised 2026-10-09 after the code reviews of
 the job and the window, and extended with section 12 (command line and MCP)
-and section 13 (dnglab first). Status: approved by Dom, and built.
+and section 13 (dnglab first). Extended 2026-10-10 with section 14 (the
+originals to the Trash, on request). Status: approved by Dom. Sections 1 to
+13 are built.
 
 **How to read this document.** It grew in one week, and the later sections
-changed earlier decisions. Sections 12 and 13 are the newest. Where they
+changed earlier decisions. Sections 12, 13 and 14 are the newest. Where they
 differ from any earlier section, they win. The earlier text was corrected
 where it would mislead, and it still tells the story in the order it
 happened: Adobe DNG Converter was the only converter until section 13.
@@ -187,7 +189,8 @@ Then the run does these steps in order. One file at a time.
    bytes, and the rename to `<base>.dng` passed. The exit code alone is not
    enough: Adobe's converter returns 0 on a file it cannot read, and makes no
    DNG.
-   The app never changes, moves, or deletes an ARW. If `<base>.dng` appeared
+   The app never changes or deletes an ARW, and it moves one only on the
+   user's request for that run (section 14). If `<base>.dng` appeared
    after the scan, the app does not start the converter for that ARW, and
    reports it.
 
@@ -298,6 +301,7 @@ One fixed-width window, about 440 points wide.
 | Folder summary | Folder name and the counts from the scan. While a scan runs, the previous folder's counts are gone and Run and Remove are off. A read-only folder gets a message here. Each orphan backup is named here with the name to rename it to: up to five by name, then a count of the others. |
 | Factor row | Four preset buttons and one custom field. One factor is selected at a time. A click in the custom field selects it. VoiceOver hears which factor is selected. |
 | Run button | Label: `Desqueeze N photos`, `Desqueeze 1 photo`, or `Desqueeze` when there is nothing to run. N is the count of DNG files plus the pending ARW files that can convert. When no converter is installed, the ARW files are not in N (13.5). |
+| Originals checkbox | Section 14.4. Off at every launch. |
 | Remove button | Writes `1 1`. On only when the folder has a DNG. It asks nothing and runs at once: the change is reversible. |
 | Progress bar | One step for each conversion and one for each tag write. Before the first step completes, the bar is indeterminate. During a run, the Run button becomes Cancel, and Escape presses it. After a Cancel the button reads "Finishing…" and is off until the run has ended, so a second click cannot start a new run. The run stays "running" until the scan after it has landed, so no click can act on old counts. |
 | Quit during a run | The app cancels the run, lets the current file complete, then quits. |
@@ -480,7 +484,8 @@ third-party code.
 
 ```
 desqueeze scan <folder> [--json]
-desqueeze run <folder> --factor <number> [--no-convert] [--dry-run] [--json]
+desqueeze run <folder> --factor <number> [--no-convert] [--trash-originals]
+              [--dry-run] [--json]
 desqueeze remove <folder> [--dry-run] [--json]
 desqueeze --version
 desqueeze --help
@@ -605,6 +610,7 @@ Build and test: `swift build --package-path MCPServer`,
 - Each tool's description tells the model what the tool changes, that the
   change is reversible with `desqueeze_remove`, and to call `desqueeze_scan`
   first.
+- The server never moves an original. It has no parameter for section 14.
 - A client stops a server with a signal. On `SIGTERM`, `SIGINT` or `SIGHUP`
   the server sets the cancel flag of the call in work, starts no waiting
   call, lets the current file complete, writes that call's report with
@@ -908,3 +914,169 @@ condition.
   raw tools publish values of the same origin. Dom decides this before the
   first public commit, and `docs/decisions.md` records it.
 
+## 14. The originals to the Trash, on request
+
+Added 2026-10-10 at Dom's request, after his first run in Lightroom. Until
+this section the app never moved an ARW. It still does not, unless the user
+turns the option on for one run.
+
+### 14.1 Decisions
+
+Dom decided each of these on 2026-10-10.
+
+| Decision | Why |
+|---|---|
+| The option is off by default, and it is never saved. | A box that stays on from an earlier day is the main way this feature can remove files that the user wants. |
+| "Deleted" means moved to the Trash. The app never deletes an ARW. | The rule of the app is that nothing is deleted. The user can put a file back until the Trash is emptied. |
+| Only an ARW that this run converted can go. | The run watched that conversion and checked its DNG. For an ARW that an earlier run converted, the only link to its DNG is a name. |
+| The window and the command line tool have the option. The MCP server does not. | An agent must never be able to remove a user's originals, by request or by mistake. |
+
+### 14.2 The rule
+
+With the option on, the run has a fifth step after the four steps of 4.3:
+**Move the originals.** It starts only when the run was not cancelled before
+it. It takes one ARW at a time and reads the cancel flag between files.
+
+An ARW goes to the Trash only when every line holds:
+
+1. This run converted it, and the conversion passed (13.3).
+2. The conversion has no `convertedUnmatched` note. A DNG that lacks the
+   match is not complete, and the ARW is the way to convert the photo again
+   when Adobe DNG Converter is installed.
+3. The tag step for its DNG ended with the DNG at the chosen factor: the tag
+   was set and read back, or it was at that value already.
+4. The ARW is the file that was converted. Before the conversion the run
+   records the ARW's size, modification date and file number, with a call
+   that does not follow links. Directly before the move it reads them again.
+   All three must be equal, and the ARW must be a regular file. A link or a
+   folder never goes.
+5. Directly before the move, `<base>.dng` is a regular file with bytes, and
+   one exiftool read of it gives the ARW's name in `OriginalRawFileName` (by
+   the comparison of 13.9) and the chosen factor in `DefaultScale`:
+
+   ```
+   exiftool -m -n -T -IFD0:OriginalRawFileName -SubIFD:DefaultScale <file.dng>
+   ```
+
+Then the app moves the ARW to the Trash through the same injected function
+that takes a backup there (`BackupHandling.trashFile`). So no test reaches
+the real Trash, and `DESQUEEZE_TEST_BACKUP_FOLDER` holds for a built tool.
+
+When a line does not hold, or the Trash refuses the file, the ARW stays, and
+a note says why. The app never falls back to a delete, and it never tries a
+second method.
+
+The app moves the ARW only. A sidecar file beside it, such as `<base>.xmp`,
+is not the app's file and stays.
+
+Step 5 runs inside the folder lock of 13.9. `remove` never has step 5. A run
+with `--no-convert` converts nothing, so it has nothing to move.
+
+### 14.3 Notes and reports
+
+A new note kind, `originalKept`, on the ARW's name. It is information, as
+`convertedUnmatched` is: it does not count as failed or blocked, the result
+does not get the "needs attention" symbol for it, and the exit code does not
+change. The core makes each sentence:
+
+| When | Sentence |
+|---|---|
+| Line 2 | "The original stays, because its DNG has no full match." |
+| Line 3 | "The original stays, because its DNG is not complete." |
+| Line 4, changed | "The original changed during the run, so it stays." |
+| Line 4, not a regular file | "The original is not a regular file, so it stays." |
+| Line 5 | "The original stays, because its DNG could not be checked." The detail line has exiftool's words, or what differed. |
+| The Trash refused | "The original could not go to the Trash, so it stays." The detail line has the system's words. |
+
+An ARW whose conversion failed gets no such note: its `failed` or
+`notConverted` note says enough. After a Cancel, the ARW files that step 5
+did not reach get no note: the result says "stopped".
+
+When the option was on, the result has one more line, from the core, in
+every front end that has the option: "Originals moved to the Trash: N of M."
+M is the count of ARW files that this run converted.
+
+Run JSON: two new keys, always present. `"trashOriginals"` is true when the
+option was on. `"originalsInTrash"` is the count of ARW files that the run
+moved. A dry run with the option on gives the count that a real run would
+give if every step passed, and one more step for each such ARW, after the
+write steps: `{ "name": "<file.ARW>", "action": "trashOriginal" }`. The plan
+knows which conversions would get the `convertedUnmatched` note (13.4), and
+gives those no such step. The run and the dry run share the function that
+decides.
+
+Progress: one more step for each ARW that step 5 handles.
+
+### 14.4 The window
+
+A checkbox between the factor row and the Run button: "Move the original ARW
+files to the Trash".
+
+- It shows only when the loaded folder has at least one pending ARW that can
+  convert. In any other state it is not shown, and it is off.
+- It is off at every launch, when another folder loads, and after every run,
+  also a run that was cancelled or that failed. A scan of the same folder
+  when the app becomes active again does not change it.
+- The app never saves it, and no launch argument turns it on.
+- While it is on, a line under it says what the run will do: "N original ARW
+  files go to the Trash after their DNG files pass the check." (For one:
+  "1 original ARW file goes to the Trash after its DNG file passes the
+  check.") N is the count of pending ARW files that can convert.
+- While it is on, the Run button reads `Desqueeze N photos, move M originals
+  to the Trash`. The window asks nothing more: the box is the request, and
+  the Trash is reversible.
+- The box is off and cannot change while a run or a scan is in work.
+- The Remove button is not affected.
+- VoiceOver hears the checkbox by its label, and hears the line of 14.3 with
+  the result counts.
+
+### 14.5 The command line tool
+
+`desqueeze run <folder> --factor <number> --trash-originals`. The flag is
+valid on `run` only.
+
+- With `--no-convert` it is a usage error, exit 2: the pair can do nothing.
+- On `scan` and `remove` it is a usage error, exit 2.
+- With `--dry-run` it prints the steps of 14.3 and moves nothing. A step in
+  text: `  trash    frame.ARW`.
+- `--help` says that the flag moves each original to the Trash after its DNG
+  passes the check, and that it is off unless given.
+- No environment variable and no saved setting turns it on.
+
+### 14.6 Structure and testing
+
+`DesqueezeJob.run` and `DesqueezeJob.plan` take the option as a parameter
+with no default value in the job itself, so each caller states it. One pure
+function decides, for one converted ARW, "move" or "keep, with this reason".
+One unit records and compares the ARW's three facts of line 4.
+
+- The pure function: every row of 14.3, and the case in which all lines hold.
+- The job on fakes: with the option off, no ARW reaches the trash function in
+  any outcome. With it on: each keep reason; a cancel before step 5 and
+  during it; the Trash refuses; the order (no ARW moves before every tag step
+  has ended).
+- The real tools, in a temporary folder with the injected trash: after a run
+  with the option on, the folder holds the DNG and no ARW, and the file in
+  the injected trash has the same bytes as the source ARW.
+- The command line tool, end to end with `DESQUEEZE_TEST_BACKUP_FOLDER`: the
+  flag, the two usage errors, the dry run, the JSON keys.
+- The window's model: the box is off at the start, after a run, and after a
+  new folder; nothing is written to the saved settings; the button label and
+  the line under the box.
+- The MCP server: a call with a parameter such as `trash_originals` moves no
+  ARW, and the tool descriptions say that the server never moves an original.
+- A behavioral test counts only after it fails against a break. The first
+  break to try: the option is treated as on when it is off.
+
+### 14.7 Known limits
+
+- The check of line 5 reads the DNG's structure and tags. It does not decode
+  the picture. The Trash is the guard for the rest: look at the DNG files in
+  Lightroom before the Trash is emptied.
+- With the ARW gone, the photo cannot be converted again with a later
+  converter or a later match table.
+- A catalog that already holds the ARW files shows them as missing after the
+  move. Use the option before the import, or import the DNG files.
+- On a volume that has no Trash, the move is refused and every ARW stays.
+- On an external volume the ARW goes to that volume's Trash, and its space
+  is free only after the Trash is emptied with the volume connected.
