@@ -3,7 +3,10 @@ import DesqueezeCore
 /// What the command line asked for.
 public enum Command: Equatable, Sendable {
     case scan(folder: String)
-    case run(folder: String, factor: SqueezeFactor, convert: Bool, dryRun: Bool)
+    /// `trashOriginals` is true only when the line has `--trash-originals`
+    /// (design 14.5). Nothing else turns it on: no environment variable, and
+    /// no saved setting.
+    case run(folder: String, factor: SqueezeFactor, convert: Bool, trashOriginals: Bool, dryRun: Bool)
     case remove(folder: String, dryRun: Bool)
     case version
     case help
@@ -35,11 +38,15 @@ public struct UsageError: Error, Equatable, Sendable {
 ///
 /// ```
 /// desqueeze scan <folder> [--json]
-/// desqueeze run <folder> --factor <number> [--no-convert] [--dry-run] [--json]
+/// desqueeze run <folder> --factor <number> [--no-convert] [--trash-originals]
+///               [--dry-run] [--json]
 /// desqueeze remove <folder> [--dry-run] [--json]
 /// desqueeze --version
 /// desqueeze --help
 /// ```
+///
+/// `--trash-originals` goes with `run` only, and not with `--no-convert`
+/// (design 14.5). Each of the two is a usage error.
 ///
 /// `--verbose` goes with every command. An option can stand before or after
 /// the command and the folder. `--` ends the options, so a folder whose name
@@ -65,7 +72,7 @@ public enum Arguments {
             case "--":
                 words += arguments[index...]
                 index = arguments.count
-            case "--json", "--verbose", "--dry-run", "--no-convert":
+            case "--json", "--verbose", "--dry-run", "--no-convert", "--trash-originals":
                 given.insert(argument)
             case "--factor":
                 // The next word is the value, unless it is another option.
@@ -93,6 +100,14 @@ public enum Arguments {
         if name != "run", given.contains("--no-convert") {
             throw UsageError(doesNotGo("--no-convert", with: name, why: "Remove never converts."))
         }
+        if name != "run", given.contains("--trash-originals") {
+            throw UsageError(doesNotGo("--trash-originals", with: name, why: "Remove never moves an original."))
+        }
+        // The pair can do nothing: only an ARW that the run converts can go.
+        if given.contains("--trash-originals"), given.contains("--no-convert") {
+            throw UsageError("--trash-originals does not go with --no-convert. "
+                + "A run that converts nothing has no original to move.")
+        }
         if name == "scan", given.contains("--dry-run") {
             throw UsageError(doesNotGo("--dry-run", with: name, why: ""))
         }
@@ -114,7 +129,8 @@ public enum Arguments {
             guard let factor = SqueezeFactor(text: factorText) else {
                 throw UsageError(SqueezeFactor.errorMessage(got: factorText))
             }
-            command = .run(folder: folder, factor: factor, convert: !given.contains("--no-convert"), dryRun: dryRun)
+            command = .run(folder: folder, factor: factor, convert: !given.contains("--no-convert"),
+                           trashOriginals: given.contains("--trash-originals"), dryRun: dryRun)
         }
         return Invocation(command: command, json: given.contains("--json"), verbose: given.contains("--verbose"))
     }

@@ -374,7 +374,8 @@ final class EndToEndTests: BuiltToolTestCase {
         XCTAssertEqual(help.exitCode, 0)
         XCTAssertEqual(help.stderr, "")
         XCTAssertTrue(help.stdout.contains(
-            "  desqueeze run <folder> --factor <number> [--no-convert] [--dry-run] [--json]\n"))
+            "  desqueeze run <folder> --factor <number> [--no-convert] [--trash-originals]\n"
+                + "                [--dry-run] [--json]\n"))
         XCTAssertFalse(help.stdout.contains("!"))
     }
 }

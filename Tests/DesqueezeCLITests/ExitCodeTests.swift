@@ -35,6 +35,18 @@ final class ExitCodeTests: XCTestCase {
         XCTAssertEqual(DesqueezeTool.exitCode(RunReport(folder: folder, factor: .noStretch, summary: summary)), 1)
     }
 
+    // An original that stays is information. Its note does not make the
+    // code 1 (design 14.3).
+    func testANoteForAnOriginalThatStaysGivesZero() {
+        var summary = RunSummary()
+        summary.convertedByDnglab = 1
+        summary.trashOriginals = true
+        summary.notes = [FileNote(name: "X.ARW", kind: .originalKept,
+                                  message: "The original changed during the run, so it stays.", detail: nil)]
+        let folder = URL(fileURLWithPath: "/tmp/Shoot 1")
+        XCTAssertEqual(DesqueezeTool.exitCode(RunReport(folder: folder, factor: .noStretch, summary: summary)), 0)
+    }
+
     func testABlockedFileGivesOneInARunAndInADryRun() throws {
         try h.touch("A.dng", "A.dng_original")
         h.tools.scales = ["A.dng": "1 1"]

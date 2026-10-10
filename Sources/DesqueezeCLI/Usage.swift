@@ -12,7 +12,8 @@ public enum Usage {
 
         Usage:
           desqueeze scan <folder> [--json]
-          desqueeze run <folder> --factor <number> [--no-convert] [--dry-run] [--json]
+          desqueeze run <folder> --factor <number> [--no-convert] [--trash-originals]
+                        [--dry-run] [--json]
           desqueeze remove <folder> [--dry-run] [--json]
           desqueeze --version
           desqueeze --help
@@ -30,9 +31,12 @@ public enum Usage {
                              \(SqueezeFactor.ruleText).
                              For run only, and run needs it. There is no default.
           --no-convert       For run: leaves the ARW files alone.
+          --trash-originals  For run: moves each original ARW to the Trash after
+                             its DNG passes the check. Off unless given. Does not
+                             go with --no-convert.
           --dry-run          For run and remove: shows what the run would do, file
                              by file, and which converter gets each ARW. Changes
-                             no file.
+                             no file, and moves none.
           --json             Prints one JSON object on standard output, and
                              nothing else there.
           --verbose          Prints each exiftool and converter command, its exit
@@ -48,6 +52,8 @@ public enum Usage {
         While a run works, a scan or a dry run can show a folder in change.
 
         A change is reversible: remove sets each DNG back. No pixel changes.
+        An ARW stays where it is, unless run has --trash-originals. An ARW in
+        the Trash can be put back until the Trash is emptied.
         \(RunSummary.lightroomHint)
 
         Exit codes:

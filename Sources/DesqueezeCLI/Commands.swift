@@ -75,10 +75,12 @@ public enum DesqueezeTool {
                 // folder: the report says `"writable": false`.
                 return (try output(report, TextOutput.scan(report), invocation), 0)
             }
-        case .run(let folder, let factor, let convert, let dryRun):
+        case .run(let folder, let factor, let convert, let trashOriginals, let dryRun):
             return perform(invocation, folder, in: environment) { operations, url in
+                // The flag of the command line, and nothing else, says
+                // whether the originals move (design 14.5).
                 let report = try operations.run(
-                    url, factor: factor, convert: convert, trashOriginals: false, dryRun: dryRun,
+                    url, factor: factor, convert: convert, trashOriginals: trashOriginals, dryRun: dryRun,
                     cancel: dryRun ? CancelFlag() : environment.interruptFlag(), progress: progress(to: environment))
                 return (try output(report, runText(report, operations), invocation), exitCode(report))
             }
@@ -98,7 +100,8 @@ public enum DesqueezeTool {
     /// the run was stopped, or the folder is read-only. A dry run gives the
     /// code of the run it plans. A scan has no such code: when it completed,
     /// it gives 0. A DNG with no full match (`convertedUnmatched`) is
-    /// converted: it does not make the code 1 (design 13.4).
+    /// converted: it does not make the code 1 (design 13.4). An original
+    /// that stays (`originalKept`) does not make it 1 either (design 14.3).
     static func exitCode(_ report: RunReport) -> Int32 {
         let readOnly = report.notes.contains { $0.kind == .folderReadOnly }
         return report.failed > 0 || report.blocked > 0 || report.stopped || readOnly ? 1 : 0

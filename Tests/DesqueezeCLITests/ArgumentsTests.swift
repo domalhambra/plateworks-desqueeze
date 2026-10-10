@@ -29,7 +29,8 @@ final class ArgumentsTests: XCTestCase {
 
     func testRun() throws {
         XCTAssertEqual(try parse("run", "Shoot", "--factor", "1.5"),
-                       Invocation(command: .run(folder: "Shoot", factor: onePointFive, convert: true, dryRun: false)))
+                       Invocation(command: .run(folder: "Shoot", factor: onePointFive, convert: true,
+                                                trashOriginals: false, dryRun: false)))
     }
 
     func testRemove() throws {
@@ -69,17 +70,19 @@ final class ArgumentsTests: XCTestCase {
 
     func testDryRunOnRunAndRemove() throws {
         XCTAssertEqual(try parse("run", "Shoot", "--factor", "1.5", "--dry-run").command,
-                       .run(folder: "Shoot", factor: onePointFive, convert: true, dryRun: true))
+                       .run(folder: "Shoot", factor: onePointFive, convert: true, trashOriginals: false, dryRun: true))
         XCTAssertEqual(try parse("remove", "Shoot", "--dry-run").command, .remove(folder: "Shoot", dryRun: true))
     }
 
     func testNoConvertOnRun() throws {
         XCTAssertEqual(try parse("run", "Shoot", "--factor", "1.5", "--no-convert").command,
-                       .run(folder: "Shoot", factor: onePointFive, convert: false, dryRun: false))
+                       .run(folder: "Shoot",
+                            factor: onePointFive, convert: false, trashOriginals: false, dryRun: false))
     }
 
     func testEveryFlagOfRunTogetherInAnyOrder() throws {
-        let expected = Invocation(command: .run(folder: "Shoot", factor: onePointFive, convert: false, dryRun: true),
+        let expected = Invocation(command: .run(folder: "Shoot", factor: onePointFive, convert: false,
+                                                trashOriginals: false, dryRun: true),
                                   json: true, verbose: true)
         XCTAssertEqual(try parse("run", "Shoot", "--factor", "1.5", "--no-convert", "--dry-run", "--json", "--verbose"),
                        expected)
@@ -91,7 +94,9 @@ final class ArgumentsTests: XCTestCase {
 
     func testTheFactorTakesTheValuesOfTheWindow() throws {
         func factor(_ text: String) throws -> SqueezeFactor? {
-            guard case .run(_, let factor, _, _) = try parse("run", "Shoot", "--factor", text).command else { return nil }
+            guard case .run(_, let factor, _, _, _) = try parse("run", "Shoot", "--factor", text).command else {
+                return nil
+            }
             return factor
         }
         XCTAssertEqual(try factor("1.33"), SqueezeFactor(1.33))
@@ -103,7 +108,7 @@ final class ArgumentsTests: XCTestCase {
 
     func testTheFactorCanFollowAnEqualsSign() throws {
         XCTAssertEqual(try parse("run", "Shoot", "--factor=1.5").command,
-                       .run(folder: "Shoot", factor: onePointFive, convert: true, dryRun: false))
+                       .run(folder: "Shoot", factor: onePointFive, convert: true, trashOriginals: false, dryRun: false))
     }
 
     func testRunWithNoFactorIsAUsageErrorBecauseThereIsNoDefault() {
@@ -169,7 +174,8 @@ final class ArgumentsTests: XCTestCase {
         XCTAssertEqual(try parse("scan", "--json", "--", "--help"),
                        Invocation(command: .scan(folder: "--help"), json: true))
         XCTAssertEqual(try parse("run", "--factor", "2", "--", "-odd folder").command,
-                       .run(folder: "-odd folder", factor: SqueezeFactor(2)!, convert: true, dryRun: false))
+                       .run(folder: "-odd folder",
+                            factor: SqueezeFactor(2)!, convert: true, trashOriginals: false, dryRun: false))
         XCTAssertEqual(usageError("scan", "--", "One", "--json"), "Too many arguments: --json. Give one folder.")
     }
 

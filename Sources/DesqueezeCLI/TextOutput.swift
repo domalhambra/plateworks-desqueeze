@@ -57,8 +57,12 @@ public enum TextOutput {
     /// tool's own words below it. A dry run shows its steps first, and a
     /// convert step names the converter that gets the ARW first. When both
     /// converters did work in a run, one line after the counts says how
-    /// many ARW files each converted. After a run that set at least one
-    /// photo, the Lightroom line is last.
+    /// many ARW files each converted. After a run that was asked to move the
+    /// originals, the next line says how many moved (design 14.3). After a
+    /// run that set at least one photo, the Lightroom line is last.
+    ///
+    /// In a dry run, the step of an original that the run would move reads
+    /// `  trash    frame.ARW` (design 14.5).
     ///
     /// - Parameter converterInstalled: true when one converter or the other
     ///   is installed. False adds the reason to the line about the ARW files
@@ -68,7 +72,7 @@ public enum TextOutput {
         if let steps = report.steps {
             lines.append("Dry run. No file was changed.")
             lines += steps.map {
-                "  " + $0.action.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0) + "  " + $0.name
+                "  " + word(for: $0.action).padding(toLength: 7, withPad: " ", startingAt: 0) + "  " + $0.name
                     + ($0.converter.map { "  with \($0.name)" } ?? "")
             }
             lines.append(report.folderIsEmpty ? FolderText.noPhotos : "A run would give: \(report.countsLine)")
@@ -78,6 +82,9 @@ public enum TextOutput {
         }
         // Nil for a dry run: its steps name the converters.
         if let converters = report.convertersLine { lines.append(converters) }
+        // Only after a run that was asked to move the originals. Nil for a
+        // dry run: its steps name each ARW that a run would move.
+        if let originals = report.originalsLine { lines.append(originals) }
         for note in report.notes {
             lines.append(note.line)
             // The detail of a failed restore has two lines.
@@ -89,5 +96,11 @@ public enum TextOutput {
         // same runs.
         if let lightroom = report.lightroomLine { lines.append(lightroom) }
         return lines
+    }
+
+    /// The word of a step in the text of a dry run. It is the name of the
+    /// action in the JSON, but for `trashOriginal`, which is `trash`.
+    static func word(for action: RunPlan.Action) -> String {
+        action == .trashOriginal ? "trash" : action.rawValue
     }
 }

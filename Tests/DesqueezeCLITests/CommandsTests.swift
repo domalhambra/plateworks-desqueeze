@@ -23,7 +23,8 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual(h.err.lines, [])
         for line in [
             "desqueeze scan <folder> [--json]",
-            "desqueeze run <folder> --factor <number> [--no-convert] [--dry-run] [--json]",
+            "desqueeze run <folder> --factor <number> [--no-convert] [--trash-originals]\n"
+                + "                [--dry-run] [--json]",
             "desqueeze remove <folder> [--dry-run] [--json]",
             "desqueeze --version",
             "desqueeze --help",

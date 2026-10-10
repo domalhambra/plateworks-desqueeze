@@ -24,6 +24,10 @@ final class FakeTools: ProcessRunner, @unchecked Sendable {
     /// dashes: exiftool could not read the file.
     var facts: [String: String] = [:]
     var failWrites: Set<String> = []
+    /// DNG name to what the check before an original moves reads as
+    /// `OriginalRawFileName` (design 14.2, line 5). No entry is the name of
+    /// an ARW with the base name of the DNG, as each converter writes it.
+    var originalNames: [String: String] = [:]
     var commands: [String] = []
     /// DNG name to the values that the dnglab match wrote, in order.
     private var matched: [String: [String]] = [:]
@@ -56,6 +60,14 @@ final class FakeTools: ProcessRunner, @unchecked Sendable {
             matched[file.lastPathComponent] = arguments.filter { $0.contains("=") }
                 .map { String($0[$0.index(after: $0.firstIndex(of: "=")!)...]) }
             return ProcessResult(exitCode: 0, stdout: "    1 image files updated\n", stderr: "")
+        }
+        if arguments.dropLast() == ["-m", "-n", "-T", "-IFD0:OriginalRawFileName", "-SubIFD:DefaultScale"] {
+            // The check of a DNG before its original moves. A converter
+            // writes no stretch, so a DNG with no entry holds "1 1".
+            let name = originalNames[file.lastPathComponent]
+                ?? file.deletingPathExtension().lastPathComponent + ".ARW"
+            return ProcessResult(exitCode: 0, stdout: "\(name)\t\(scales[file.lastPathComponent] ?? "1 1")\n",
+                                 stderr: "")
         }
         if arguments.contains("-T"), !arguments.contains("-ext") {
             let row = (matched[file.lastPathComponent] ?? []).joined(separator: "\t")
