@@ -39,7 +39,7 @@ The first version. It is built from source, and there is no download.
 - `--verbose`, which shows each command that the tool starts.
 - A documentation site: guides for a photographer and for a contributor,
   and the API reference of `DesqueezeCore`. `scripts/build_docs.sh` builds
-  it from the DocC catalog. It is not published yet.
+  it from the DocC catalog. It is published at <https://domalhambra.github.io/plateworks-desqueeze/>.
 
 ### Safety
 

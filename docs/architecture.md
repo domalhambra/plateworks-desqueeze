@@ -427,11 +427,12 @@ not exist. It does not build the site.
 `docc` of Xcode, and it must end with no warning. No suite runs it: run it
 after a change to an article or to a documentation comment.
 
-**Two workflows** are in `.github/workflows/`, for the time when the repo is
-on GitHub. `tests.yml` runs the three suites on every push and on every pull
-request. `docs.yml` builds the site with `scripts/build_docs.sh` and
-publishes it to GitHub Pages. Neither has run yet: the header of each file
-lists what to check on its first run.
+**Two workflows** are in `.github/workflows/`. `tests.yml` runs the three
+suites on every push and on every pull request. `docs.yml` builds the site
+with `scripts/build_docs.sh` and publishes it to GitHub Pages. Both first
+passed on 2026-10-10. The runner has no sample photo and no Adobe DNG
+Converter, so the tests on the real programs skip there: the header of
+`tests.yml` says what a green run proves.
 
 **No test reaches the real Trash.** A unit test gives `FileBackups` its own
 function. A test that starts a built tool sets

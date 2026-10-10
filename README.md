@@ -328,8 +328,8 @@ The guides for a photographer and for a contributor, and the API reference
 of `DesqueezeCore`, are one DocC catalog:
 `Sources/DesqueezeCore/DesqueezeCore.docc`. Build the site with
 `scripts/build_docs.sh`. It needs Xcode, and it adds no dependency to the
-package. The site is not published yet. `.github/workflows/docs.yml`
-publishes it when the repo is on GitHub.
+package. The site is at <https://domalhambra.github.io/plateworks-desqueeze/>.
+`.github/workflows/docs.yml` publishes it on each push to the main branch.
 
 ## License
 

@@ -1,8 +1,11 @@
 # Runs the three test suites.
 #
-# NOT YET RUN. This workflow was written before the repo was on GitHub, so it
-# has never started. The suites were run on one Mac only (macOS 27.2, Xcode
-# 27.0, Swift 6.4). Check these on the first run:
+# First passed on 2026-10-10, on macOS 26.6.2 with Xcode 26.6 (Swift 6.3.3),
+# exiftool 13.55 and dnglab 0.8.0: 844 tests in the root package with 61
+# skipped, 66 in the server package with 21 skipped, 73 for the window. The
+# maintainer's Mac has Swift 6.4, and the runner's older compiler refused one
+# pattern that 6.4 accepts (docs/decisions.md, 2026-10-10). So a green run on
+# a Mac does not prove a green run here. What to know about this workflow:
 #
 #   1. The runner image. Read the output of the "Versions" step. The package
 #      has the tools version 5.9. The app sets SWIFT_VERSION 6.0 in
@@ -21,8 +24,8 @@
 #   4. The tests that make disk images with hdiutil. They skip when the
 #      runner cannot make or attach an image.
 #   5. The tests with real signals and real pipes: InterruptTests, and the
-#      end-to-end tests of the server. They were never run on a shared
-#      runner.
+#      end-to-end tests of the server. They depend on timing, and a shared
+#      runner is slower than a Mac. They passed on the first green run.
 #   6. The window's tests. The targets are signed to run locally
 #      (CODE_SIGN_IDENTITY "-"). See that xcodebuild can sign on the runner.
 #   7. This workflow runs on every push and on every pull request. A push to

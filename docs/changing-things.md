@@ -404,8 +404,8 @@ When you change a sentence, an option, a note kind, a JSON key or the match
 table, change the article that describes it in the same change.
 
 `.github/workflows/docs.yml` publishes the site to GitHub Pages on a push to
-the main branch. It has not run yet: the repo is not on GitHub. Its header
-lists what to check on the first run.
+the main branch. Its header says what it needs. The runner's Xcode can be
+older than yours: a warning of its `docc` fails the build there.
 
 ## Record a decision
 

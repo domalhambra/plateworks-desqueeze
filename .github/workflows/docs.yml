@@ -1,8 +1,8 @@
 # Builds the documentation site and publishes it to GitHub Pages.
 #
-# NOT YET RUN. This workflow was written before the repo was on GitHub, so it
-# has never started. Only scripts/build_docs.sh was run, on one Mac (macOS
-# 27.2, Xcode 27.0, Swift 6.4). Check these on the first run:
+# First passed on 2026-10-10, on macOS 26.6.2 with Xcode 26.6 (Swift 6.3.3).
+# The site loaded its style, its script and its data, and the first address
+# went to documentation/desqueezecore/. What this workflow needs:
 #
 #   1. Pages. In the repo settings, under Pages, the source must be "GitHub
 #      Actions". Without it, the configure-pages step fails.
