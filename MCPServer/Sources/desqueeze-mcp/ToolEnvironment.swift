@@ -74,9 +74,10 @@ struct ToolEnvironment: Sendable {
         return folder
     }
 
-    /// An operation throws when its scan of the folder fails, and when
-    /// another run works in the folder (design 13.9). No file was tried
-    /// then.
+    /// An operation throws when its scan of the folder fails, when another
+    /// run works in the folder, and when the lock call of a run failed
+    /// (design 13.9). No file was tried then. A lock call that failed is a
+    /// folder that could not be read, with the system's words.
     private func scanned<Report>(_ folder: URL, _ work: () throws -> Report) throws -> Report {
         do {
             return try work()

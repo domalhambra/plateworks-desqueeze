@@ -122,7 +122,13 @@ final class ServerEndToEndTests: ServerTestCase {
             + "Photos already in Lightroom: Metadata › Read Metadata from File. "
             + "Do not say it after a dry run, or when \"set\" is 0."
         let removeText = try XCTUnwrap(tools[2]["description"] as? String)
+        // Design 13.9: a run and a remove on a volume that gives no folder
+        // lock go on, and the result has a note. The model must not take
+        // it for a failure.
+        let noLock = "A note of the kind \"noFolderLock\" is no failure: the volume gives no lock for a folder, "
+            + "so nothing kept a second run out of the folder while this run worked."
         for (name, text) in [("run", runText), ("remove", removeText)] {
+            XCTAssertTrue(text.contains(noLock), "\(name): \(text)")
             XCTAssertTrue(text.contains(lightroomRule), "\(name): \(text)")
             XCTAssertFalse(text.contains("When photos are in Lightroom already"), "\(name): the rule before 4.4")
         }

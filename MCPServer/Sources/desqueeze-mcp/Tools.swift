@@ -112,6 +112,13 @@ enum ToolCatalog {
     static let neverMovesAnOriginal = "This server never moves an original ARW file to the Trash, and it has "
         + "no argument for that. Only the user can ask for it, in the window or with the command line tool."
 
+    /// What run and remove say about the note of a volume that gives no
+    /// lock for a folder (design 13.9). The run went on without the lock,
+    /// and its result is a good one. The note itself is the core's.
+    static let noFolderLockIsNoFailure = "A note of the kind \"\(FileNote.Kind.noFolderLock.rawValue)\" is no "
+        + "failure: the volume gives no lock for a folder, so nothing kept a second run out of the folder while "
+        + "this run worked."
+
     /// Run and remove change files and destroy nothing: a change is
     /// reversible, and the original is kept until the check passes. A second
     /// call with the same arguments changes nothing more.
@@ -175,6 +182,7 @@ enum ToolCatalog {
             "converted". A file that failed or was blocked is in the notes. It does not make the call \
             an error. A note of the kind "convertedUnmatched" is no failure: dnglab converted the \
             file, Adobe DNG Converter is not installed, and the note says what the DNG lacks. \
+            \(noFolderLockIsNoFailure) \
             "stopped" true means that the run was cancelled and left work undone. "trashOriginals" is \
             always false and "originalsInTrash" is always 0 in a result of this server.
 
@@ -211,7 +219,8 @@ enum ToolCatalog {
             The safe path: call desqueeze_scan first. Then call this tool with dry_run true, and read \
             the steps. Then call it with dry_run false.
 
-            The result is the same JSON object as the result of desqueeze_run, with "factor" "1".
+            The result is the same JSON object as the result of desqueeze_run, with "factor" "1". \
+            \(noFolderLockIsNoFailure)
 
             \(lightroomRule)
             """,
