@@ -48,6 +48,10 @@ final class EndToEndTests: BuiltToolTestCase {
 
         let result = try desqueeze("scan", folder.path)
 
+        // On a Mac with no dnglab, the line of advice follows the tools.
+        let dnglab = ToolLocator().dnglab()
+        let advice = dnglab == nil
+            ? "dnglab is faster and opens no window. Install it with: brew install dnglab\n" : ""
         XCTAssertEqual(result.exitCode, 0)
         XCTAssertEqual(result.stdout, """
             \(folder.path)
@@ -62,8 +66,9 @@ final class EndToEndTests: BuiltToolTestCase {
             lost.dng_original: A backup with no DNG beside it. Rename it to lost.dng to get the photo back.
 
             exiftool: \(try XCTUnwrap(ToolLocator().exiftool()).path)
+            dnglab: \(dnglab?.path ?? "not installed")
             Adobe DNG Converter: \(try XCTUnwrap(ToolLocator().dngConverter()).path)
-
+            \(advice)
             """)
     }
 

@@ -173,9 +173,8 @@ public enum DesqueezeTool {
         invocation.json ? try ReportJSON.text(report) : text().joined(separator: "\n")
     }
 
-    /// The reason "Adobe DNG Converter is not installed" follows the ARW
-    /// line only when neither converter is there. With dnglab installed the
-    /// sentence would be the wrong reason.
+    /// The reason "No converter is installed" follows the line about the
+    /// ARW files that the run left only when neither converter is there.
     private static func runText(_ report: RunReport, _ operations: DesqueezeOperations) -> [String] {
         TextOutput.run(report, converterInstalled: operations.canConvert)
     }

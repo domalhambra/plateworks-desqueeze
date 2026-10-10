@@ -3,10 +3,14 @@ import DesqueezeCore
 /// The output for a person. Each function is pure: a report in, lines out.
 ///
 /// Every sentence that the window also shows is made in `DesqueezeCore`
-/// (`FolderText`, `FileNote`, `RunSummary`). This type only lays them out.
+/// (`FolderText`, `FileNote`, `RunSummary`, `RunReport`). This type only
+/// lays them out.
 public enum TextOutput {
     /// A short table of the DNG files, then the ARW files with no DNG, then
-    /// the messages about the folder, then where the two tools are.
+    /// the messages about the folder, then where the three tools are:
+    /// exiftool, dnglab, and Adobe DNG Converter, in this order. The line
+    /// of advice about the converters is last, when there is one
+    /// (`FolderText.converterAdvice`, design 13.5).
     public static func scan(_ report: ScanReport) -> [String] {
         var lines = [report.folder, ""]
         if report.isEmpty {
@@ -37,31 +41,38 @@ public enum TextOutput {
         if !messages.isEmpty { lines += messages + [""] }
 
         lines.append("exiftool: \(report.exiftool)")
-        // "ARW files cannot be converted" is true only with neither converter.
-        // With dnglab installed, that sentence does not show.
-        lines.append("Adobe DNG Converter: " + (report.dngConverter
-            ?? (report.dnglab == nil ? "not installed. ARW files cannot be converted." : "not installed.")))
+        lines.append("\(ConverterKind.dnglab.name): \(report.dnglab ?? "not installed")")
+        // dnglab converts. Adobe DNG Converter is not needed, and the line
+        // says so where it is missing.
+        lines.append("\(ConverterKind.adobe.name): \(report.dngConverter ?? "not installed (optional backup)")")
+        if let advice = report.converterAdvice { lines.append(advice) }
         return lines
     }
 
     /// The window's line of counts, then one line for each note, with the
-    /// tool's own words below it. A dry run shows its steps first.
+    /// tool's own words below it. A dry run shows its steps first, and a
+    /// convert step names the converter that gets the ARW first. When both
+    /// converters did work in a run, one line after the counts says how
+    /// many ARW files each converted.
     ///
     /// - Parameter converterInstalled: true when one converter or the other
     ///   is installed. False adds the reason to the line about the ARW files
-    ///   that the run left.
+    ///   that the run left: no converter is installed.
     public static func run(_ report: RunReport, converterInstalled: Bool) -> [String] {
         var lines: [String] = []
         if let steps = report.steps {
             lines.append("Dry run. No file was changed.")
             lines += steps.map {
                 "  " + $0.action.rawValue.padding(toLength: 7, withPad: " ", startingAt: 0) + "  " + $0.name
+                    + ($0.converter.map { "  with \($0.name)" } ?? "")
             }
             lines.append(report.folderIsEmpty ? FolderText.noPhotos : "A run would give: \(report.countsLine)")
         } else {
             // A folder with nothing in it has no counts worth a line.
             lines.append(report.folderIsEmpty ? FolderText.noPhotos : report.countsLine)
         }
+        // Nil for a dry run: its steps name the converters.
+        if let converters = report.convertersLine { lines.append(converters) }
         for note in report.notes {
             lines.append(note.line)
             // The detail of a failed restore has two lines.

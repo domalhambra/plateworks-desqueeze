@@ -37,6 +37,25 @@ final class CommandsTests: XCTestCase {
         XCTAssertFalse(h.out.text.contains(FileBackups.testFolderVariable), "the test variable is in no help text")
     }
 
+    // dnglab converts, and Adobe DNG Converter is the optional backup
+    // (design 13). The help names no converter as "the" converter, and it
+    // names three tools, not two.
+    func testHelpSaysThatDnglabConvertsAndThatAdobeIsTheOptionalBackup() {
+        h.run("--help")
+        let text = h.out.lines.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: " ")
+        for words in [
+            "where exiftool, dnglab and Adobe DNG Converter are",
+            "dnglab converts the ARW files.",
+            "Adobe DNG Converter is the optional backup, for a photo that dnglab cannot match.",
+            "Install dnglab with: brew install dnglab",
+        ] {
+            XCTAssertTrue(text.contains(words), words)
+        }
+        XCTAssertFalse(text.contains("the two tools"), text)
+        XCTAssertTrue(text.contains("Install dnglab with: \(ToolLocator.dnglabInstallCommand)"),
+                      "the command is the core's constant")
+    }
+
     // The rule is one sentence in the core. The help shows it on one line.
     func testHelpStatesTheFactorRuleOfTheCore() {
         h.run("--help")
@@ -317,8 +336,71 @@ final class CommandsTests: XCTestCase {
         ])
 
         XCTAssertEqual(h.run("scan", "Shoot 1"), 0)
-        XCTAssertEqual(h.out.lines.last, "Adobe DNG Converter: not installed.")
+        XCTAssertEqual(Array(h.out.lines.suffix(4)), [
+            "exiftool: /fake/bin/exiftool",
+            "dnglab: /fake/bin/dnglab",
+            "Adobe DNG Converter: not installed (optional backup)",
+            "Adobe DNG Converter is not installed. It is an optional backup for photos that dnglab cannot match.",
+        ])
         XCTAssertFalse(h.out.text.contains("cannot be converted"), h.out.text)
+    }
+
+    // The scan text of the tool in the other three states of design 13.5.
+    func testTheScanTextNamesTheThreeToolsAndGivesTheAdviceOfEachState() throws {
+        try h.touch("A.dng", "X.ARW")
+        h.tools.scales = ["A.dng": "1 1"]
+
+        h.hasDnglab = true
+        XCTAssertEqual(h.run("scan", "Shoot 1"), 0)
+        XCTAssertEqual(Array(h.out.lines.suffix(4)), [
+            "",
+            "exiftool: /fake/bin/exiftool",
+            "dnglab: /fake/bin/dnglab",
+            "Adobe DNG Converter: /fake/Adobe DNG Converter",
+        ], "both converters: no advice")
+
+        h.hasDnglab = false
+        XCTAssertEqual(h.run("scan", "Shoot 1"), 0)
+        XCTAssertEqual(Array(h.out.lines.suffix(4)), [
+            "exiftool: /fake/bin/exiftool",
+            "dnglab: not installed",
+            "Adobe DNG Converter: /fake/Adobe DNG Converter",
+            "dnglab is faster and opens no window. Install it with: brew install dnglab",
+        ])
+
+        h.hasConverter = false
+        XCTAssertEqual(h.run("scan", "Shoot 1"), 0, "a scan that completed gives 0, also with no converter")
+        XCTAssertEqual(Array(h.out.lines.suffix(4)), [
+            "exiftool: /fake/bin/exiftool",
+            "dnglab: not installed",
+            "Adobe DNG Converter: not installed (optional backup)",
+            "Install dnglab with: brew install dnglab",
+        ])
+    }
+
+    // The text of a dry run and of a run with both converters at work: a
+    // full match goes to dnglab, and a lens frame to Adobe DNG Converter.
+    func testTheTextOfADryRunNamesEachConverterAndTheRunSaysHowManyEachConverted() throws {
+        try h.touch("X.ARW", "Y.ARW")
+        h.tools.facts = ["X.ARW": FakeTools.adapted, "Y.ARW": FakeTools.lens]
+        h.hasDnglab = true
+
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5", "--dry-run"), 0)
+        XCTAssertEqual(h.out.lines, [
+            "Dry run. No file was changed.",
+            "  convert  X.ARW  with dnglab",
+            "  convert  Y.ARW  with Adobe DNG Converter",
+            "  write    X.dng",
+            "  write    Y.dng",
+            "A run would give: 2 converted · 2 set · 0 skipped · 0 failed",
+        ])
+
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5"), 0)
+        XCTAssertEqual(h.out.lines, [
+            "2 converted · 2 set · 0 skipped · 0 failed",
+            "Converted with dnglab: 1. With Adobe DNG Converter: 1.",
+            "Photos already in Lightroom: Metadata › Read Metadata from File.",
+        ])
     }
 
     func testScanJSONSaysWhereEachConverterIs() throws {

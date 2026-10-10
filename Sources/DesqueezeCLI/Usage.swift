@@ -19,8 +19,8 @@ public enum Usage {
 
         Commands:
           scan     Shows each DNG with its current scale, the ARW files that have
-                   no DNG, each backup that has lost its DNG, and where the two
-                   tools are. Changes no file.
+                   no DNG, each backup that has lost its DNG, and where exiftool,
+                   dnglab and Adobe DNG Converter are. Changes no file.
           run      Converts each ARW that has no DNG, then sets the stretch on
                    every DNG.
           remove   Sets every DNG back to no stretch. Converts nothing.
@@ -31,11 +31,18 @@ public enum Usage {
                              For run only, and run needs it. There is no default.
           --no-convert       For run: leaves the ARW files alone.
           --dry-run          For run and remove: shows what the run would do, file
-                             by file. Changes no file.
+                             by file, and which converter gets each ARW. Changes
+                             no file.
           --json             Prints one JSON object on standard output, and
                              nothing else there.
           --verbose          Prints each exiftool and converter command, its exit
                              code, and its output on standard error.
+
+        dnglab converts the ARW files. Each DNG that it makes gets the values that
+        Adobe DNG Converter writes, so Lightroom shows the same photo. Adobe DNG
+        Converter is the optional backup, for a photo that dnglab cannot match.
+        With no converter, run still sets the stretch on the DNG files.
+        Install dnglab with: \(ToolLocator.dnglabInstallCommand)
 
         Progress goes to standard error. Control-C stops a run after the current
         file, and the result so far is still printed.

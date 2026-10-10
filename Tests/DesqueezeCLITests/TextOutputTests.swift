@@ -39,10 +39,13 @@ final class TextOutputTests: XCTestCase {
             "lost.dng_original: A backup with no DNG beside it. Rename it to lost.dng to get the photo back.",
             "",
             "exiftool: /opt/homebrew/bin/exiftool",
+            "dnglab: not installed",
             "Adobe DNG Converter: /Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter",
+            "dnglab is faster and opens no window. Install it with: brew install dnglab",
         ])
     }
 
+    // No ARW is pending, so no advice follows the three tools.
     func testAScanWithNoMessageAndNoConverter() {
         XCTAssertEqual(TextOutput.scan(scan(dngs: [dng("a.dng", "2 1")], converter: nil)), [
             "/Volumes/Card/Shoot 1",
@@ -54,18 +57,66 @@ final class TextOutputTests: XCTestCase {
             "ARW files with no DNG: 0",
             "",
             "exiftool: /opt/homebrew/bin/exiftool",
-            "Adobe DNG Converter: not installed. ARW files cannot be converted.",
+            "dnglab: not installed",
+            "Adobe DNG Converter: not installed (optional backup)",
         ])
     }
 
-    // "ARW files cannot be converted" is false when dnglab is installed, so
-    // the sentence does not show then.
-    func testAScanWithDnglabAndNoAdobeDoesNotSayThatARWFilesCannotBeConverted() {
-        let lines = TextOutput.scan(scan(arws: ["b.ARW"], dnglab: "/opt/homebrew/bin/dnglab", converter: nil))
-        XCTAssertEqual(lines.last, "Adobe DNG Converter: not installed.")
-        XCTAssertFalse(lines.contains { $0.contains("cannot be converted") }, "\(lines)")
-        XCTAssertEqual(TextOutput.scan(scan(arws: ["b.ARW"], dnglab: nil, converter: nil)).last,
-                       "Adobe DNG Converter: not installed. ARW files cannot be converted.")
+    // MARK: The three tools and the advice (design 13.5)
+
+    static let adobe = "/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter"
+
+    /// The lines of a scan from the line of exiftool on.
+    func tools(arws: [String] = ["b.ARW"], dnglab: String?, converter: String?) -> [String] {
+        let lines = TextOutput.scan(scan(arws: arws, dnglab: dnglab, converter: converter))
+        return Array(lines[(lines.firstIndex(of: "exiftool: /opt/homebrew/bin/exiftool") ?? lines.endIndex)...])
+    }
+
+    func testWithBothConvertersAScanNamesTheThreeToolsInOrderAndGivesNoAdvice() {
+        XCTAssertEqual(tools(dnglab: "/opt/homebrew/bin/dnglab", converter: Self.adobe), [
+            "exiftool: /opt/homebrew/bin/exiftool",
+            "dnglab: /opt/homebrew/bin/dnglab",
+            "Adobe DNG Converter: \(Self.adobe)",
+        ])
+    }
+
+    func testWithDnglabAloneAScanSaysThatAdobeIsAnOptionalBackup() {
+        XCTAssertEqual(tools(dnglab: "/opt/homebrew/bin/dnglab", converter: nil), [
+            "exiftool: /opt/homebrew/bin/exiftool",
+            "dnglab: /opt/homebrew/bin/dnglab",
+            "Adobe DNG Converter: not installed (optional backup)",
+            "Adobe DNG Converter is not installed. It is an optional backup for photos that dnglab cannot match.",
+        ])
+    }
+
+    func testWithAdobeAloneAScanSaysThatDnglabIsFaster() {
+        XCTAssertEqual(tools(dnglab: nil, converter: Self.adobe), [
+            "exiftool: /opt/homebrew/bin/exiftool",
+            "dnglab: not installed",
+            "Adobe DNG Converter: \(Self.adobe)",
+            "dnglab is faster and opens no window. Install it with: brew install dnglab",
+        ])
+    }
+
+    func testWithNeitherConverterAScanGivesTheInstallCommandOfDnglab() {
+        XCTAssertEqual(tools(dnglab: nil, converter: nil), [
+            "exiftool: /opt/homebrew/bin/exiftool",
+            "dnglab: not installed",
+            "Adobe DNG Converter: not installed (optional backup)",
+            "Install dnglab with: brew install dnglab",
+        ])
+    }
+
+    // The advice is the core's line, so the window says the same words. With
+    // no pending ARW there is none, in every state.
+    func testTheAdviceOfAScanIsTheLineOfTheCoreAndNeedsAPendingARW() {
+        for (dnglab, converter) in [("/opt/homebrew/bin/dnglab", nil), (nil, Self.adobe), (nil, nil)] as [(String?, String?)] {
+            let report = scan(arws: ["b.ARW"], dnglab: dnglab, converter: converter)
+            XCTAssertEqual(TextOutput.scan(report).last, report.converterAdvice)
+            XCTAssertNotNil(report.converterAdvice)
+            XCTAssertEqual(tools(arws: [], dnglab: dnglab, converter: converter).count, 3,
+                           "three tools and no advice")
+        }
     }
 
     func testAScanOfAnEmptyFolderSaysSo() {
@@ -190,7 +241,7 @@ final class TextOutputTests: XCTestCase {
         let report = RunReport(folder: folder, factor: SqueezeFactor(1.5)!, plan: plan)
         XCTAssertEqual(TextOutput.run(report, converterInstalled: true), [
             "Dry run. No file was changed.",
-            "  convert  frame.ARW",
+            "  convert  frame.ARW  with dnglab",
             "  write    a.dng",
             "  skip     c.dng",
             "  blocked  d.dng",
@@ -199,6 +250,61 @@ final class TextOutputTests: XCTestCase {
             "lost.dng_original: A backup with no DNG beside it. Rename it to lost.dng to get the photo back.",
             "2 ARW files would not be converted.",
         ])
+    }
+
+    // A convert step names the converter that gets the ARW first.
+    func testADryRunNamesTheConverterOfEachConvertStep() {
+        let plan = RunPlan(
+            steps: [RunPlan.Step(name: "frame.ARW", action: .convert, converter: .dnglab),
+                    RunPlan.Step(name: "lens.ARW", action: .convert, converter: .adobe),
+                    RunPlan.Step(name: "frame.dng", action: .write), RunPlan.Step(name: "lens.dng", action: .write)],
+            summary: summary {
+                $0.convertedByDnglab = 1
+                $0.convertedByAdobe = 1
+                $0.set = 2
+            })
+        let report = RunReport(folder: folder, factor: SqueezeFactor(1.5)!, plan: plan)
+        XCTAssertEqual(TextOutput.run(report, converterInstalled: true), [
+            "Dry run. No file was changed.",
+            "  convert  frame.ARW  with dnglab",
+            "  convert  lens.ARW  with Adobe DNG Converter",
+            "  write    frame.dng",
+            "  write    lens.dng",
+            "A run would give: 2 converted · 2 set · 0 skipped · 0 failed",
+        ])
+    }
+
+    // When both converters did work, one line after the counts says how
+    // many each converted.
+    func testARunInWhichBothConvertersWorkedSaysSoAfterTheCounts() {
+        let report = RunReport(folder: folder, factor: SqueezeFactor(1.5)!, summary: summary {
+            $0.convertedByDnglab = 11
+            $0.convertedByAdobe = 1
+            $0.set = 12
+            $0.unconvertedARWs = 1
+            $0.notes = [.orphanBackup(named: "lost.dng_original")]
+        })
+        XCTAssertEqual(TextOutput.run(report, converterInstalled: true), [
+            "12 converted · 12 set · 0 skipped · 0 failed",
+            "Converted with dnglab: 11. With Adobe DNG Converter: 1.",
+            "lost.dng_original: A backup with no DNG beside it. Rename it to lost.dng to get the photo back.",
+            "1 ARW file was not converted.",
+            "Photos already in Lightroom: Metadata › Read Metadata from File.",
+        ])
+    }
+
+    func testARunInWhichOneConverterWorkedHasNoLineAboutTheConverters() {
+        for (dnglab, adobe) in [(12, 0), (0, 12)] {
+            let report = RunReport(folder: folder, factor: SqueezeFactor(1.5)!, summary: summary {
+                $0.convertedByDnglab = dnglab
+                $0.convertedByAdobe = adobe
+                $0.set = 12
+            })
+            XCTAssertEqual(TextOutput.run(report, converterInstalled: true), [
+                "12 converted · 12 set · 0 skipped · 0 failed",
+                "Photos already in Lightroom: Metadata › Read Metadata from File.",
+            ])
+        }
     }
 
     // The sentence is made once, in `FolderText`.
