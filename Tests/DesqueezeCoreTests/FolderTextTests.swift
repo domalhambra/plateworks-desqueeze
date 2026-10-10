@@ -143,19 +143,24 @@ final class FolderTextTests: XCTestCase {
         XCTAssertEqual(snapshot.runCount(converterAvailable: false), 216)
     }
 
+    /// The label as the window makes it: the label of the run count.
+    func runLabel(_ snapshot: FolderSnapshot, converterAvailable: Bool) -> String {
+        FolderText.runLabel(count: snapshot.runCount(converterAvailable: converterAvailable))
+    }
+
     func testTheRunLabelHasThreeForms() {
-        XCTAssertEqual(h.snapshot().runLabel(converterAvailable: true), "Desqueeze")
-        XCTAssertEqual(h.snapshot(dngs: dngs(1)).runLabel(converterAvailable: true), "Desqueeze 1 photo")
-        XCTAssertEqual(h.snapshot(dngs: dngs(1), pending: arws(1)).runLabel(converterAvailable: true),
+        XCTAssertEqual(runLabel(h.snapshot(), converterAvailable: true), "Desqueeze")
+        XCTAssertEqual(runLabel(h.snapshot(dngs: dngs(1)), converterAvailable: true), "Desqueeze 1 photo")
+        XCTAssertEqual(runLabel(h.snapshot(dngs: dngs(1), pending: arws(1)), converterAvailable: true),
                        "Desqueeze 2 photos")
-        XCTAssertEqual(h.snapshot(dngs: dngs(216), pending: arws(12)).runLabel(converterAvailable: true),
+        XCTAssertEqual(runLabel(h.snapshot(dngs: dngs(216), pending: arws(12)), converterAvailable: true),
                        "Desqueeze 228 photos")
     }
 
     func testTheRunLabelLeavesOutTheARWFilesThatCannotConvert() {
-        XCTAssertEqual(h.snapshot(dngs: dngs(1), pending: arws(12)).runLabel(converterAvailable: false),
+        XCTAssertEqual(runLabel(h.snapshot(dngs: dngs(1), pending: arws(12)), converterAvailable: false),
                        "Desqueeze 1 photo")
-        XCTAssertEqual(h.snapshot(pending: arws(12)).runLabel(converterAvailable: false), "Desqueeze")
+        XCTAssertEqual(runLabel(h.snapshot(pending: arws(12)), converterAvailable: false), "Desqueeze")
     }
 
     // A window with no folder has no snapshot, and still has a button.

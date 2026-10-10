@@ -96,8 +96,11 @@ public enum AdobeMatch {
     /// over the red of the ARW's daylight levels, and b the same for blue,
     /// each rounded to 4 decimal places. A lens that reports itself changes
     /// the daylight levels, so the value varies with the lens.
-    static func calibration(red: Int, blue: Int,
-                            reference: ARWFacts.DaylightLevels = ilce7SM3.daylightReference) -> String {
+    ///
+    /// - Parameter reference: the daylight reference of the camera of this
+    ///   ARW. There is no default, so a second camera cannot take the
+    ///   values of the first by accident.
+    static func calibration(red: Int, blue: Int, reference: ARWFacts.DaylightLevels) -> String {
         "\(ratio(reference.red, over: red)) 0 0 0 1 0 0 0 \(ratio(reference.blue, over: blue))"
     }
 

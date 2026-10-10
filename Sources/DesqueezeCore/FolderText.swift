@@ -62,7 +62,9 @@ public enum FolderText {
         "\(count) ARW cannot be converted: no converter is installed"
     }
 
-    /// The label of the run button for `count` photos.
+    /// The label of the run button for `count` photos: `Desqueeze N photos`,
+    /// `Desqueeze 1 photo`, or `Desqueeze` when there is nothing to run. The
+    /// window gives it `FolderSnapshot.runCount`.
     public static func runLabel(count: Int) -> String {
         switch count {
         case ...0: return "Desqueeze"
@@ -122,12 +124,6 @@ extension FolderSnapshot {
     /// that can convert. With neither converter the ARW files are not in it.
     public func runCount(converterAvailable: Bool) -> Int {
         dngs.count + (converterAvailable ? pendingARWs.count : 0)
-    }
-
-    /// `Desqueeze N photos`, `Desqueeze 1 photo`, or `Desqueeze` when there
-    /// is nothing to run.
-    public func runLabel(converterAvailable: Bool) -> String {
-        FolderText.runLabel(count: runCount(converterAvailable: converterAvailable))
     }
 
     /// The messages about this folder, as the window shows them: at most

@@ -54,10 +54,23 @@ final class AdobeMatchTests: XCTestCase {
 
     // The two results that the measured files gave (design 13.2).
     func testTheCalibrationIsTheReferenceOverTheDaylightLevelsRoundedToFourPlaces() {
-        XCTAssertEqual(AdobeMatch.calibration(red: 2597, blue: 1556), "0.9888 0 0 0 1 0 0 0 0.9955")
-        XCTAssertEqual(AdobeMatch.calibration(red: 2496, blue: 1617), "1.0288 0 0 0 1 0 0 0 0.9579")
+        // The daylight reference of the A7S III, as it was measured.
+        let reference = ARWFacts.DaylightLevels(red: 2568, green: 1024, blue: 1549)
+        XCTAssertEqual(AdobeMatch.calibration(red: 2597, blue: 1556, reference: reference),
+                       "0.9888 0 0 0 1 0 0 0 0.9955")
+        XCTAssertEqual(AdobeMatch.calibration(red: 2496, blue: 1617, reference: reference),
+                       "1.0288 0 0 0 1 0 0 0 0.9579")
         // The levels of the reference itself give no change.
-        XCTAssertEqual(AdobeMatch.calibration(red: 2568, blue: 1549), "1.0000 0 0 0 1 0 0 0 1.0000")
+        XCTAssertEqual(AdobeMatch.calibration(red: 2568, blue: 1549, reference: reference),
+                       "1.0000 0 0 0 1 0 0 0 1.0000")
+    }
+
+    // The reference is the camera's, and the caller names it: a camera with
+    // another reference gets another value for the same levels.
+    func testTheCalibrationUsesTheReferenceThatItIsGiven() {
+        let other = ARWFacts.DaylightLevels(red: 2000, green: 1024, blue: 2334)
+        XCTAssertEqual(AdobeMatch.calibration(red: 2597, blue: 1556, reference: other),
+                       "0.7701 0 0 0 1 0 0 0 1.5000")
     }
 
     func testTheRoundingIsToTheNearestTenThousandth() {
