@@ -111,9 +111,9 @@ The first version. It is built from source, and there is no download.
   date and the file number of the ARW and of its DNG. They do not compare
   the bytes.
 - Another program can put a file at the name of a DNG in a moment that the
-  run cannot see: before the first record of the DNG, or between the
-  compare before its tag step and the record after it. The run takes such a
-  file as its own.
+  run cannot see: before the first record of the DNG, while exiftool works
+  in a tag step that writes (about a tenth of a second), or after the last
+  read of the DNG before the move. The run takes such a file as its own.
 - The box of the window, the run button and a dry run count from the last
   scan. The run scans again, so it can convert and move more or fewer ARW
   files than they said.

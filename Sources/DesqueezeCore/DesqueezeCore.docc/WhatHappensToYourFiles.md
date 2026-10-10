@@ -123,12 +123,14 @@ to the Trash only when all of these are true:
    records the size, the modification date and the file number of the DNG
    two times: directly after the conversion, and directly after it set the
    stretch. The first record must still be true directly before the tool
-   sets the stretch. The second record must still be true at the move. A
-   DNG that fails one of the two still gets the stretch, as each DNG in the
-   folder does. Only its ARW stays.
+   sets the stretch. The second record must still be true at the move: the
+   tool compares it before check 5, and again after the exiftool read of
+   check 5. When the DNG had the stretch already, the tool writes nothing,
+   and the first record must be true to the end. A DNG that fails one of
+   these is handled as each DNG in the folder is. Only its ARW stays.
 
-The tool asks them in the order 1, 2, 3, 6, 5, 4. So the second read of the
-ARW is the last thing before the move.
+The tool asks them in the order 1, 2, 3, 6, 5, 6 again, 4. So the second
+read of the ARW is the last thing before the move.
 
 When one of them is not true, the ARW stays, and the result has a note that
 says why. <doc:Troubleshooting> lists the eight sentences. When the Trash
@@ -165,12 +167,16 @@ Know these limits before you turn the option on:
   back is not seen. On a FAT32 volume, a file that is deleted and made
   again with the same name, size and date gets the same file number. That
   was measured on a disk image. APFS, HFS+ and ExFAT gave another number.
-- **Short moments that the tool cannot see.** The tool records the DNG
-  directly after its conversion. It compares that record directly before
-  it sets the stretch, and it records the DNG again directly after.
-  Another program can put a file at `<base>.dng` in two moments: before the
-  first record, and between that compare and the second record. The tool
-  takes such a file as its own DNG.
+- **Three moments that the tool cannot see.** Another program can put a
+  file at `<base>.dng` in one of them, and the tool takes that file as its
+  own DNG. Check 5 still holds for such a file: it must name the ARW and
+  have the stretch of this run.
+  - The moment between the end of a conversion and the first record.
+  - The time that exiftool works on the DNG when it sets the stretch, about
+    a tenth of a second. exiftool writes a new file, so the tool cannot
+    tell that file from another one.
+  - After the last read of the DNG, directly before the move. That is the
+    same as a file that arrives after the run.
 - **The counts come from the last scan.** The line under the box, the run
   button and a dry run count the ARW files of the last scan. The run scans
   the folder again. When the folder changed in between, the run can convert

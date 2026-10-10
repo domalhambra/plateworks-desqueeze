@@ -253,7 +253,9 @@ Each step has the rule that keeps the user's files safe. Design 4.3, 13.3,
     recorded the size, the modification date and the file number of the DNG
     directly after the conversion, and again directly after the tag step.
     The first record must hold directly before the tag step, and the second
-    one here. The name in a DNG cannot prove whose DNG it is. The check of
+    one here: before the check of the DNG, and again after its exiftool
+    read. After a tag step that skipped, the second record is the first
+    one. The name in a DNG cannot prove whose DNG it is. The check of
     the DNG is one exiftool read: the DNG is a regular file with bytes, it
     names the ARW in `OriginalRawFileName`, and its `DefaultScale` is the
     factor. The run recorded the same three facts of the ARW before the

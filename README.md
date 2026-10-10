@@ -231,9 +231,10 @@ runs in one folder there.
     Lightroom before you empty the Trash.
   - The tool compares the size, the modification date and the file number of
     the ARW and of the DNG. It does not compare the bytes.
-  - Another program can put a file at the name of the DNG in a short moment
-    that the tool cannot see: directly after a conversion, or while the tool
-    sets the stretch of that DNG.
+  - Another program can put a file at the name of the DNG in three short
+    moments that the tool cannot see: directly after a conversion, while
+    exiftool sets the stretch of that DNG (about a tenth of a second), and
+    after the last read before the move.
   - The box, the run button and a dry run count from the last scan. The run
     scans again, so it can move more or fewer ARW files than they said.
   - A dry run lists a `trash` step for each ARW that it expects to convert.
