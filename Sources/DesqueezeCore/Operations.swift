@@ -25,14 +25,17 @@ public struct DesqueezeOperations: Sendable {
     ///     mistake and converts with Adobe alone.
     ///   - runner: starts exiftool and both converters. Wrap it in a
     ///     `LoggingProcessRunner` to see each command.
-    ///   - backups: where a backup goes after a write that passed its check.
-    ///     There is no default, so no caller reaches the Trash by leaving it
-    ///     out. The window and the tool name the Trash themselves.
+    ///   - backups: where a backup goes after a write that passed its check,
+    ///     and where the partial output of a failed conversion and the
+    ///     leftover work file of an earlier run go. There is no default, so
+    ///     no caller reaches the Trash by leaving it out. The window and the
+    ///     tool name the Trash themselves.
     public init(exiftool: URL, dnglab: URL?, dngConverter: URL?, runner: ProcessRunner = SystemProcessRunner(),
                 backups: BackupHandling) {
         self.init(exiftool: exiftool, dnglab: dnglab, dngConverter: dngConverter,
                   tag: ScaleTag(exiftool: exiftool, runner: runner),
-                  converters: RawConverters(exiftool: exiftool, dnglab: dnglab, adobe: dngConverter, runner: runner),
+                  converters: RawConverters(exiftool: exiftool, dnglab: dnglab, adobe: dngConverter, runner: runner,
+                                            backups: backups),
                   backups: backups)
     }
 

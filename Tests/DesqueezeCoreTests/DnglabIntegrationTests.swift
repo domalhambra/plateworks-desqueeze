@@ -41,7 +41,12 @@ class RealDnglabTestCase: XCTestCase {
         return destination
     }
 
-    var converter: DnglabConverter { DnglabConverter(executable: dnglab, exiftool: exiftool) }
+    /// A converter with no leftover to discard: a test that has one gives
+    /// its own action.
+    var converter: DnglabConverter {
+        DnglabConverter(executable: dnglab, exiftool: exiftool,
+                        discardLeftover: { XCTFail("no leftover was expected: \($0.lastPathComponent)") })
+    }
 
     func facts(of arw: URL) throws -> ARWFacts {
         try XCTUnwrap(ARWFactsReader(exiftool: exiftool).read([arw])[arw.lastPathComponent])
@@ -96,7 +101,10 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
 
         let dng = folder.appendingPathComponent("frame.dng")
         XCTAssertEqual(conversion, Conversion(dng: dng, unmatched: nil))
+        // `names()` lists hidden files too: the folder holds the ARW and the
+        // DNG, and nothing else.
         XCTAssertEqual(try names(), ["frame.ARW", "frame.dng"], "no backup and no work file stays")
+        XCTAssertFalse(ConverterOutput.exists(atPath: ConverterOutput.workURL(for: arw).path))
         XCTAssertEqual(try Data(contentsOf: arw), arwBefore, "the ARW must not change")
 
         // The tags, read back from the file. Adobe's values for this frame.
@@ -158,6 +166,99 @@ final class DnglabIntegrationTests: RealDnglabTestCase {
                 partial: nil))
         }
         XCTAssertEqual(try names(), ["junk.ARW"])
+    }
+
+    // MARK: The work file (design 13.3)
+
+    /// A folder that stands for the Trash, beside the photo folder.
+    func makeTrash() throws -> (folder: URL, backups: FileBackups) {
+        let trash = folder.deletingLastPathComponent().appendingPathComponent("Test trash")
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        return (trash, try FileBackups.fromEnvironment([FileBackups.testFolderVariable: trash.path]).backups)
+    }
+
+    // Another program makes `frame.dng` after the check before the start,
+    // just before the rename. Its file must not change and must not go to
+    // the Trash. dnglab's work file goes there, and no other converter gets
+    // the ARW.
+    func testADNGThatAnotherProgramMakesJustBeforeTheRenameIsLeftAsItIs() throws {
+        let arw = try copyFixture(as: "frame.ARW")
+        let dng = folder.appendingPathComponent("frame.dng")
+        let (trash, backups) = try makeTrash()
+        let others = Data("another program's DNG".utf8)
+        let dnglabs = DnglabConverter(
+            executable: dnglab, exiftool: exiftool, discardLeftover: { try backups.trashFile($0) },
+            rename: { work, name in
+                FileManager.default.createFile(atPath: name.path, contents: others)
+                return ExclusiveRename.system.move(work, to: name)
+            })
+        let adobeRunner = FakeRunner()
+        let adobes = AdobeConverter(executable: URL(fileURLWithPath: "/nonexistent/Adobe DNG Converter"),
+                                    runner: adobeRunner)
+        let job = DesqueezeJob(
+            tag: ScaleTag(exiftool: exiftool),
+            converters: RawConverters(dnglab: dnglabs, adobe: adobes, facts: ARWFactsReader(exiftool: exiftool)),
+            backups: backups)
+
+        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+
+        XCTAssertEqual(try Data(contentsOf: dng), others, "the DNG of the other program has the same bytes")
+        XCTAssertEqual(try names(), ["frame.ARW", "frame.dng"], "no work file stays, hidden files counted")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path), [".frame.desqueeze-work.dng"],
+                       "only the work file is in the injected trash")
+        // The work file was complete: dnglab's DNG, with the match in it.
+        XCTAssertEqual(try read(["SubIFD:WhiteLevel", "IFD0:OriginalRawFileName"],
+                                in: trash.appendingPathComponent(".frame.desqueeze-work.dng")),
+                       ["16383", "frame.ARW"])
+        XCTAssertEqual(adobeRunner.calls, [], "the next converter is not tried")
+        XCTAssertEqual(summary.notes, [FileNote(name: "frame.ARW", kind: .notConverted, message: "Not converted.",
+                                                detail: "A DNG with this name exists already. Not converted.")])
+        XCTAssertEqual([summary.converted, summary.set, summary.failed, summary.unconvertedARWs], [0, 0, 1, 1])
+        XCTAssertEqual(try Data(contentsOf: arw), try Data(contentsOf: IntegrationTests.fixtures
+            .appendingPathComponent("sample.ARW")), "the ARW must not change")
+    }
+
+    // A run that ended hard left a cut-off work file. The real dnglab would
+    // refuse to write over it. It goes to the injected trash first, and the
+    // conversion then passes.
+    func testARealConversionDiscardsTheLeftoverWorkFileOfAnEarlierRun() throws {
+        let arw = try copyFixture(as: "frame 1.ARW")
+        let work = folder.appendingPathComponent(".frame 1.desqueeze-work.dng")
+        try Data("II*\u{0}".utf8).write(to: work)
+        let (trash, backups) = try makeTrash()
+
+        // The leftover is invisible to the scan: the ARW is pending, and
+        // the folder has no DNG.
+        let scan = try FolderScanner(tag: ScaleTag(exiftool: exiftool), backups: backups).snapshot(of: folder)
+        XCTAssertEqual(scan.dngs, [])
+        XCTAssertEqual(scan.pendingARWs.map(\.lastPathComponent), ["frame 1.ARW"])
+
+        let conversion = try DnglabConverter(executable: dnglab, exiftool: exiftool,
+                                             discardLeftover: { try backups.trashFile($0) })
+            .convert(arw, facts: try facts(of: arw))
+
+        XCTAssertEqual(conversion, Conversion(dng: folder.appendingPathComponent("frame 1.dng"), unmatched: nil))
+        XCTAssertEqual(try names(), ["frame 1.ARW", "frame 1.dng"])
+        XCTAssertEqual(try Data(contentsOf: trash.appendingPathComponent(".frame 1.desqueeze-work.dng")),
+                       Data("II*\u{0}".utf8), "the leftover is in the injected trash")
+        XCTAssertEqual(try read(["SubIFD:WhiteLevel", "IFD0:OriginalRawFileName"], in: conversion.dng),
+                       ["16383", "frame 1.ARW"])
+    }
+
+    // The real dnglab returns 6 for an output that exists, and does not
+    // touch it. Here the discard says yes and leaves the file. The file is
+    // not reported as partial, so nothing sends it anywhere.
+    func testTheRealDnglabReturnsSixForAWorkFileThatIsStillThereAndReportsNoPartial() throws {
+        let arw = try copyFixture(as: "frame.ARW")
+        let work = folder.appendingPathComponent(".frame.desqueeze-work.dng")
+        try Data("not this run's".utf8).write(to: work)
+        let converter = DnglabConverter(executable: dnglab, exiftool: exiftool, discardLeftover: { _ in })
+        XCTAssertThrowsError(try converter.convert(arw, facts: try facts(of: arw))) {
+            XCTAssertEqual($0 as? ConvertError,
+                           .failed("dnglab returned 6. Already exists: \(work.path).", partial: nil))
+        }
+        XCTAssertEqual(try Data(contentsOf: work), Data("not this run's".utf8))
+        XCTAssertEqual(try names(), [".frame.desqueeze-work.dng", "frame.ARW"])
     }
 
     func testARealConverterLeavesADNGThatIsThereAlreadyAsItIs() throws {
@@ -222,7 +323,8 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
     ///   has it. With no Adobe on this Mac, the job has dnglab alone.
     func job(withAdobe: Bool) -> DesqueezeJob {
         DesqueezeJob(tag: tag, converters: RawConverters(
-            exiftool: exiftool, dnglab: dnglab, adobe: withAdobe ? ToolLocator().dngConverter() : nil),
+            exiftool: exiftool, dnglab: dnglab, adobe: withAdobe ? ToolLocator().dngConverter() : nil,
+            backups: backups),
             backups: backups)
     }
 

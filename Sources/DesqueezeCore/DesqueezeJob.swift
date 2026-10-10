@@ -18,11 +18,20 @@ import Foundation
 /// A cancel between two converters stops the run there: the next converter
 /// does not start for that ARW. The ARW is listed as failed, with the words
 /// of the converters that were tried, and the run is stopped.
-/// When a converter left a partial DNG, the job moves it to the Trash
+/// When a converter left a partial output, the job moves it to the Trash
 /// through `BackupHandling.trashFile` and says so on that converter's line,
-/// or names the file to delete when the Trash refuses (design 4.3). It moves
-/// only the output of that ARW, and never a DNG that the scan found. The ARW
-/// is never touched.
+/// or names the file to delete when the Trash refuses (design 4.3). For
+/// dnglab that file is its hidden work file, and for Adobe DNG Converter it
+/// is `<base>.dng` (design 13.3). The job moves only that file of that ARW,
+/// and never a DNG that the scan found (`discard`). The ARW is never touched.
+///
+/// **When the next converter is not tried.** A converter can say that its
+/// failure holds for every converter (`ConvertError.failedForAll`): another
+/// program took the name `<base>.dng` while dnglab worked, or a leftover
+/// file is in the way. The ARW is then failed with that converter's words,
+/// and the next converter does not start. The same holds when the Trash
+/// refuses dnglab's work file: a work file that cannot be removed stops the
+/// ARW, in this run as in the next one, and the note names it.
 ///
 /// **A DNG with no full match.** With dnglab alone, an ARW that the table
 /// does not cover still converts. It counts as converted, and it gets a
@@ -49,7 +58,7 @@ public struct DesqueezeJob: Sendable {
     ///   it is not installed, and the reader of the ARW facts. With neither
     ///   converter the ARW files wait, and the DNG files still run.
     /// - Parameter backups: where a backup goes after a write that passed its
-    ///   check, and where the partial DNG of a failed conversion goes. There
+    ///   check, and where the partial output of a failed conversion goes. There
     ///   is no default, so no caller reaches the Trash by
     ///   leaving it out. The window and the tool name the Trash themselves.
     public init(tag: ScaleTagging, converters: RawConverters, backups: BackupHandling) {
@@ -262,12 +271,31 @@ public struct DesqueezeJob: Sendable {
                     break
                 } catch {
                     var text = Self.describe(error)
-                    if case ConvertError.failed(_, let partial?) = error {
-                        text += " " + discard(partial: partial, of: pending.arw, keeping: dngs)
+                    // The failure holds for every converter.
+                    var stop = false
+                    if case ConvertError.failedForAll = error { stop = true }
+                    if let partial = (error as? ConvertError)?.partial {
+                        switch discard(partial: partial, of: pending.arw, from: kind, keeping: dngs) {
+                        case .moved:
+                            // After "A DNG with this name exists already",
+                            // these words would read as if that DNG moved.
+                            if !stop { text += " The partial DNG was moved to the Trash." }
+                        case .refused:
+                            text += " A partial DNG, \(partial.lastPathComponent), is beside the ARW. "
+                                + "Delete it, then run again."
+                            // The file is still there. When it is dnglab's
+                            // work file, the next run would stop at it too
+                            // (design 13.3, step 1), so this one stops here.
+                            stop = true
+                        case .notThisRuns:
+                            text += " A file, \(partial.lastPathComponent), was reported as the partial DNG. "
+                                + "It is not this run's file, and it was not moved."
+                        }
                     }
                     // Both converters refuse a name that is taken, with
                     // the same sentence. One line says it.
                     if !words.contains(text) { words.append(text) }
+                    if stop { break }
                 }
             }
             if let made {
@@ -302,31 +330,49 @@ public struct DesqueezeJob: Sendable {
         return summary
     }
 
-    /// Moves the partial DNG of a failed conversion to the Trash. The ARW is
-    /// never touched. Returns the sentence for the note's detail line.
+    /// What `discard` did with a partial output.
+    private enum Discarded {
+        case moved
+        /// The Trash refused the file. It is where it was.
+        case refused
+        /// The second lock held: the file is not this run's, and it is
+        /// where it was.
+        case notThisRuns
+    }
+
+    /// Moves the partial output of a failed conversion to the Trash. The ARW
+    /// is never touched.
     ///
-    /// The converter proves that the partial DNG is its own (`ConverterRules`).
-    /// This is a second lock, and it does not take the converter's word. A
-    /// file moves only when both hold:
+    /// The converter proves that the partial output is its own
+    /// (`ConverterRules`). This is a second lock, and it does not take the
+    /// converter's word. A file moves only when its path is exactly one of
+    /// these:
     ///
-    /// - It is exactly the output of this ARW, `<base>.dng` beside it.
-    /// - It is not one of `dngs`: the DNG files that the run's scan found,
-    ///   and the ones that the run made before this ARW. Letter case is
-    ///   ignored there, as most volumes ignore it.
+    /// - From dnglab: the work file of this ARW (`ConverterOutput.workURL`).
+    ///   The name is this app's own, and the scan never lists it. A
+    ///   `<base>.dng` from dnglab never moves: dnglab's converter does not
+    ///   write to that name, so a file there is someone else's.
+    /// - From Adobe DNG Converter: the output of this ARW, `<base>.dng`
+    ///   beside it, when it is not one of `dngs`: the DNG files that the
+    ///   run's scan found, and the ones that the run made before this ARW.
+    ///   Letter case is ignored there, as most volumes ignore it.
     ///
-    /// Any other file stays where it is, and the sentence names it.
-    private func discard(partial: URL, of arw: URL, keeping dngs: [DNGFile]) -> String {
-        let isTheOutput = partial.path == ConverterOutput.url(for: arw).path
-        let isAKnownDNG = dngs.contains { $0.url.path.lowercased() == partial.path.lowercased() }
-        guard isTheOutput, !isAKnownDNG else {
-            return "A file, \(partial.lastPathComponent), was reported as the partial DNG. "
-                + "It is not this run's file, and it was not moved."
+    /// Any other file stays where it is.
+    private func discard(partial: URL, of arw: URL, from converter: ConverterKind, keeping dngs: [DNGFile]) -> Discarded {
+        let isThisRuns: Bool
+        switch converter {
+        case .dnglab:
+            isThisRuns = partial.path == ConverterOutput.workURL(for: arw).path
+        case .adobe:
+            let isAKnownDNG = dngs.contains { $0.url.path.lowercased() == partial.path.lowercased() }
+            isThisRuns = partial.path == ConverterOutput.url(for: arw).path && !isAKnownDNG
         }
+        guard isThisRuns else { return .notThisRuns }
         do {
             try backups.trashFile(partial)
-            return "The partial DNG was moved to the Trash."
+            return .moved
         } catch {
-            return "A partial DNG, \(partial.lastPathComponent), is beside the ARW. Delete it, then run again."
+            return .refused
         }
     }
 
@@ -372,7 +418,7 @@ public struct DesqueezeJob: Sendable {
     static func describe(_ error: Error) -> String {
         switch error {
         case TagError.toolFailed(let text): return text
-        case ConvertError.failed(let text, _): return text
+        case let error as ConvertError: return error.text
         default: return error.localizedDescription
         }
     }

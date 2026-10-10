@@ -434,15 +434,17 @@ extension AppModel {
         let exiftool = options.hidesExiftool ? nil : locator.exiftool()
         // dnglab converts first. Adobe DNG Converter is the optional backup.
         // Both need exiftool: with none, the window can do nothing.
+        // The window moves a backup to the Trash, and the leftover work file
+        // of a run that ended hard (design 13.3).
+        let backups = FileBackups.systemTrash
         let converters = exiftool.map {
             RawConverters(exiftool: $0, dnglab: options.hidesDnglab ? nil : locator.dnglab(),
-                          adobe: options.hidesAdobe ? nil : locator.dngConverter())
+                          adobe: options.hidesAdobe ? nil : locator.dngConverter(), backups: backups)
         }
         let model = AppModel(
             tag: exiftool.map { ScaleTag(exiftool: $0) },
             converters: converters ?? .none,
-            // The window moves a backup to the Trash.
-            backups: FileBackups.systemTrash,
+            backups: backups,
             savedFactor: UserDefaults.standard.string(forKey: factorKey),
             saveFactor: { UserDefaults.standard.set($0, forKey: factorKey) },
             now: { ProcessInfo.processInfo.systemUptime },

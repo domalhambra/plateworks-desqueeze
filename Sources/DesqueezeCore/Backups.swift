@@ -8,9 +8,10 @@ public protocol BackupHandling: Sendable {
     /// Replaces the DNG with its backup. The backup file is consumed.
     func restoreBackup(for dng: URL) throws
     /// Moves a file that is not a backup to the Trash. The job uses it for
-    /// the partial DNG of a failed conversion (design, section 4.3). It goes
-    /// where a backup goes, so a test that injects the Trash for backups
-    /// injects it for this file too.
+    /// the partial output of a failed conversion (design 4.3), and dnglab's
+    /// converter for the work file that an earlier run left (design 13.3).
+    /// It goes where a backup goes, so a test that injects the Trash for
+    /// backups injects it for these files too.
     func trashFile(_ file: URL) throws
 }
 
@@ -69,8 +70,9 @@ public struct FileBackups: BackupHandling {
 /// - Its value must be an absolute path to a folder that exists. Any other
 ///   value is an error, and the tool stops before it reads a photo folder.
 ///   So `=1`, or an empty value, starts nothing.
-/// - A backup, or the partial DNG of a failed conversion, is moved to that
-///   folder. Nothing is ever removed, and no file there is replaced. The
+/// - A backup, the partial output of a failed conversion, or the leftover
+///   work file of an earlier run is moved to that folder. Nothing is ever
+///   removed, and no file there is replaced. The
 ///   worst case is a file in a folder that the person named, in place of the
 ///   Trash.
 /// - A front end that takes the folder must say so on standard error.

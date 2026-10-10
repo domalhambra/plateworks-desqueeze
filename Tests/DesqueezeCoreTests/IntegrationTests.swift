@@ -45,7 +45,8 @@ final class IntegrationTests: XCTestCase {
     /// As on a Mac with Adobe DNG Converter and no dnglab. The run with both
     /// converters is in `DnglabRunIntegrationTests`.
     var job: DesqueezeJob {
-        DesqueezeJob(tag: tag, converters: RawConverters(exiftool: exiftool, dnglab: nil, adobe: converterTool),
+        DesqueezeJob(tag: tag, converters: RawConverters(exiftool: exiftool, dnglab: nil, adobe: converterTool,
+                                                         backups: backups),
                      backups: backups)
     }
 

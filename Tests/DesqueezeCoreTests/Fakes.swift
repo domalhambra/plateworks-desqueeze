@@ -139,11 +139,15 @@ final class FakeConverter: RawConverter, @unchecked Sendable {
     /// DNG from a full match, as `DnglabConverter` gives it.
     let reportsTheMatch: Bool
     var fail: Set<String> = []
-    /// ARW names whose failed conversion also left a partial DNG.
+    /// ARW names whose failed conversion also left a partial output: the
+    /// work file from the dnglab fake, and `<base>.dng` from the other one.
     var failWithPartial: Set<String> = []
-    /// What a failed conversion names as its partial DNG, in place of the
-    /// output of the ARW. A correct converter never does this.
+    /// What a failed conversion names as its partial output, in place of
+    /// its own file of the ARW. A correct converter never does this.
     var reportedPartial: URL?
+    /// ARW names for which the rename of the work file finds the name
+    /// `<base>.dng` taken, as `DnglabConverter` reports it.
+    var nameTakenAtRename: Set<String> = []
     /// ARW names that the converter refuses before it starts.
     var refuse: Set<String> = []
     /// The facts that each call got, by ARW name.
@@ -166,12 +170,82 @@ final class FakeConverter: RawConverter, @unchecked Sendable {
             throw ConvertError.failed("A DNG with this name exists already. Not converted.")
         }
         if fail.contains(arw.lastPathComponent) { throw ConvertError.failed("made no DNG") }
+        // dnglab's converter writes a hidden work file, and Adobe's writes
+        // `<base>.dng` (design 13.3).
+        let ownFile = reportsTheMatch ? ConverterOutput.workURL(for: arw) : AdobeConverter.outputURL(for: arw)
+        if nameTakenAtRename.contains(arw.lastPathComponent) {
+            throw ConvertError.failedForAll("A DNG with this name exists already. Not converted.",
+                                            partial: reportedPartial ?? ownFile)
+        }
         if failWithPartial.contains(arw.lastPathComponent) {
-            throw ConvertError.failed("\(name) returned 1.",
-                                      partial: reportedPartial ?? AdobeConverter.outputURL(for: arw))
+            throw ConvertError.failed("\(name) returned 1.", partial: reportedPartial ?? ownFile)
         }
         return Conversion(dng: AdobeConverter.outputURL(for: arw),
                           unmatched: reportsTheMatch ? AdobeMatch.match(facts).failed : nil)
+    }
+}
+
+/// The three programs on real files, with no program started: a runner that
+/// acts like dnglab, like Adobe DNG Converter, and like exiftool for the
+/// facts read and for the match. A test gives it to the public
+/// `RawConverters(exiftool:dnglab:adobe:runner:backups:)`, so the converters
+/// are the real ones, wired as the app wires them.
+final class ScriptedTools: @unchecked Sendable {
+    static let exiftool = URL(fileURLWithPath: "/nonexistent/exiftool")
+    static let dnglab = URL(fileURLWithPath: "/nonexistent/dnglab")
+    static let adobe = URL(fileURLWithPath: "/nonexistent/Adobe DNG Converter")
+    /// What the scripted dnglab writes into its output.
+    static let dnglabBytes = Data("dnglab's DNG".utf8)
+    static let adobeBytes = Data("Adobe's DNG".utf8)
+
+    let runner = FakeRunner()
+    /// The row of the facts read for every ARW, after the file name.
+    var factsRow = "ILCE-7SM3\t800\t2597 1024 1556\t255"
+    private var written: [String] = []
+
+    init() {
+        runner.handler = { [unowned self] call in
+            func result(_ code: Int32 = 0, _ out: String = "", _ err: String = "") -> ProcessResult {
+                ProcessResult(exitCode: code, stdout: out, stderr: err)
+            }
+            switch call.executable {
+            case Self.dnglab.path:
+                // dnglab 0.8.0 returns 6 for an output that exists, and does
+                // not touch it.
+                let output = call.arguments.last!
+                guard !ConverterOutput.exists(atPath: output) else {
+                    return result(6, "", "Error: Already exists: \(output)\n")
+                }
+                FileManager.default.createFile(atPath: output, contents: Self.dnglabBytes)
+                return result()
+            case Self.adobe.path:
+                let arw = URL(fileURLWithPath: call.arguments.last!)
+                FileManager.default.createFile(atPath: ConverterOutput.url(for: arw).path, contents: Self.adobeBytes)
+                return result()
+            default:
+                if call.arguments.contains("-IFD0:Model") {
+                    let rows = call.arguments.filter { $0.hasPrefix("/") }
+                        .map { "\(URL(fileURLWithPath: $0).lastPathComponent)\t\(self.factsRow)\n" }
+                    return result(0, rows.joined())
+                }
+                if call.arguments.contains("-overwrite_original") {
+                    self.written = call.arguments.filter { $0.contains("=") }
+                        .map { String($0[$0.index(after: $0.firstIndex(of: "=")!)...]) }
+                    return result(0, "    1 image files updated\n")
+                }
+                return result(0, self.written.joined(separator: "\t") + "\n")
+            }
+        }
+    }
+
+    /// The calls to one program, in order.
+    func calls(to program: URL) -> [FakeRunner.Call] { runner.calls.filter { $0.executable == program.path } }
+
+    /// The real converters on this runner. `backups` gets the leftover work
+    /// file, as the job's backups get it in the app.
+    func converters(backups: BackupHandling, withAdobe: Bool = true) -> RawConverters {
+        RawConverters(exiftool: Self.exiftool, dnglab: Self.dnglab, adobe: withAdobe ? Self.adobe : nil,
+                      runner: runner, backups: backups)
     }
 }
 

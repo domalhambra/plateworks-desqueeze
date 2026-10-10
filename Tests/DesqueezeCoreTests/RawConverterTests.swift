@@ -219,4 +219,11 @@ final class FakeDisk: @unchecked Sendable {
         checked.append(path)
         return paths.contains(path)
     }
+
+    /// A rename: the file has the new name, with its size.
+    func move(_ path: String, to name: String) {
+        paths.remove(path)
+        paths.insert(name)
+        sizes[name] = sizes.removeValue(forKey: path)
+    }
 }

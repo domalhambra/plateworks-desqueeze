@@ -7,6 +7,9 @@ final class DnglabConverterTests: XCTestCase {
     let arw = URL(fileURLWithPath: "/tmp/Shoot 1/DSC05680.ARW")
     let dngPath = "/tmp/Shoot 1/DSC05680.dng"
     var dng: URL { URL(fileURLWithPath: dngPath) }
+    /// The hidden work file that dnglab writes (design 13.3).
+    let workPath = "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng"
+    var work: URL { URL(fileURLWithPath: workPath) }
 
     /// An adapted lens at ISO 800: a full match.
     let adapted = ARWFacts(model: "ILCE-7SM3", iso: 800,
@@ -20,11 +23,20 @@ final class DnglabConverterTests: XCTestCase {
     static let noise800 = "9.17112993057145e-05 1.80963827089821e-07 0.000132825207904173 1.86198019692823e-07 "
         + "6.88838025482567e-05 1.77853114759923e-07"
 
-    /// What the three programs do, and what they were asked.
+    /// What the three programs, the discard and the rename do, and what
+    /// they were asked.
     final class Tools: @unchecked Sendable {
         var dnglabExit: Int32 = 0
-        /// The bytes of the DNG that dnglab leaves. Nil: it leaves no file.
+        /// The bytes of the file that dnglab leaves at the name that it was
+        /// given. Nil: it leaves no file.
         var dnglabWrites: Int? = 1_000
+        /// Each leftover that the converter asked to discard.
+        var discarded: [String] = []
+        /// Set when the discard must fail, as when the Trash refuses.
+        var discardError: Error?
+        /// Each rename that the converter asked for: from, then to.
+        var renames: [[String]] = []
+        var renameOutcome = ExclusiveRename.Outcome.moved
         /// What dnglab prints on standard error.
         var dnglabError = ""
         var writeResult = ProcessResult(exitCode: 0, stdout: "    1 image files updated\n", stderr: "")
@@ -43,12 +55,13 @@ final class DnglabConverterTests: XCTestCase {
         runner = FakeRunner()
         disk = FakeDisk()
         tools = Tools()
-        let (runner, disk, tools, dnglab, dngPath) = (runner!, disk!, tools!, dnglab, dngPath)
+        let (runner, disk, tools, dnglab) = (runner!, disk!, tools!, dnglab)
         runner.handler = { call in
             if call.executable == dnglab.path {
-                if let bytes = tools.dnglabWrites {
-                    disk.paths.insert(dngPath)
-                    disk.sizes[dngPath] = bytes
+                // dnglab writes where its last argument says.
+                if let bytes = tools.dnglabWrites, let output = call.arguments.last {
+                    disk.paths.insert(output)
+                    disk.sizes[output] = bytes
                 }
                 return ProcessResult(exitCode: tools.dnglabExit, stdout: "", stderr: tools.dnglabError)
             }
@@ -64,8 +77,19 @@ final class DnglabConverterTests: XCTestCase {
 
     func converter() -> DnglabConverter {
         let (runner, disk, tools) = (runner!, disk!, tools!)
-        return DnglabConverter(executable: dnglab, exiftool: exiftool, runner: ThrowingRunner(runner, tools),
-                               fileExists: { disk.exists($0) }, fileSize: { disk.size($0) })
+        return DnglabConverter(
+            executable: dnglab, exiftool: exiftool, runner: ThrowingRunner(runner, tools),
+            discardLeftover: {
+                tools.discarded.append($0.path)
+                if let error = tools.discardError { throw error }
+                disk.paths.remove($0.path)
+            },
+            fileExists: { disk.exists($0) }, fileSize: { disk.size($0) },
+            rename: { from, to in
+                tools.renames.append([from.path, to.path])
+                if tools.renameOutcome == .moved { disk.move(from.path, to: to.path) }
+                return tools.renameOutcome
+            })
     }
 
     /// Passes each call on, and throws after the call that `Tools` names.
@@ -90,7 +114,20 @@ final class DnglabConverterTests: XCTestCase {
     }
 
     var convertCall: FakeRunner.Call {
-        call(dnglab, ["convert", "--embed-raw", "false", "/tmp/Shoot 1/DSC05680.ARW", "/tmp/Shoot 1/DSC05680.dng"])
+        call(dnglab, ["convert", "--embed-raw", "false", "/tmp/Shoot 1/DSC05680.ARW",
+                      "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng"])
+    }
+
+    /// The conversion fails with exactly `expected`. Whatever fails, dnglab's
+    /// converter never reports `<base>.dng` as its partial output: it never
+    /// writes to that name, so a file there is someone else's.
+    func assertFails(_ expected: ConvertError, _ facts: ARWFacts? = nil, _ message: String = "",
+                     file: StaticString = #filePath, line: UInt = #line) {
+        let thrown = error(facts, file: file, line: line) as? ConvertError
+        XCTAssertEqual(thrown, expected, message, file: file, line: line)
+        XCTAssertNotEqual(thrown?.partial, dng, "the DNG's own name was reported as partial", file: file, line: line)
+        XCTAssertFalse(disk.paths.contains(dngPath), "a failed conversion left a file at the DNG's name",
+                       file: file, line: line)
     }
 
     func error(_ facts: ARWFacts? = nil, file: StaticString = #filePath, line: UInt = #line) -> Error? {
@@ -108,6 +145,7 @@ final class DnglabConverterTests: XCTestCase {
 
         XCTAssertEqual(conversion, Conversion(dng: dng, unmatched: nil))
         guard runner.calls.count == 3 else { return XCTFail("\(runner.calls.count) calls, not 3") }
+        // dnglab writes the work file, and both exiftool calls name it.
         XCTAssertEqual(runner.calls[0], convertCall)
         // One exiftool call writes every tag. No backup: the file is this
         // run's own, and has no earlier state to keep.
@@ -123,15 +161,44 @@ final class DnglabConverterTests: XCTestCase {
             "-SubIFD:AntiAliasStrength=1",
             "-SubIFD:BayerGreenSplit=250",
             "-IFD0:OriginalRawFileName=DSC05680.ARW",
-            "/tmp/Shoot 1/DSC05680.dng",
+            "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng",
         ]))
         XCTAssertEqual(runner.calls[2], call(exiftool, [
             "-m", "-n", "-T",
             "-SubIFD:WhiteLevel", "-IFD0:BaselineExposure", "-IFD0:CameraCalibration1", "-IFD0:CameraCalibration2",
             "-IFD0:NoiseProfile", "-IFD0:BaselineNoise", "-IFD0:BaselineSharpness", "-SubIFD:AntiAliasStrength",
             "-SubIFD:BayerGreenSplit", "-IFD0:OriginalRawFileName",
-            "/tmp/Shoot 1/DSC05680.dng",
+            "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng",
         ]))
+        // Only then the DNG gets its name, with the rename that never replaces.
+        XCTAssertEqual(tools.renames, [[workPath, dngPath]])
+        XCTAssertEqual(disk.paths, [dngPath], "the DNG is at its name, and no work file is left")
+        XCTAssertEqual(tools.discarded, [], "there was no leftover to discard")
+    }
+
+    // MARK: The name of the work file
+
+    // One function makes the name: a period, the base name, and the suffix,
+    // in the folder of the ARW. The period hides it from the scan, Finder
+    // and Lightroom.
+    func testTheWorkFileIsAHiddenFileBesideTheARWWithTheBaseNameInIt() {
+        func name(_ path: String) -> String { ConverterOutput.workURL(for: URL(fileURLWithPath: path)).path }
+        XCTAssertEqual(name("/tmp/Shoot 1/DSC05680.ARW"), "/tmp/Shoot 1/.DSC05680.desqueeze-work.dng")
+        XCTAssertEqual(name("/tmp/Shoot 1/frame 1.ARW"), "/tmp/Shoot 1/.frame 1.desqueeze-work.dng")
+        XCTAssertEqual(name("/tmp/Shoot 1/lower.arw"), "/tmp/Shoot 1/.lower.desqueeze-work.dng")
+        XCTAssertEqual(name("/tmp/Shoot 1/two.dots.ARW"), "/tmp/Shoot 1/.two.dots.desqueeze-work.dng")
+        XCTAssertNotEqual(name("/tmp/Shoot 1/a.ARW"), name("/tmp/Shoot 2/a.ARW"))
+    }
+
+    func testTheScanDoesNotSeeAWorkFile() throws {
+        let folder = try makeTemporaryFolder()
+        defer { removeTemporaryFolder(folder) }
+        let arw = folder.appendingPathComponent("frame 1.ARW")
+        try Data("raw".utf8).write(to: arw)
+        try Data("half a DNG".utf8).write(to: ConverterOutput.workURL(for: arw))
+        let contents = try FolderScan.contents(of: folder)
+        XCTAssertEqual(contents.dngs, [])
+        XCTAssertEqual(contents.arws.map(\.lastPathComponent), ["frame 1.ARW"])
     }
 
     // dnglab's `-f` writes over a file. The pre-start check is the rule, and
@@ -167,9 +234,8 @@ final class DnglabConverterTests: XCTestCase {
             XCTAssertEqual(conversion, Conversion(dng: dng, unmatched: rule))
             XCTAssertEqual(runner.calls, [
                 convertCall,
-                call(exiftool, ["-m", "-overwrite_original", "-IFD0:OriginalRawFileName=DSC05680.ARW",
-                                "/tmp/Shoot 1/DSC05680.dng"]),
-                call(exiftool, ["-m", "-n", "-T", "-IFD0:OriginalRawFileName", "/tmp/Shoot 1/DSC05680.dng"]),
+                call(exiftool, ["-m", "-overwrite_original", "-IFD0:OriginalRawFileName=DSC05680.ARW", workPath]),
+                call(exiftool, ["-m", "-n", "-T", "-IFD0:OriginalRawFileName", workPath]),
             ])
         }
     }
@@ -185,17 +251,38 @@ final class DnglabConverterTests: XCTestCase {
 
     // MARK: dnglab fails
 
-    func testANonZeroExitWithAFileReportsThePartialDNGAndWritesNoTag() {
+    func testANonZeroExitWithAFileReportsTheWorkFileAndWritesNoTag() {
         tools.dnglabExit = 1
-        XCTAssertEqual(error() as? ConvertError, .failed("dnglab returned 1.", partial: dng))
+        assertFails(.failed("dnglab returned 1.", partial: work))
         XCTAssertEqual(runner.calls, [convertCall])
+        XCTAssertEqual(tools.renames, [], "a failed conversion never gets the DNG's name")
+    }
+
+    // dnglab returns 6 when its output exists, and does not touch it. The
+    // leftover was discarded before dnglab started, so this file came after
+    // that. It is not this conversion's, and it is not reported.
+    // The words are what dnglab 0.8.0 printed on 2026-10-09 for a work file
+    // that was there, with exit code 6.
+    func testExitCodeSixReportsNoPartialAlsoWithAFileAtTheWorkName() {
+        tools.dnglabExit = 6
+        tools.dnglabError = [
+            "Converted 0/1 files, 1 failed:",
+            "   /tmp/Shoot 1/DSC05680.ARW",
+            "Total time: 0.00s",
+            "Error: Already exists: /tmp/Shoot 1/.DSC05680.desqueeze-work.dng",
+        ].joined(separator: "\n") + "\n"
+        assertFails(.failed("dnglab returned 6. Already exists: /tmp/Shoot 1/.DSC05680.desqueeze-work.dng.",
+                            partial: nil))
+        XCTAssertTrue(disk.paths.contains(workPath), "a file is at the work name")
+        XCTAssertEqual(runner.calls, [convertCall])
+        XCTAssertEqual(tools.renames, [])
     }
 
     // A file that dnglab cannot read: exit code 7, and no DNG.
     func testANonZeroExitWithNoFileReportsNoPartialDNG() {
         tools.dnglabExit = 7
         tools.dnglabWrites = nil
-        XCTAssertEqual(error() as? ConvertError, .failed("dnglab returned 7.", partial: nil))
+        assertFails(.failed("dnglab returned 7.", partial: nil))
         XCTAssertEqual(runner.calls, [convertCall])
     }
 
@@ -231,10 +318,10 @@ final class DnglabConverterTests: XCTestCase {
                        .failed("dnglab returned 7. \(Self.realReason).", partial: nil))
     }
 
-    func testTheReasonKeepsThePartialDNG() {
+    func testTheReasonKeepsThePartialOutput() {
         tools.dnglabExit = 1
         tools.dnglabError = "Error: The disk is full.\n"
-        XCTAssertEqual(error() as? ConvertError, .failed("dnglab returned 1. The disk is full.", partial: dng))
+        assertFails(.failed("dnglab returned 1. The disk is full.", partial: work))
     }
 
     func testWithNoErrorLineTheTextStaysAsItIs() {
@@ -278,14 +365,14 @@ final class DnglabConverterTests: XCTestCase {
 
     // Killed in work, dnglab left a DNG of 0 bytes, of 4 bytes, or a cut-off
     // file (design 13.2).
-    func testASignalWithAFileReportsThePartialDNGAndTheSignal() {
+    func testASignalWithAFileReportsTheWorkFileAndTheSignal() {
         for bytes in [0, 4, 12_100_000] {
             setUp()
             tools.dnglabWrites = bytes
             tools.failure = (1, ProcessSignalError(signal: 15, stdout: "", stderr: ""))
-            XCTAssertEqual(error() as? ConvertError, .failed("The program was ended by signal 15.", partial: dng),
-                           "\(bytes) bytes")
+            assertFails(.failed("The program was ended by signal 15.", partial: work), nil, "\(bytes) bytes")
             XCTAssertEqual(runner.calls, [convertCall])
+            XCTAssertEqual(tools.renames, [])
         }
     }
 
@@ -311,53 +398,54 @@ final class DnglabConverterTests: XCTestCase {
         XCTAssertEqual(runner.calls, [convertCall])
     }
 
-    func testExitZeroWithAnEmptyDNGFailsAndReportsThePartialDNG() {
+    func testExitZeroWithAnEmptyWorkFileFailsAndReportsTheWorkFile() {
         tools.dnglabWrites = 0
-        XCTAssertEqual(error() as? ConvertError, .failed("dnglab made an empty DNG.", partial: dng))
+        assertFails(.failed("dnglab made an empty DNG.", partial: work))
         XCTAssertEqual(runner.calls, [convertCall])
+        XCTAssertEqual(tools.renames, [])
     }
 
-    func testExitZeroWithADNGOfUnknownSizeMadeNoDNGAndReportsNoPartialDNG() {
-        disk.unreadableSizes = [dngPath]
+    func testExitZeroWithAWorkFileOfUnknownSizeMadeNoDNGAndReportsNoPartialDNG() {
+        disk.unreadableSizes = [workPath]
         XCTAssertEqual(error() as? ConvertError,
                        .failed("dnglab made no DNG. It may not support this file.", partial: nil))
     }
 
     // MARK: The match fails
 
-    // dnglab made the DNG in this run, so the file is the partial output.
-    func testAFailedMatchWriteReportsThePartialDNGWithExiftoolsWords() {
+    // dnglab made the work file in this run, so it is the partial output.
+    func testAFailedMatchWriteReportsTheWorkFileWithExiftoolsWords() {
         tools.writeResult = ProcessResult(
             exitCode: 1, stdout: "    0 image files updated\n    1 files weren't updated due to errors\n",
-            stderr: "Error: Not a valid TIFF - /tmp/Shoot 1/DSC05680.dng\n")
-        XCTAssertEqual(error() as? ConvertError,
-                       .failed("The tags could not be written: Error: Not a valid TIFF", partial: dng))
+            stderr: "Error: Not a valid TIFF - /tmp/Shoot 1/.DSC05680.desqueeze-work.dng\n")
+        assertFails(.failed("The tags could not be written: Error: Not a valid TIFF", partial: work))
         XCTAssertEqual(runner.calls.count, 2, "no read-back after a write that failed")
+        XCTAssertEqual(tools.renames, [], "a DNG with no match never gets its name")
     }
 
     // exiftool exits 0 when it changed nothing.
     func testAMatchWriteThatUpdatedNoFileFails() {
         tools.writeResult = ProcessResult(exitCode: 0, stdout: "    0 image files updated\n", stderr: "")
-        XCTAssertEqual(error() as? ConvertError,
-                       .failed("The tags could not be written: 0 image files updated", partial: dng))
+        assertFails(.failed("The tags could not be written: 0 image files updated", partial: work))
     }
 
-    // dnglab ran, so every error after it reports the partial DNG: also an
+    // dnglab ran, so every error after it reports the work file: also an
     // exiftool that cannot start, and one that a signal ended.
-    func testAMatchWriteThatCannotStartOrIsEndedReportsThePartialDNG() {
+    func testAMatchWriteThatCannotStartOrIsEndedReportsTheWorkFile() {
         tools.failure = (2, NamedError(text: "The program could not start."))
-        XCTAssertEqual(error() as? ConvertError, .failed("The program could not start.", partial: dng))
+        assertFails(.failed("The program could not start.", partial: work))
 
         setUp()
         tools.failure = (2, ProcessSignalError(signal: 2, stdout: "", stderr: ""))
-        XCTAssertEqual(error() as? ConvertError, .failed("The program was ended by signal 2.", partial: dng))
+        assertFails(.failed("The program was ended by signal 2.", partial: work))
 
         setUp()
         tools.failure = (3, ProcessSignalError(signal: 2, stdout: "", stderr: ""))
-        XCTAssertEqual(error() as? ConvertError, .failed("The program was ended by signal 2.", partial: dng))
+        assertFails(.failed("The program was ended by signal 2.", partial: work))
+        XCTAssertEqual(tools.renames, [])
     }
 
-    func testAReadBackThatDiffersInOneTagReportsThePartialDNGAndNamesTheTag() {
+    func testAReadBackThatDiffersInOneTagReportsTheWorkFileAndNamesTheTag() {
         func readBack(_ change: (inout [String]) -> Void) -> String {
             var cells = ["16383", "0.15", "0.9888 0 0 0 1 0 0 0 0.9955", "0.9888 0 0 0 1 0 0 0 0.9955", Self.noise800,
                          "0.6", "1.25", "1", "250", "DSC05680.ARW"]
@@ -381,9 +469,66 @@ final class DnglabConverterTests: XCTestCase {
         for (text, words) in cases {
             setUp()
             tools.readBack = text
-            XCTAssertEqual(error() as? ConvertError, .failed(words, partial: dng), words)
+            assertFails(.failed(words, partial: work), nil, words)
             XCTAssertEqual(runner.calls.count, 3)
+            XCTAssertEqual(tools.renames, [], "a DNG whose match did not read back never gets its name")
         }
+    }
+
+    // MARK: The rename
+
+    // Another program made `<base>.dng` after the check before the start,
+    // while dnglab worked. That file is not this run's: it is not reported,
+    // and nothing replaces it. The work file is the partial output. The
+    // error holds for every converter, so the job does not ask the next one.
+    func testARenameThatFindsTheNameTakenReportsTheWorkFileAndNeverTheDNGOfTheOtherProgram() {
+        let (disk, dngPath) = (disk!, dngPath)
+        tools.renameOutcome = .nameTaken
+        // The other program's DNG appears while dnglab works.
+        let handler = runner.handler
+        runner.handler = { call in
+            if call.arguments.first == "convert" { disk.paths.insert(dngPath) }
+            return handler(call)
+        }
+        let thrown = error() as? ConvertError
+        XCTAssertEqual(thrown, .failedForAll("A DNG with this name exists already. Not converted.", partial: work))
+        XCTAssertNotEqual(thrown?.partial, dng)
+        XCTAssertEqual(runner.calls.count, 3, "the match was written and read back before the rename")
+        XCTAssertEqual(tools.renames, [[workPath, dngPath]])
+        XCTAssertEqual(disk.paths, [dngPath, workPath], "both files are where they were")
+    }
+
+    func testARenameThatFailsForAnotherReasonReportsTheWorkFileWithTheSystemsWords() {
+        tools.renameOutcome = .failed(EACCES)
+        assertFails(.failed("The DNG could not get the name DSC05680.dng: Permission denied.", partial: work))
+        XCTAssertEqual(disk.paths, [workPath])
+    }
+
+    // MARK: A leftover work file (design 13.3, step 1)
+
+    // A run that ended hard left the work file. Its name says that it is
+    // this app's own, so it is discarded, and the conversion goes on.
+    func testALeftoverWorkFileIsDiscardedBeforeDnglabStarts() throws {
+        disk.paths = [workPath]
+        disk.sizes[workPath] = 4
+        let conversion = try converter().convert(arw, facts: adapted)
+        XCTAssertEqual(conversion, Conversion(dng: dng, unmatched: nil))
+        XCTAssertEqual(tools.discarded, [workPath], "the discard gets the work file, and only it")
+        XCTAssertEqual(runner.calls.count, 3)
+        XCTAssertEqual(disk.paths, [dngPath])
+    }
+
+    // The Trash refused the leftover. No program starts, and the sentence
+    // names the file to delete. No partial: this conversion made no file.
+    func testALeftoverThatCannotBeDiscardedStopsTheConversionBeforeAnyProgram() {
+        disk.paths = [workPath]
+        tools.discardError = NamedError(text: "The Trash refused it.")
+        assertFails(.failedForAll(
+            "A leftover file, .DSC05680.desqueeze-work.dng, is beside this photo. Delete it, then run again.",
+            partial: nil))
+        XCTAssertEqual(tools.discarded, [workPath])
+        XCTAssertEqual(runner.calls, [], "no program started")
+        XCTAssertEqual(disk.paths, [workPath], "the leftover is where it was")
     }
 
     // MARK: Before the start
@@ -395,6 +540,17 @@ final class DnglabConverterTests: XCTestCase {
         XCTAssertEqual(error() as? ConvertError,
                        .failed("A DNG with this name exists already. Not converted.", partial: nil))
         XCTAssertEqual(runner.calls, [])
+    }
+
+    // The check of the DNG's name comes before step 1: with a DNG at the
+    // name, nothing is discarded, and nothing starts.
+    func testTheCheckOfTheNameComesBeforeTheLeftoverIsDiscarded() {
+        disk.paths = [dngPath, workPath]
+        XCTAssertEqual(error() as? ConvertError,
+                       .failed("A DNG with this name exists already. Not converted.", partial: nil))
+        XCTAssertEqual(tools.discarded, [])
+        XCTAssertEqual(runner.calls, [])
+        XCTAssertEqual(disk.paths, [dngPath, workPath])
     }
 
     func testOnTheRealDiskAFileAFolderAndADanglingLinkEachStopTheConverterBeforeItStarts() throws {
@@ -409,7 +565,8 @@ final class DnglabConverterTests: XCTestCase {
                 try files.createSymbolicLink(atPath: $0.path, withDestinationPath: folder.path + "/no such file")
             }),
         ]
-        let real = DnglabConverter(executable: dnglab, exiftool: exiftool, runner: runner)
+        let real = DnglabConverter(executable: dnglab, exiftool: exiftool, runner: runner,
+                                   discardLeftover: { _ in XCTFail("there is no leftover") })
         for (number, (what, make)) in plant.enumerated() {
             try make(folder.appendingPathComponent("frame \(number).dng"))
             XCTAssertThrowsError(

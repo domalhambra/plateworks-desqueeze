@@ -241,7 +241,11 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual([json["converted"], json["convertedByDnglab"], json["convertedByAdobe"]] as? [Int], [1, 1, 0])
         XCTAssertEqual([json["set"], json["failed"], json["unconvertedARWs"]] as? [Int], [2, 0, 0])
         XCTAssertEqual(json["notes"] as? [NSDictionary], [])
-        XCTAssertTrue(h.tools.commands.contains("dnglab convert --embed-raw false X.ARW X.dng"), "\(h.tools.commands)")
+        // dnglab writes a hidden work file, and the DNG gets its name last.
+        XCTAssertTrue(h.tools.commands.contains("dnglab convert --embed-raw false X.ARW .X.desqueeze-work.dng"),
+                      "\(h.tools.commands)")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: h.shoot.path).sorted(),
+                       ["A.dng", "X.ARW", "X.dng"], "no work file stays")
         XCTAssertFalse(h.tools.commands.contains { $0.hasPrefix("Adobe") }, "\(h.tools.commands)")
         XCTAssertEqual(h.err.lines, ["1/3 X.ARW", "2/3 A.dng", "3/3 X.dng"], "one step for the conversion")
         XCTAssertEqual(try Data(contentsOf: h.shoot.appendingPathComponent("X.dng")), Data("converted by dnglab".utf8))
@@ -279,14 +283,14 @@ final class CommandsTests: XCTestCase {
         XCTAssertEqual(commands.count, 4, "the facts, dnglab, the match write, and its read-back: \(commands)")
         XCTAssertTrue(isCommand(0, "$ /fake/bin/exiftool -m -n -T -filename -IFD0:Model -ExifIFD:ISO "
             + "-SR2SubIFD:WB_RGBLevelsDaylight -SubIFD:DistortionCorrection '/", "/Shoot 1/X.ARW'"), "\(commands)")
-        XCTAssertTrue(isCommand(1, "$ /fake/bin/dnglab convert --embed-raw false '/", "/Shoot 1/X.dng'"),
-                      "\(commands)")
+        XCTAssertTrue(isCommand(1, "$ /fake/bin/dnglab convert --embed-raw false '/",
+                                "/Shoot 1/.X.desqueeze-work.dng'"), "\(commands)")
         XCTAssertTrue(commands.count > 1 && commands[1].contains("/Shoot 1/X.ARW' '/"), "\(commands)")
         XCTAssertTrue(isCommand(2, "$ /fake/bin/exiftool -m -overwrite_original -SubIFD:WhiteLevel=16383 ",
-                                "/Shoot 1/X.dng'"), "\(commands)")
+                                "/Shoot 1/.X.desqueeze-work.dng'"), "\(commands)")
         XCTAssertTrue(commands.count > 2 && commands[2].contains(" -IFD0:OriginalRawFileName=X.ARW '/"), "\(commands)")
-        XCTAssertTrue(isCommand(3, "$ /fake/bin/exiftool -m -n -T -SubIFD:WhiteLevel ", "/Shoot 1/X.dng'"),
-                      "\(commands)")
+        XCTAssertTrue(isCommand(3, "$ /fake/bin/exiftool -m -n -T -SubIFD:WhiteLevel ",
+                                "/Shoot 1/.X.desqueeze-work.dng'"), "\(commands)")
         XCTAssertTrue(h.err.lines.contains("  stdout: X.ARW\tILCE-7SM3\t800\t2597 1024 1556\t255"))
         XCTAssertTrue(h.err.lines.contains("1/2 X.ARW"), "progress is still there")
     }

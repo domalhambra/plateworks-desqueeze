@@ -411,13 +411,14 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertFalse(summary.needsAttention)
     }
 
-    // dnglab's partial DNG goes to the Trash before Adobe DNG Converter
-    // starts: left there, the name would be taken.
-    func testThePartialDNGOfDnglabIsDiscardedBeforeAdobeGetsTheARW() {
+    // dnglab's partial output is its hidden work file. It goes to the Trash
+    // before Adobe DNG Converter starts.
+    func testTheWorkFileOfAFailedDnglabIsDiscardedBeforeAdobeGetsTheARW() {
         facts.facts = ["X.ARW": .adapted]
         dnglab.failWithPartial = ["X.ARW"]
         let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
-        XCTAssertEqual(conversionLog, ["facts X.ARW", "dnglab X.ARW", "trashFile X.dng", "convert X.ARW"])
+        XCTAssertEqual(conversionLog, ["facts X.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng",
+                                       "convert X.ARW"])
         XCTAssertEqual([summary.convertedByAdobe, summary.failed], [1, 0])
         XCTAssertEqual(summary.notes, [])
     }
@@ -431,7 +432,7 @@ final class DesqueezeJobTests: XCTestCase {
         let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW", "Y.ARW"]),
                                                 factor: factor, convert: true)
         XCTAssertEqual(conversionLog, [
-            "facts X.ARW Y.ARW", "dnglab X.ARW", "trashFile X.dng", "convert X.ARW", "dnglab Y.ARW",
+            "facts X.ARW Y.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng", "convert X.ARW", "dnglab Y.ARW",
         ], "the run goes on with the next ARW")
         XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.convertedByAdobe], [1, 1, 0])
         XCTAssertEqual([summary.failed, summary.unconvertedARWs, summary.set], [1, 1, 1])
@@ -446,7 +447,7 @@ final class DesqueezeJobTests: XCTestCase {
         dnglab.failWithPartial = ["X.ARW"]
         let summary = job(withConverter: false, withDnglab: true)
             .run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW"]), factor: factor, convert: true)
-        XCTAssertEqual(conversionLog, ["facts X.ARW", "dnglab X.ARW", "trashFile X.dng"])
+        XCTAssertEqual(conversionLog, ["facts X.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng"])
         XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs, summary.set], [0, 1, 1, 1])
         XCTAssertEqual(summary.notes, [FileNote(
             name: "X.ARW", kind: .notConverted, message: "Not converted.",
@@ -572,33 +573,112 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(summary.failed, 1)
     }
 
-    // The Trash refused dnglab's partial DNG, so the name is taken when
-    // Adobe DNG Converter is asked. Both lines stay: each says its own thing.
-    func testARefusedTrashForTheDnglabPartialNamesTheFileAndAdobeThenRefusesTheName() {
-        facts.facts = ["X.ARW": .adapted]
+    // The Trash refused dnglab's work file. A work file that cannot be
+    // removed stops the ARW: the next run would stop at it too (design
+    // 13.3, step 1). Adobe DNG Converter does not start, and the note names
+    // the file. Were Adobe to convert, the hidden file would stay with no
+    // one told.
+    func testARefusedTrashForTheWorkFileNamesTheFileAndAdobeIsNotStarted() {
+        facts.facts = ["X.ARW": .adapted, "Y.ARW": .adapted]
         dnglab.failWithPartial = ["X.ARW"]
-        converter.refuse = ["X.ARW"]
+        backups.trashFileError = NamedError(text: "The Trash refused it.")
+        let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW", "Y.ARW"]), factor: .noStretch,
+                                                convert: true)
+        XCTAssertEqual(log.entries, ["facts X.ARW Y.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng",
+                                     "dnglab Y.ARW"], "no Adobe DNG Converter for X.ARW, and the run goes on")
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: "X.ARW", kind: .notConverted, message: "Not converted.",
+            detail: "dnglab returned 1. "
+                + "A partial DNG, .X.desqueeze-work.dng, is beside the ARW. Delete it, then run again.")])
+        XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs], [1, 1, 1])
+        XCTAssertFalse(summary.cancelled)
+    }
+
+    // MARK: The name is taken at the rename (design 13.3)
+
+    // Another program made X.dng while dnglab worked. That DNG is not this
+    // run's. The work file goes to the Trash, the note has the sentence of
+    // the check before the start, and Adobe DNG Converter does not start.
+    func testANameThatIsTakenAtTheRenameDoesNotStartAdobeAndOnlyTheWorkFileGoesToTheTrash() {
+        facts.facts = ["X.ARW": .adapted, "Y.ARW": .adapted]
+        dnglab.nameTakenAtRename = ["X.ARW"]
+        let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW", "Y.ARW"]), factor: .noStretch,
+                                                convert: true)
+        XCTAssertEqual(log.entries, ["facts X.ARW Y.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng",
+                                     "dnglab Y.ARW"], "no Adobe DNG Converter for X.ARW, and X.dng is not moved")
+        XCTAssertEqual(summary.notes, [FileNote(name: "X.ARW", kind: .notConverted, message: "Not converted.",
+                                                detail: "A DNG with this name exists already. Not converted.")])
+        XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs], [1, 1, 1])
+        XCTAssertFalse(summary.cancelled, "the run was not stopped: it went on with the next ARW")
+    }
+
+    func testANameTakenAtTheRenameWithATrashThatRefusesTheWorkFileNamesTheWorkFile() {
+        facts.facts = ["X.ARW": .adapted]
+        dnglab.nameTakenAtRename = ["X.ARW"]
         backups.trashFileError = NamedError(text: "The Trash refused it.")
         let summary = job(withDnglab: true).run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
-        XCTAssertEqual(log.entries, ["facts X.ARW", "dnglab X.ARW", "trashFile X.dng", "convert X.ARW"])
+        XCTAssertEqual(log.entries, ["facts X.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng"])
         XCTAssertEqual(summary.notes.map(\.detail), [
-            "dnglab returned 1. A partial DNG, X.dng, is beside the ARW. Delete it, then run again.\n"
-                + "A DNG with this name exists already. Not converted.",
+            "A DNG with this name exists already. Not converted. "
+                + "A partial DNG, .X.desqueeze-work.dng, is beside the ARW. Delete it, then run again.",
         ])
     }
 
-    // The second lock holds for each converter's partial DNG.
-    func testTheSecondLockHoldsForAPartialDNGThatDnglabReports() {
+    // MARK: The second lock, for dnglab (design 13.3)
+
+    // dnglab's converter never writes `<base>.dng`. A converter that names
+    // that file as its partial output is wrong, and the file is someone
+    // else's: it does not move. This is the lock that keeps a DNG of the
+    // person's out of the Trash.
+    func testTheDNGOfTheARWIsNeverMovedForDnglab() {
         facts.facts = ["X.ARW": .adapted]
-        dnglab.failWithPartial = ["X.ARW"]
-        dnglab.reportedPartial = folder.appendingPathComponent("A.dng")
-        let summary = job(withConverter: false, withDnglab: true)
-            .run(snapshot(dngs: [dng("A.dng", at: 1.5)], pending: ["X.ARW"]), factor: factor, convert: true)
-        XCTAssertEqual(log.entries, ["facts X.ARW", "dnglab X.ARW"], "no file was moved")
-        XCTAssertEqual(summary.notes.map(\.detail), [
-            "dnglab returned 1. "
-                + "A file, A.dng, was reported as the partial DNG. It is not this run's file, and it was not moved.",
-        ])
+        for taken in [false, true] {
+            setUp()
+            facts.facts = ["X.ARW": .adapted]
+            if taken { dnglab.nameTakenAtRename = ["X.ARW"] } else { dnglab.failWithPartial = ["X.ARW"] }
+            dnglab.reportedPartial = folder.appendingPathComponent("X.dng")
+            let summary = job(withConverter: false, withDnglab: true)
+                .run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+            XCTAssertEqual(log.entries, ["facts X.ARW", "dnglab X.ARW"], "no file was moved")
+            XCTAssertEqual(summary.notes.map(\.detail), [
+                (taken ? "A DNG with this name exists already. Not converted. " : "dnglab returned 1. ")
+                    + "A file, X.dng, was reported as the partial DNG. It is not this run's file, and it was not moved.",
+            ])
+        }
+    }
+
+    // Only the work file of this ARW, in this folder, with its exact name.
+    func testOnlyTheExactWorkFileOfTheARWIsMovedForDnglab() {
+        let others = [
+            folder.appendingPathComponent("A.dng"),
+            folder.appendingPathComponent(".Y.desqueeze-work.dng"),
+            folder.appendingPathComponent(".x.desqueeze-work.dng"),
+            folder.appendingPathComponent("X.desqueeze-work.dng"),
+            URL(fileURLWithPath: "/tmp/Shoot 2/.X.desqueeze-work.dng"),
+        ]
+        for other in others {
+            setUp()
+            facts.facts = ["X.ARW": .adapted]
+            dnglab.failWithPartial = ["X.ARW"]
+            dnglab.reportedPartial = other
+            let summary = job(withConverter: false, withDnglab: true)
+                .run(snapshot(dngs: [dng("A.dng", at: 1.5)], pending: ["X.ARW"]), factor: factor, convert: true)
+            XCTAssertEqual(log.entries, ["facts X.ARW", "dnglab X.ARW"], "\(other.path) was moved")
+            XCTAssertEqual(summary.notes.map(\.detail), [
+                "dnglab returned 1. A file, \(other.lastPathComponent), was reported as the partial DNG. "
+                    + "It is not this run's file, and it was not moved.",
+            ])
+        }
+    }
+
+    // The work-file name is dnglab's. Adobe DNG Converter writes `<base>.dng`
+    // and nothing else, so a work file from it does not move.
+    func testAWorkFileIsNotMovedForAdobe() {
+        converter.failWithPartial = ["X.ARW"]
+        converter.reportedPartial = folder.appendingPathComponent(".X.desqueeze-work.dng")
+        let summary = job().run(snapshot(dngs: [], pending: ["X.ARW"]), factor: factor, convert: true)
+        XCTAssertEqual(log.entries, ["convert X.ARW"], "no file was moved")
+        XCTAssertEqual(summary.failed, 1)
     }
 
     // One step for each ARW, whatever the number of converters that it took.
@@ -637,7 +717,7 @@ final class DesqueezeJobTests: XCTestCase {
         var updates: [RunProgress] = []
         let summary = job(withDnglab: true).run(snapshot(dngs: [dng("A.dng")], pending: ["X.ARW", "Y.ARW"]),
                                                 factor: factor, convert: true, cancel: flag) { updates.append($0) }
-        XCTAssertEqual(log.entries, ["facts X.ARW Y.ARW", "dnglab X.ARW", "trashFile X.dng"],
+        XCTAssertEqual(log.entries, ["facts X.ARW Y.ARW", "dnglab X.ARW", "trashFile .X.desqueeze-work.dng"],
                        "no Adobe DNG Converter, no next ARW, no tag")
         XCTAssertTrue(summary.cancelled)
         XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs, summary.set], [0, 1, 2, 0])
@@ -676,9 +756,9 @@ final class DesqueezeJobTests: XCTestCase {
     }
 
     // The whole path on real files with the real `DnglabConverter` on a fake
-    // runner: dnglab leaves a cut-off DNG and is ended by a signal, the file
-    // moves to the injected Trash, and Adobe DNG Converter then converts.
-    func testACutOffDnglabDNGReallyMovesToTheInjectedTrashAndAdobeThenConverts() throws {
+    // runner: dnglab leaves a cut-off work file and is ended by a signal, the
+    // file moves to the injected Trash, and Adobe DNG Converter then converts.
+    func testACutOffDnglabWorkFileReallyMovesToTheInjectedTrashAndAdobeThenConverts() throws {
         let shoot = try makeTemporaryFolder()
         defer { removeTemporaryFolder(shoot) }
         let trash = shoot.deletingLastPathComponent().appendingPathComponent("Test trash")
@@ -688,8 +768,8 @@ final class DesqueezeJobTests: XCTestCase {
         let dngPath = shoot.appendingPathComponent("a.dng").path
 
         let dnglabRunner = FakeRunner()
-        dnglabRunner.handler = { _ in
-            FileManager.default.createFile(atPath: dngPath, contents: Data("II*".utf8))
+        dnglabRunner.handler = { call in
+            FileManager.default.createFile(atPath: call.arguments.last!, contents: Data("II*".utf8))
             return ProcessResult(exitCode: 0, stdout: "", stderr: "")
         }
         dnglabRunner.failure = ProcessSignalError(signal: 9, stdout: "", stderr: "")
@@ -700,23 +780,114 @@ final class DesqueezeJobTests: XCTestCase {
         }
         facts.facts = ["a.ARW": .adapted]
         let tool = URL(fileURLWithPath: "/nonexistent/tool")
-        let converters = RawConverters(
-            dnglab: DnglabConverter(executable: tool, exiftool: tool, runner: dnglabRunner),
-            adobe: AdobeConverter(executable: tool, runner: adobeRunner), facts: facts)
         let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: trash.path]).backups
+        let converters = RawConverters(
+            dnglab: DnglabConverter(executable: tool, exiftool: tool, runner: dnglabRunner,
+                                    discardLeftover: { try files.trashFile($0) }),
+            adobe: AdobeConverter(executable: tool, runner: adobeRunner), facts: facts)
 
         let summary = DesqueezeJob(tag: tag, converters: converters, backups: files).run(
             FolderSnapshot(folder: shoot, dngs: [], pendingARWs: [arw], orphanBackups: [], isWritable: true),
             factor: .noStretch, convert: true)
 
         XCTAssertEqual(dnglabRunner.calls.count, 1, "no match write after a signal")
+        XCTAssertEqual(dnglabRunner.calls.first?.arguments.last, shoot.appendingPathComponent(".a.desqueeze-work.dng").path)
         XCTAssertEqual(adobeRunner.calls.count, 1)
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path), ["a.dng"])
-        XCTAssertEqual(try Data(contentsOf: trash.appendingPathComponent("a.dng")), Data("II*".utf8))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path), [".a.desqueeze-work.dng"])
+        XCTAssertEqual(try Data(contentsOf: trash.appendingPathComponent(".a.desqueeze-work.dng")), Data("II*".utf8))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: shoot.path).sorted(), ["a.ARW", "a.dng"],
+                       "no work file stays, hidden files counted")
         XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: dngPath)), Data("Adobe's DNG".utf8))
         XCTAssertEqual(try Data(contentsOf: arw), Data("raw bytes".utf8))
         XCTAssertEqual([summary.converted, summary.convertedByAdobe, summary.failed], [1, 1, 0])
         XCTAssertEqual(summary.notes, [])
+    }
+
+    // MARK: A leftover work file (design 13.3, step 1)
+
+    /// A real folder with one pending ARW, a folder that stands for the
+    /// Trash, and the real converters on scripted programs.
+    struct RealShoot {
+        let shoot: URL
+        let trash: URL
+        let arw: URL
+        let tools = ScriptedTools()
+
+        init() throws {
+            shoot = try makeTemporaryFolder()
+            trash = shoot.deletingLastPathComponent().appendingPathComponent("Test trash")
+            try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+            arw = shoot.appendingPathComponent("frame 1.ARW")
+            try Data("raw bytes".utf8).write(to: arw)
+        }
+
+        var work: URL { ConverterOutput.workURL(for: arw) }
+        var dng: URL { ConverterOutput.url(for: arw) }
+        var snapshot: FolderSnapshot {
+            FolderSnapshot(folder: shoot, dngs: [], pendingARWs: [arw], orphanBackups: [], isWritable: true)
+        }
+
+        /// Every name in the folder, hidden files too.
+        func names(in folder: URL) throws -> [String] {
+            try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()
+        }
+    }
+
+    // A run that ended hard left a work file. The next run moves it to the
+    // Trash through the job's backups, and then converts.
+    func testALeftoverWorkFileGoesToTheTrashFirstAndTheConversionThenPasses() throws {
+        let real = try RealShoot()
+        defer { removeTemporaryFolder(real.shoot) }
+        try Data("cut off".utf8).write(to: real.work)
+        let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
+
+        let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files), backups: files)
+            .run(real.snapshot, factor: .noStretch, convert: true)
+
+        XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.failed], [1, 1, 0])
+        XCTAssertEqual(summary.notes, [])
+        XCTAssertEqual(try real.names(in: real.trash), [".frame 1.desqueeze-work.dng"])
+        XCTAssertEqual(try Data(contentsOf: real.trash.appendingPathComponent(".frame 1.desqueeze-work.dng")),
+                       Data("cut off".utf8), "the leftover, not the new work file")
+        XCTAssertEqual(try real.names(in: real.shoot), ["frame 1.ARW", "frame 1.dng"], "no work file stays")
+        XCTAssertEqual(try Data(contentsOf: real.dng), ScriptedTools.dnglabBytes)
+        XCTAssertEqual(real.tools.calls(to: ScriptedTools.dnglab).count, 1)
+        XCTAssertEqual(real.tools.calls(to: ScriptedTools.adobe), [])
+    }
+
+    // The Trash refuses the leftover. The ARW fails with a note that names
+    // the file to delete, and no converter starts: not dnglab, and not Adobe
+    // DNG Converter.
+    func testWhenTheTrashRefusesTheLeftoverNoConverterStartsAndTheNoteNamesIt() throws {
+        let real = try RealShoot()
+        defer { removeTemporaryFolder(real.shoot) }
+        try Data("cut off".utf8).write(to: real.work)
+        let files = FileBackups(trash: { _ in throw NamedError(text: "The Trash refused it.") })
+
+        let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files), backups: files)
+            .run(real.snapshot, factor: .noStretch, convert: true)
+
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: "frame 1.ARW", kind: .notConverted, message: "Not converted.",
+            detail: "A leftover file, .frame 1.desqueeze-work.dng, is beside this photo. Delete it, then run again.")])
+        XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs], [0, 1, 1])
+        XCTAssertEqual(real.tools.calls(to: ScriptedTools.dnglab), [], "dnglab did not start")
+        XCTAssertEqual(real.tools.calls(to: ScriptedTools.adobe), [], "Adobe DNG Converter did not start")
+        XCTAssertEqual(try real.names(in: real.shoot), [".frame 1.desqueeze-work.dng", "frame 1.ARW"])
+        XCTAssertEqual(try Data(contentsOf: real.work), Data("cut off".utf8), "the leftover is as it was")
+        XCTAssertEqual(try real.names(in: real.trash), [])
+    }
+
+    // With no leftover, nothing goes to the Trash.
+    func testWithNoLeftoverAConversionSendsNothingToTheTrash() throws {
+        let real = try RealShoot()
+        defer { removeTemporaryFolder(real.shoot) }
+        let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
+        let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files), backups: files)
+            .run(real.snapshot, factor: .noStretch, convert: true)
+        XCTAssertEqual([summary.convertedByDnglab, summary.failed], [1, 0])
+        XCTAssertEqual(try real.names(in: real.trash), [])
+        XCTAssertEqual(try real.names(in: real.shoot), ["frame 1.ARW", "frame 1.dng"])
     }
 
     func testWithNoConverterTheARWFilesWaitAndTheDNGFilesRun() {

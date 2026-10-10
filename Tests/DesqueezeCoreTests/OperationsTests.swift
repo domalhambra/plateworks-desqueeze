@@ -228,8 +228,9 @@ final class OperationsTests: XCTestCase {
         let fake = try script("kill -TERM $$")
         let operations = DesqueezeOperations(
             exiftool: exiftool, dnglab: fake, dngConverter: nil, tag: h.tag,
-            converters: RawConverters(dnglab: DnglabConverter(executable: fake, exiftool: exiftool), adobe: nil,
-                                      facts: h.facts),
+            converters: RawConverters(
+                dnglab: DnglabConverter(executable: fake, exiftool: exiftool, discardLeftover: { _ in }), adobe: nil,
+                facts: h.facts),
             backups: h.backups)
         let report = try operations.run(shoot, factor: factor)
         let note = try XCTUnwrap(report.notes.first { $0.kind == .notConverted })
@@ -274,13 +275,19 @@ final class OperationsTests: XCTestCase {
             "exiftool", "exiftool", // X.dng: the scale, then its check
         ])
         XCTAssertEqual(runner.calls[2].arguments.map { URL(fileURLWithPath: $0).lastPathComponent },
-                       ["convert", "--embed-raw", "false", "X.ARW", "X.dng"])
+                       ["convert", "--embed-raw", "false", "X.ARW", ".X.desqueeze-work.dng"])
+        XCTAssertEqual(runner.calls[3].arguments.last.map { URL(fileURLWithPath: $0).lastPathComponent },
+                       ".X.desqueeze-work.dng", "the match goes into the work file")
+        XCTAssertEqual(runner.calls[5].arguments.last.map { URL(fileURLWithPath: $0).lastPathComponent }, "X.dng",
+                       "the scale goes into the DNG, after the rename")
         XCTAssertFalse(runner.calls.contains { $0.executable == converterTool.path },
                        "a full match does not start Adobe DNG Converter")
         XCTAssertEqual([report.converted, report.convertedByDnglab, report.convertedByAdobe], [1, 1, 0])
         XCTAssertEqual([report.set, report.skipped, report.failed], [1, 2, 0])
         XCTAssertEqual(report.notes.map(\.kind), [.orphanBackup])
         XCTAssertEqual(try Data(contentsOf: shoot.appendingPathComponent("X.dng")), Data("a DNG".utf8))
+        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: shoot.path).contains { $0.hasPrefix(".") },
+                       "no work file stays")
     }
 
     // The public way in: one runner starts both tools.

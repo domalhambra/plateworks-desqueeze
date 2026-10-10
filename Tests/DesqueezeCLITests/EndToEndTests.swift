@@ -286,16 +286,17 @@ final class EndToEndTests: BuiltToolTestCase {
                           result.stderr)
             XCTAssertTrue(result.messages.contains {
                 $0.hasPrefix("$ \(dnglab) convert --embed-raw false '/")
-                    && $0.contains("/Shoot with spaces/frame.ARW' '/") && $0.hasSuffix("/Shoot with spaces/frame.dng'")
+                    && $0.contains("/Shoot with spaces/frame.ARW' '/")
+                    && $0.hasSuffix("/Shoot with spaces/.frame.desqueeze-work.dng'")
             }, result.stderr)
             XCTAssertTrue(result.messages.contains {
                 $0.hasPrefix("$ \(exiftool) -m -overwrite_original -SubIFD:WhiteLevel=16383 "
                     + "-IFD0:BaselineExposure=0.15 '-IFD0:CameraCalibration1=0.9888 0 0 0 1 0 0 0 0.9955' ")
                     && $0.contains(" -IFD0:OriginalRawFileName=frame.ARW '/")
-                    && $0.hasSuffix("/Shoot with spaces/frame.dng'")
+                    && $0.hasSuffix("/Shoot with spaces/.frame.desqueeze-work.dng'")
             }, result.stderr)
-            XCTAssertTrue(hasLine("$ \(exiftool) -m -n -T -SubIFD:WhiteLevel ", "/Shoot with spaces/frame.dng'"),
-                          result.stderr)
+            XCTAssertTrue(hasLine("$ \(exiftool) -m -n -T -SubIFD:WhiteLevel ",
+                                  "/Shoot with spaces/.frame.desqueeze-work.dng'"), result.stderr)
             XCTAssertFalse(result.messages.contains { $0.contains(converter) },
                            "a full match does not start Adobe DNG Converter")
         } else {
