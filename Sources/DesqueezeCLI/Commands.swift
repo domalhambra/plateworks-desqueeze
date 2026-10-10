@@ -48,11 +48,6 @@ public struct ToolEnvironment: Sendable {
 /// exactly one JSON object. Progress, `--verbose` and every message go to
 /// standard error. All file work is in `DesqueezeOperations`.
 public enum DesqueezeTool {
-    /// The sentence and the command are the core's, so the window says the
-    /// same words.
-    static let missingExiftool =
-        "\(ToolLocator.exiftoolMissing) Install it with: \(ToolLocator.exiftoolInstallCommand)"
-
     /// - Parameter arguments: the command line with no program name.
     /// - Returns: the exit code. 0, 1 or 2, as the design defines them.
     public static func run(_ arguments: [String], in environment: ToolEnvironment) -> Int32 {
@@ -121,7 +116,8 @@ public enum DesqueezeTool {
             environment.standardError("Test mode: backups go to \(testFolder.path), not to the Trash.")
         }
         guard let exiftool = environment.exiftool else {
-            return fail(missingExiftool, detail: nil, invocation, environment)
+            // The line is the core's, so the MCP server says the same.
+            return fail(ToolLocator.exiftoolMissingLine, detail: nil, invocation, environment)
         }
         let named = resolve(folder, against: environment.workingFolder)
         // The window's rule for what a folder is. A link to a folder is that
