@@ -129,8 +129,28 @@ final class AppModel: ObservableObject {
     /// can convert.
     private var converterAvailable: Bool { converters.canConvert }
 
-    /// For example `216 DNG · 12 ARW to convert`.
+    /// For example `216 DNG · 12 ARW to convert`. With neither converter:
+    /// `216 DNG · 12 ARW cannot be converted: no converter is installed`.
     var countsLine: String? { snapshot?.countsLine(converterAvailable: converterAvailable) }
+
+    /// The one line about the converters, for a folder with a pending ARW
+    /// (design 13.5). Nil when both are installed, and when no ARW is
+    /// pending. With one converter it is a quiet line: every ARW converts.
+    var converterAdvice: String? {
+        snapshot?.converterAdvice(dnglabInstalled: converters.dnglab != nil, adobeInstalled: converters.adobe != nil)
+    }
+
+    /// True when the folder has a pending ARW and neither converter is
+    /// installed. The counts line then says that the ARW files cannot be
+    /// converted, and it and the advice show as the read-only message
+    /// shows. In every other state the two are quiet lines.
+    var arwsCannotConvert: Bool { snapshot?.pendingARWs.isEmpty == false && !converterAvailable }
+
+    /// True for a note that only informs: the DNG that dnglab made with no
+    /// full match (design 13.4). That file is converted, and the result
+    /// keeps its "done" mark (`RunSummary.needsAttention`). Every other
+    /// kind of note is about a file to look at.
+    nonisolated static func isInformation(_ note: FileNote) -> Bool { note.kind == .convertedUnmatched }
 
     /// The messages about the loaded folder. All come from the newest scan.
     var folderMessages: [String] {

@@ -152,6 +152,20 @@ final class FakeBackups: BackupHandling, @unchecked Sendable {
     func trashFile(_ file: URL) throws {}
 }
 
+/// Either converter. It makes an empty DNG beside the ARW, and starts no
+/// program.
+struct FakeConverter: RawConverter {
+    /// The rule that kept the DNG from a full match, as dnglab reports it
+    /// for a frame that the table does not cover. Nil is a full match.
+    var unmatched: AdobeMatch.Rule?
+
+    func convert(_ arw: URL, facts: ARWFacts) throws -> Conversion {
+        let dng = ConverterOutput.url(for: arw)
+        try Data().write(to: dng)
+        return Conversion(dng: dng, unmatched: unmatched)
+    }
+}
+
 /// One model with its fakes, in temporary folders of its own.
 @MainActor
 final class ModelHarness {
@@ -169,14 +183,21 @@ final class ModelHarness {
     private(set) var model: AppModel!
 
     private let base: URL
+    private let converters: RawConverters
     private var watch: AnyCancellable?
 
-    /// - Parameter hasExiftool: false gives a model with no tag reader, as
-    ///   on a Mac with no exiftool.
-    init(hasExiftool: Bool = true) throws {
+    /// - Parameters:
+    ///   - hasExiftool: false gives a model with no tag reader, as on a Mac
+    ///     with no exiftool.
+    ///   - dnglab: the fake that stands for dnglab. Nil: it is not installed.
+    ///   - adobe: the fake that stands for Adobe DNG Converter. Nil: it is
+    ///     not installed.
+    init(hasExiftool: Bool = true, dnglab: FakeConverter? = nil, adobe: FakeConverter? = nil) throws {
         base = FileManager.default.temporaryDirectory
             .appendingPathComponent("desqueeze-app-tests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        // No reader of the facts: every ARW has none, and no program starts.
+        converters = RawConverters(dnglab: dnglab, adobe: adobe, facts: nil)
         model = makeModel(hasExiftool: hasExiftool)
         watch = model.$phase.removeDuplicates().sink { [weak self] in self?.phases.append($0) }
     }
@@ -188,7 +209,7 @@ final class ModelHarness {
     /// its run is in flight, and that run must find nothing, not crash.
     func makeModel(hasExiftool: Bool = true) -> AppModel {
         AppModel(
-            tag: hasExiftool ? tag : nil, converters: .none, backups: backups,
+            tag: hasExiftool ? tag : nil, converters: converters, backups: backups,
             savedFactor: savedFactor, saveFactor: { [weak self] in self?.savedFactor = $0 },
             now: { [weak self] in self?.time ?? 0 }, announce: { [weak self] in self?.announcements.append($0) })
     }

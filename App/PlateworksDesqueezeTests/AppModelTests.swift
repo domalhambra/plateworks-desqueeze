@@ -426,6 +426,120 @@ final class AppModelTests: XCTestCase {
         XCTAssertFalse(h.model.canRun)
     }
 
+    // MARK: The converters (design 13.5)
+
+    private static let adobeIsOptional =
+        "Adobe DNG Converter is not installed. It is an optional backup for photos that dnglab cannot match."
+    private static let dnglabIsFaster = "dnglab is faster and opens no window. Install it with: brew install dnglab"
+
+    /// A model with these converters, and a folder with one DNG and one
+    /// pending ARW loaded in it.
+    private func loaded(dnglab: Bool, adobe: Bool, files: [String] = ["a.dng", "b.ARW"]) async throws -> ModelHarness {
+        let h = try ModelHarness(dnglab: dnglab ? FakeConverter() : nil, adobe: adobe ? FakeConverter() : nil)
+        await h.load(try h.folder("Shoot", files: files))
+        return h
+    }
+
+    func testWithBothConvertersTheWindowSaysNothingExtra() async throws {
+        let h = try await loaded(dnglab: true, adobe: true)
+        defer { h.cleanUp() }
+        XCTAssertEqual(h.model.countsLine, "1 DNG · 1 ARW to convert")
+        XCTAssertNil(h.model.converterAdvice)
+        XCTAssertFalse(h.model.arwsCannotConvert)
+        XCTAssertEqual(h.model.runLabel, "Desqueeze 2 photos")
+    }
+
+    func testWithDnglabAloneTheWindowSaysQuietlyThatAdobeIsAnOptionalBackup() async throws {
+        let h = try await loaded(dnglab: true, adobe: false)
+        defer { h.cleanUp() }
+        XCTAssertEqual(h.model.countsLine, "1 DNG · 1 ARW to convert")
+        XCTAssertEqual(h.model.converterAdvice, Self.adobeIsOptional)
+        XCTAssertFalse(h.model.arwsCannotConvert, "every ARW converts: the line is a quiet one")
+        XCTAssertEqual(h.model.runLabel, "Desqueeze 2 photos")
+        XCTAssertEqual(h.model.folderMessages, [], "the advice is no message that needs attention")
+    }
+
+    func testWithAdobeAloneTheWindowSaysQuietlyThatDnglabIsFaster() async throws {
+        let h = try await loaded(dnglab: false, adobe: true)
+        defer { h.cleanUp() }
+        XCTAssertEqual(h.model.countsLine, "1 DNG · 1 ARW to convert")
+        XCTAssertEqual(h.model.converterAdvice, Self.dnglabIsFaster)
+        XCTAssertFalse(h.model.arwsCannotConvert)
+        XCTAssertEqual(h.model.runLabel, "Desqueeze 2 photos")
+        XCTAssertEqual(h.model.folderMessages, [])
+    }
+
+    // The one state in which the lines are no quiet ones: the ARW files
+    // wait, so both show as the read-only message shows.
+    func testWithNeitherConverterTheWindowSaysThatTheARWFilesCannotConvertAndHowToInstallDnglab() async throws {
+        let h = try await loaded(dnglab: false, adobe: false)
+        defer { h.cleanUp() }
+        XCTAssertEqual(h.model.countsLine, "1 DNG · 1 ARW cannot be converted: no converter is installed")
+        XCTAssertEqual(h.model.converterAdvice, "Install dnglab with: brew install dnglab")
+        XCTAssertTrue(h.model.arwsCannotConvert)
+        XCTAssertEqual(h.model.runLabel, "Desqueeze 1 photo", "the ARW is not in the count")
+        XCTAssertTrue(h.model.canRun, "the DNG still runs")
+    }
+
+    // The lines are about the ARW files that wait. With none, nothing shows.
+    func testWithNoPendingARWNoLineAboutTheConvertersShowsInAnyState() async throws {
+        for (dnglab, adobe) in [(true, true), (true, false), (false, true), (false, false)] {
+            let h = try await loaded(dnglab: dnglab, adobe: adobe, files: ["a.dng"])
+            defer { h.cleanUp() }
+            XCTAssertEqual(h.model.countsLine, "1 DNG", "dnglab \(dnglab), Adobe \(adobe)")
+            XCTAssertNil(h.model.converterAdvice, "dnglab \(dnglab), Adobe \(adobe)")
+            XCTAssertFalse(h.model.arwsCannotConvert, "dnglab \(dnglab), Adobe \(adobe)")
+        }
+    }
+
+    // Before the first scan, and with no folder, there is nothing to say.
+    func testWithNoFolderThereIsNoLineAboutTheConverters() throws {
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        XCTAssertNil(h.model.converterAdvice)
+        XCTAssertFalse(h.model.arwsCannotConvert)
+    }
+
+    // The advice goes away when the run has converted the ARW: the scan
+    // after the run finds no pending file.
+    func testAfterARunThatConvertedTheARWTheAdviceIsGone() async throws {
+        let h = try await loaded(dnglab: true, adobe: false)
+        defer { h.cleanUp() }
+        XCTAssertNotNil(h.model.converterAdvice)
+
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.summary?.convertedByDnglab, 1)
+        XCTAssertEqual(h.model.countsLine, "2 DNG")
+        XCTAssertNil(h.model.converterAdvice)
+    }
+
+    // dnglab alone, and a frame with no full match (design 13.4). The file
+    // is converted. Its note informs, and the result keeps its "done" mark.
+    func testAResultWithOnlyNotesOfADNGWithNoFullMatchDoesNotNeedAttention() async throws {
+        let h = try ModelHarness(dnglab: FakeConverter(unmatched: .noLensCorrection))
+        defer { h.cleanUp() }
+        await h.load(try h.folder("Shoot", files: ["b.ARW", "c.ARW"]))
+
+        h.model.run()
+        await h.runEnds()
+        let summary = try XCTUnwrap(h.model.summary)
+        XCTAssertEqual([summary.convertedByDnglab, summary.set, summary.failed, summary.blocked], [2, 2, 0, 0])
+        XCTAssertEqual(summary.notes.map(\.kind), [.convertedUnmatched, .convertedUnmatched])
+        XCTAssertEqual(summary.notes.map(\.name), ["b.dng", "c.dng"])
+        XCTAssertFalse(summary.needsAttention)
+        XCTAssertFalse(summary.cancelled)
+        XCTAssertEqual(summary.notes.map(AppModel.isInformation), [true, true])
+    }
+
+    // Only that kind of note informs. Every other kind is a file to look at.
+    func testOnlyTheNoteOfADNGWithNoFullMatchIsInformation() {
+        for kind in FileNote.Kind.allCases {
+            let note = FileNote(name: "a.dng", kind: kind, message: "A sentence.", detail: nil)
+            XCTAssertEqual(AppModel.isInformation(note), kind == .convertedUnmatched, "\(kind)")
+        }
+    }
+
     // MARK: The launch arguments
 
     // "The converter" is both converters: dnglab, and Adobe DNG Converter.

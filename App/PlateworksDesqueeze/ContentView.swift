@@ -66,14 +66,22 @@ struct ContentView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
-            if let counts = model.countsLine {
-                // The line that says why the ARW files wait is longer than
-                // the window is wide. It wraps, and is not cut.
-                Text(counts)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+            if !model.arwsCannotConvert {
+                if let counts = model.countsLine {
+                    Text(counts)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                // One converter is missing, and every ARW still converts.
+                // A quiet line: it is no error, and it asks for nothing.
+                // It is longer than the window is wide, so it wraps.
+                if let advice = model.converterAdvice {
+                    SymbolLine(.information, advice, quiet: true)
+                        .font(.callout)
+                        .textSelection(.enabled)
+                }
             }
             // Also beside counts that are there: a scan after the app became
             // active leaves the old counts and turns Run and Remove off.
@@ -82,9 +90,17 @@ struct ContentView: View {
                     .controlSize(.small)
                     .accessibilityLabel("Reading the folder")
             }
-            if !model.folderMessages.isEmpty || model.dropMessage != nil {
+            if model.arwsCannotConvert || !model.folderMessages.isEmpty || model.dropMessage != nil {
                 // One block with one left edge, so the symbols make a column.
                 VStack(alignment: .leading, spacing: 6) {
+                    // Neither converter is installed, and ARW files wait.
+                    // The counts and the install command show as the
+                    // read-only message shows: a symbol, primary text. Both
+                    // lines wrap, and are not cut.
+                    if model.arwsCannotConvert {
+                        if let counts = model.countsLine { zoneMessage(counts) }
+                        if let advice = model.converterAdvice { zoneMessage(advice).textSelection(.enabled) }
+                    }
                     ForEach(model.folderMessages, id: \.self) { zoneMessage($0) }
                     // A wrong drop gets its own line. It never hides a line above.
                     if let message = model.dropMessage { zoneMessage(message) }
@@ -270,7 +286,15 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(summary.notes) { note in
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(note.name).font(.callout.weight(.medium))
+                                // A DNG with no full match is converted.
+                                // Its note informs, so it has the symbol
+                                // of information, and the result above
+                                // keeps its "done" symbol.
+                                if AppModel.isInformation(note) {
+                                    SymbolLine(.information, note.name).font(.callout.weight(.medium))
+                                } else {
+                                    Text(note.name).font(.callout.weight(.medium))
+                                }
                                 Text(note.message).font(.callout)
                                 if let detail = note.detail {
                                     // A restore failure has two lines here.
@@ -300,13 +324,16 @@ struct ContentView: View {
 /// an error. VoiceOver reads the symbol's meaning, then the text.
 private struct SymbolLine: View {
     enum Meaning {
-        case attention, done, stopped
+        /// `information` says "good to know". It is never an error, and it
+        /// asks for nothing.
+        case attention, done, stopped, information
 
         var symbol: String {
             switch self {
             case .attention: return "exclamationmark.triangle.fill"
             case .done: return "checkmark.circle.fill"
             case .stopped: return "stop.circle.fill"
+            case .information: return "info.circle"
             }
         }
 
@@ -315,6 +342,7 @@ private struct SymbolLine: View {
             case .attention: return "Needs attention"
             case .done: return "Done"
             case .stopped: return "Stopped"
+            case .information: return "Information"
             }
         }
 
@@ -322,17 +350,21 @@ private struct SymbolLine: View {
             switch self {
             case .attention: return .orange
             case .done: return .green
-            case .stopped: return .secondary
+            case .stopped, .information: return .secondary
             }
         }
     }
 
     private let meaning: Meaning
     private let text: String
+    private let quiet: Bool
 
-    init(_ meaning: Meaning, _ text: String) {
+    /// - Parameter quiet: true shows the text in the secondary text style,
+    ///   for a line that only informs.
+    init(_ meaning: Meaning, _ text: String, quiet: Bool = false) {
         self.meaning = meaning
         self.text = text
+        self.quiet = quiet
     }
 
     var body: some View {
@@ -341,7 +373,7 @@ private struct SymbolLine: View {
                 .foregroundStyle(meaning.colour)
                 .accessibilityLabel(meaning.spoken)
             Text(text)
-                .foregroundStyle(.primary)
+                .foregroundStyle(quiet ? .secondary : .primary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
