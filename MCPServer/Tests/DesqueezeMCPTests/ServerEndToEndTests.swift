@@ -71,6 +71,42 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertTrue(try XCTUnwrap(tools[1]["description"] as? String).contains("desqueeze_remove"),
                       "run names the tool that reverses it")
 
+        // Design 13: dnglab converts first, and Adobe DNG Converter is the
+        // optional backup. Each description says what is true now.
+        let scanText = try XCTUnwrap(tools[0]["description"] as? String)
+        for phrase in [
+            "\"exiftool\", \"dnglab\" and \"dngConverter\": where the three programs are.",
+            "\"dngConverter\" is the path of Adobe DNG Converter.",
+            "ARW files are converted when \"dnglab\" or \"dngConverter\" has a path.",
+            "dnglab converts first.",
+            "Adobe DNG Converter is the optional backup.",
+            "When both are null, ARW files stay as they are",
+        ] {
+            XCTAssertTrue(scanText.contains(phrase), "scan: \(phrase)")
+        }
+        let runText = try XCTUnwrap(tools[1]["description"] as? String)
+        for phrase in [
+            "dnglab converts first.",
+            "the values that Adobe DNG Converter writes",
+            "Adobe DNG Converter is the optional backup",
+            "\"convertedByDnglab\" and \"convertedByAdobe\"",
+            "Their sum is \"converted\".",
+            "A note of the kind \"convertedUnmatched\" is no failure:",
+            "the note says what the DNG lacks",
+        ] {
+            XCTAssertTrue(runText.contains(phrase), "run: \(phrase)")
+        }
+        XCTAssertEqual((run?["dry_run"]?["description"] as? String)?.contains(
+            "A \"convert\" step names its converter in \"converter\": \"dnglab\" or \"adobe\"."), true)
+        // What was true with one converter, and is false now.
+        for tool in tools {
+            let text = try XCTUnwrap(tool["description"] as? String)
+            for phrase in ["the two programs", "with Adobe DNG Converter.",
+                           "Adobe DNG Converter is not installed, and ARW files stay as they are"] {
+                XCTAssertFalse(text.contains(phrase), "\(tool["name"] ?? ""): \(phrase)")
+            }
+        }
+
         // Scan is read-only. Run and remove change files, destroy nothing,
         // and a second call with the same arguments changes nothing more.
         let scan = try XCTUnwrap(tools[0]["annotations"] as? [String: Any])

@@ -66,6 +66,10 @@ struct ToolDefinition: Sendable {
 /// Each description tells the model what the tool changes, that the change
 /// is reversible with `desqueeze_remove`, and to call `desqueeze_scan`
 /// first. Short, plain sentences: a model reads them before every call.
+///
+/// The descriptions name dnglab first (design 13.6): dnglab converts, and
+/// Adobe DNG Converter is the optional backup. They name the keys of the
+/// reports as `ScanReport` and `RunReport` write them.
 enum ToolCatalog {
     static let all = [scan, run, remove]
 
@@ -80,6 +84,12 @@ enum ToolCatalog {
     private static let dryRun = ToolArgument(
         name: "dry_run", kind: .flag(default: false),
         description: "True changes no file. The result lists what each file would get, in \"steps\".")
+
+    /// Only a run converts, so only its dry run has `convert` steps.
+    private static let dryRunOfARun = ToolArgument(
+        name: dryRun.name, kind: dryRun.kind,
+        description: dryRun.description
+            + " A \"convert\" step names its converter in \"converter\": \"dnglab\" or \"adobe\".")
 
     /// Run and remove change files and destroy nothing: a change is
     /// reversible, and the original is kept until the check passes. A second
@@ -102,8 +112,12 @@ enum ToolCatalog {
             - "pendingARWs": each Sony ARW file that has no DNG yet. desqueeze_run converts these.
             - "orphanBackups": each backup file (name_original) that has lost its DNG.
             - "writable": false means that desqueeze_run and desqueeze_remove can change nothing here.
-            - "exiftool" and "dngConverter": where the two programs are. A null "dngConverter" means \
-            that Adobe DNG Converter is not installed, and ARW files stay as they are.
+            - "exiftool", "dnglab" and "dngConverter": where the three programs are. "dngConverter" is \
+            the path of Adobe DNG Converter. null means that the program is not installed.
+
+            ARW files are converted when "dnglab" or "dngConverter" has a path. dnglab converts first. \
+            Adobe DNG Converter is the optional backup. When both are null, ARW files stay as they are, \
+            and desqueeze_run still sets the DNG files.
             """,
         arguments: [folder],
         annotations: Tool.Annotations(readOnlyHint: true, openWorldHint: false))
@@ -116,8 +130,10 @@ enum ToolCatalog {
             them at the correct shape.
 
             What it changes:
-            1. It converts each Sony ARW file that has no DNG to a new DNG beside it, with Adobe DNG \
-            Converter.
+            1. It converts each Sony ARW file that has no DNG to a new DNG beside it. dnglab converts \
+            first. Its DNG gets the values that Adobe DNG Converter writes, so Lightroom shows the same \
+            photo. Adobe DNG Converter is the optional backup, for a photo that dnglab cannot match. \
+            When neither is installed, ARW files stay as they are.
             2. It sets the DefaultScale tag of every DNG to "<factor> 1". A DNG that has this value \
             already is skipped.
 
@@ -133,9 +149,12 @@ enum ToolCatalog {
             the steps. Then call it with dry_run false.
 
             The result is one JSON object with the counts "converted", "set", "skipped", "blocked" and \
-            "failed", and a note for each file that needs attention. A file that failed or was blocked \
-            is in the notes. It does not make the call an error. "stopped" true means that the run was \
-            cancelled and left work undone.
+            "failed", and a note for each file that has something to say. "convertedByDnglab" and \
+            "convertedByAdobe" say how many ARW files each converter converted. Their sum is \
+            "converted". A file that failed or was blocked is in the notes. It does not make the call \
+            an error. A note of the kind "convertedUnmatched" is no failure: dnglab converted the \
+            file, Adobe DNG Converter is not installed, and the note says what the DNG lacks. \
+            "stopped" true means that the run was cancelled and left work undone.
 
             For photos that are in Lightroom already, tell the user: Metadata › Read Metadata from File.
             """,
@@ -148,7 +167,7 @@ enum ToolCatalog {
             ToolArgument(
                 name: "convert", kind: .flag(default: true),
                 description: "False leaves the ARW files alone. Only the DNG files that exist get the tag."),
-            dryRun,
+            dryRunOfARun,
         ],
         annotations: changesFiles)
 
