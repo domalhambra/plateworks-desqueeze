@@ -295,6 +295,57 @@ final class RawConverterTests: XCTestCase {
         XCTAssertEqual(runner.calls, [])
     }
 
+    // MARK: A file name that is too long (design 13.9)
+
+    /// The sentence of design 13.9. Held here, so a change of the core's
+    /// constant fails the tests.
+    static let nameTooLong = "The file name is too long. Shorten it, then run again."
+
+    func arw(base: String) -> URL { URL(fileURLWithPath: "/tmp/Shoot 1/\(base).ARW") }
+
+    // A file name can have 255 bytes. The work file's name is the base name
+    // with 20 more: a period before it, and `.desqueeze-work.dng` after it.
+    func testAnARWWhoseWorkFileNameIsTooLongStartsNoConverterAndTouchesNothing() {
+        converterWritesItsFile()
+        let long = arw(base: String(repeating: "n", count: 240))
+        XCTAssertThrowsError(try converter().convert(long)) {
+            XCTAssertEqual($0 as? ConvertError, .failedForAll(Self.nameTooLong),
+                           "it holds for every converter, and no file is reported as partial")
+        }
+        XCTAssertEqual(runner.calls, [], "the converter must not start")
+        XCTAssertEqual(disk.checked, [], "no question to the disk about a name that cannot be there")
+        XCTAssertEqual(steps.discarded, [])
+        XCTAssertEqual(steps.renames, [])
+        XCTAssertEqual(disk.paths, [])
+    }
+
+    func testTheLongestBaseNameThatConvertsHas235Bytes() throws {
+        converterWritesItsFile()
+        let longest = arw(base: String(repeating: "n", count: 235))
+        XCTAssertEqual(ConverterOutput.workURL(for: longest).lastPathComponent.utf8.count, 255)
+        XCTAssertEqual(try converter().convert(longest).dng, ConverterOutput.url(for: longest))
+        XCTAssertEqual(runner.calls.count, 1)
+
+        runner.calls = []
+        XCTAssertThrowsError(try converter().convert(arw(base: String(repeating: "n", count: 236)))) {
+            XCTAssertEqual($0 as? ConvertError, .failedForAll(Self.nameTooLong))
+        }
+        XCTAssertEqual(runner.calls, [])
+    }
+
+    // The limit is in bytes of UTF-8, as the file system counts. 118
+    // letters of two bytes each are 236 bytes.
+    func testTheLengthOfANameIsCountedInBytesAndNotInLetters() {
+        converterWritesItsFile()
+        let base = String(repeating: "\u{E9}", count: 118)
+        XCTAssertEqual(base.count, 118)
+        XCTAssertEqual(base.utf8.count, 236)
+        XCTAssertThrowsError(try converter().convert(arw(base: base))) {
+            XCTAssertEqual($0 as? ConvertError, .failedForAll(Self.nameTooLong))
+        }
+        XCTAssertEqual(runner.calls, [])
+    }
+
     // MARK: A leftover file of exiftool (design 13.3)
 
     // exiftool that ended hard in the tag step left

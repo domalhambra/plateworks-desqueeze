@@ -889,6 +889,39 @@ final class DesqueezeJobTests: XCTestCase {
         XCTAssertEqual(try real.names(in: real.shoot), ["frame 1.ARW"])
     }
 
+    // MARK: A file name that is too long (design 13.9)
+
+    // A real folder, and the real converters on scripted programs. The base
+    // name has 240 letters, so the work file's name would have 260 bytes: 5
+    // more than a file name can have. Neither converter starts for that
+    // ARW, the note says what to do, and the run goes on to the next file.
+    func testAnARWWithANameThatIsTooLongIsNotConvertedAndTheRunGoesOn() throws {
+        let real = try RealShoot()
+        defer { removeTemporaryFolder(real.shoot) }
+        let longName = String(repeating: "n", count: 240) + ".ARW"
+        let long = real.shoot.appendingPathComponent(longName)
+        try Data("raw bytes".utf8).write(to: long)
+        let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups
+        let snapshot = FolderSnapshot(folder: real.shoot, dngs: [], pendingARWs: [long, real.arw], orphanBackups: [],
+                                      isWritable: true)
+
+        let summary = DesqueezeJob(tag: tag, converters: real.tools.converters(backups: files), backups: files)
+            .run(snapshot, factor: .noStretch, convert: true)
+
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: longName, kind: .notConverted, message: "Not converted.",
+            detail: "The file name is too long. Shorten it, then run again.")])
+        XCTAssertEqual([summary.converted, summary.failed, summary.unconvertedARWs], [1, 1, 1])
+        let converted = (real.tools.calls(to: ScriptedTools.dnglab) + real.tools.calls(to: ScriptedTools.adobe))
+            .map { URL(fileURLWithPath: $0.arguments.last ?? "").lastPathComponent }
+        XCTAssertFalse(real.tools.runner.calls.contains { call in
+            call.executable != ScriptedTools.exiftool.path && call.arguments.contains { $0.contains(longName) }
+        }, "no converter starts for the ARW with the long name")
+        XCTAssertEqual(converted, [".frame 1.desqueeze-work.dng"], "dnglab converts the other ARW, and only that")
+        XCTAssertEqual(try real.names(in: real.shoot), ["frame 1.ARW", "frame 1.dng", longName].sorted())
+        XCTAssertEqual(try real.names(in: real.trash), [], "nothing goes to the Trash")
+    }
+
     // MARK: A leftover work file (design 13.3, step 1)
 
     /// A real folder with one pending ARW, a folder that stands for the

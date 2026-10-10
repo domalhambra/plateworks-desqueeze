@@ -23,6 +23,8 @@ public enum ConvertError: Error, Equatable {
     ///   exiftool's leftover beside it.
     /// - A folder or a link has the name of that work file or of that
     ///   leftover. The app does not remove it.
+    /// - The name of the work file would be longer than a file name can be
+    ///   (design 13.9).
     ///
     /// `partial` is as for `failed`.
     case failedForAll(String, partial: URL? = nil)
@@ -172,6 +174,12 @@ public enum ConverterOutput {
         return arw.deletingLastPathComponent().appendingPathComponent(".\(base).desqueeze-work.dng")
     }
 
+    /// The most bytes of UTF-8 that a file name can have on the volumes of
+    /// a Mac. The name of the work file is the base name of the ARW and 20
+    /// bytes more, so a base name of more than 235 bytes has no work file
+    /// (design 13.9).
+    public static let longestFileName = 255
+
     /// What a note says after it names a file to delete, when that file is
     /// hidden: the work file is. The only place that makes the sentence.
     public static let hiddenFileHint = "It is a hidden file: in Finder, press Command-Shift-Period to see it."
@@ -228,6 +236,11 @@ public enum ConverterOutput {
 /// as a partial output, and a DNG that this conversion did not make is never
 /// touched.
 ///
+/// 0. **A name that is too long** (design 13.9). When the name of the work
+///    file has more bytes than a file name can have, no program is started
+///    and the disk is asked nothing. A program would fail on that name with
+///    the system's words, or with words about the photo. The failure holds
+///    for every converter, and the sentence says what to do.
 /// 1. **Before the start.** When anything has the name `<base>.dng`, the
 ///    program is not started. That refusal reports no partial output: the
 ///    thing at the name is not ours.
@@ -273,6 +286,11 @@ struct ConverterRules: Sendable {
     /// What every converter says when something has the name `<base>.dng`:
     /// before the start, and at the rename of the work file.
     static let nameTaken = "A DNG with this name exists already. Not converted."
+
+    /// What every converter says when the name of the work file would be
+    /// longer than a file name can be (rule 0). The only place that makes
+    /// this sentence.
+    static let nameTooLong = "The file name is too long. Shorten it, then run again."
 
     /// What a converter says about a file that an earlier run or an earlier
     /// exiftool left, and that the app does not remove. The only place that
@@ -324,6 +342,11 @@ struct ConverterRules: Sendable {
     ) throws -> URL {
         let output = ConverterOutput.url(for: arw)
         let work = ConverterOutput.workURL(for: arw)
+        // Rule 0, before any question to the disk: no file can have this
+        // name, so no converter could write it.
+        guard work.lastPathComponent.utf8.count <= ConverterOutput.longestFileName else {
+            throw ConvertError.failedForAll(Self.nameTooLong)
+        }
         // The scan sends only pending files. This guard holds the rule at the
         // last moment, for a DNG that appeared after the scan.
         guard !exists(output.path) else {

@@ -578,6 +578,52 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
         try assertTheMatch(of: ["SubIFD:WhiteLevel"], isIn: dng, for: facts) // Remove keeps the match.
     }
 
+    /// Starts each program for real, and keeps the name of each one.
+    final class RecordingRunner: ProcessRunner, @unchecked Sendable {
+        private let lock = NSLock()
+        private var names: [String] = []
+
+        var programs: [String] {
+            lock.lock()
+            defer { lock.unlock() }
+            return names
+        }
+
+        func run(_ executable: URL, _ arguments: [String]) throws -> ProcessResult {
+            lock.lock()
+            names.append(executable.lastPathComponent)
+            lock.unlock()
+            return try SystemProcessRunner().run(executable, arguments)
+        }
+    }
+
+    // A real photo under a name of 240 letters (design 13.9). The work
+    // file's name would be longer than a file name can be. Before this
+    // rule, dnglab failed with the system's words, and Adobe DNG Converter
+    // then said that it may not support the file. Now neither starts: only
+    // exiftool runs, for the scan and for the facts.
+    func testARealRunStartsNoConverterForAnARWWithANameThatIsTooLong() throws {
+        let longName = String(repeating: "n", count: 240) + ".ARW"
+        let arw = try copyFixture(as: longName)
+        let arwBefore = try Data(contentsOf: arw)
+        let runner = RecordingRunner()
+        let job = DesqueezeJob(
+            tag: ScaleTag(exiftool: exiftool, runner: runner),
+            converters: RawConverters(exiftool: exiftool, dnglab: dnglab, adobe: ToolLocator().dngConverter(),
+                                      runner: runner, backups: backups),
+            backups: backups)
+
+        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true)
+
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: longName, kind: .notConverted, message: "Not converted.",
+            detail: "The file name is too long. Shorten it, then run again.")])
+        XCTAssertEqual([summary.converted, summary.set, summary.failed, summary.unconvertedARWs], [0, 0, 1, 1])
+        XCTAssertEqual(Set(runner.programs), ["exiftool"], "no converter starts: \(runner.programs)")
+        XCTAssertEqual(try names(), [longName], "the folder holds what it held")
+        XCTAssertEqual(try Data(contentsOf: arw), arwBefore, "the ARW must not change")
+    }
+
     // dnglab alone, and a file that is no photo: failed, with dnglab's words.
     // dnglab made no DNG, so the folder holds what it held.
     //

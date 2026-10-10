@@ -145,6 +145,22 @@ final class DnglabConverterTests: XCTestCase {
         return thrown
     }
 
+    // MARK: A file name that is too long (design 13.9)
+
+    // The rule is `ConverterRules`', so dnglab's converter has it too: no
+    // dnglab starts, and no exiftool.
+    func testAnARWWhoseWorkFileNameIsTooLongStartsNoProgram() {
+        let long = URL(fileURLWithPath: "/tmp/Shoot 1/\(String(repeating: "n", count: 240)).ARW")
+        XCTAssertThrowsError(try converter().convert(long, facts: adapted)) {
+            XCTAssertEqual($0 as? ConvertError,
+                           .failedForAll("The file name is too long. Shorten it, then run again."))
+        }
+        XCTAssertEqual(runner.calls, [], "no dnglab and no exiftool")
+        XCTAssertEqual(disk.checked, [])
+        XCTAssertEqual(tools.discarded, [])
+        XCTAssertEqual(tools.renames, [])
+    }
+
     // MARK: A conversion that passes
 
     func testAFullMatchIsThreeCallsWithTheExactArguments() throws {
