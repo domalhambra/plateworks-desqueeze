@@ -67,9 +67,11 @@ struct ToolDefinition: Sendable {
 /// is reversible with `desqueeze_remove`, and to call `desqueeze_scan`
 /// first. Short, plain sentences: a model reads them before every call.
 ///
-/// The descriptions name dnglab first (design 13.6): dnglab converts, and
-/// Adobe DNG Converter is the optional backup. They name the keys of the
-/// reports as `ScanReport` and `RunReport` write them.
+/// The descriptions name dnglab first (design 13.6), and say who converts the
+/// long way, with the core's sentence (`ConverterText.whoConverts`): "dnglab
+/// converts first" is not the rule. Every sentence that the tool also says is
+/// the core's, so the two cannot differ. They name the keys of the reports as
+/// `ScanReport` and `RunReport` write them.
 enum ToolCatalog {
     static let all = [scan, run, remove]
 
@@ -115,9 +117,9 @@ enum ToolCatalog {
             - "exiftool", "dnglab" and "dngConverter": where the three programs are. "dngConverter" is \
             the path of Adobe DNG Converter. null means that the program is not installed.
 
-            ARW files are converted when "dnglab" or "dngConverter" has a path. dnglab converts first. \
-            Adobe DNG Converter is the optional backup. When both are null, ARW files stay as they are, \
-            and desqueeze_run still sets the DNG files.
+            ARW files are converted when "dnglab" or "dngConverter" has a path. \(ConverterText.whoConverts) \
+            When both are null, ARW files stay as they are, and desqueeze_run still sets the stretch of \
+            the DNG files. To make the ARW files convert, tell the user: \(ToolLocator.dnglabInstallLine)
             """,
         arguments: [folder],
         annotations: Tool.Annotations(readOnlyHint: true, openWorldHint: false))
@@ -130,10 +132,10 @@ enum ToolCatalog {
             them at the correct shape.
 
             What it changes:
-            1. It converts each Sony ARW file that has no DNG to a new DNG beside it. dnglab converts \
-            first. Its DNG gets the values that Adobe DNG Converter writes, so Lightroom shows the same \
-            photo. Adobe DNG Converter is the optional backup, for a photo that dnglab cannot match. \
-            When neither is installed, ARW files stay as they are.
+            1. It converts each Sony ARW file that has no DNG to a new DNG beside it. \
+            \(ConverterText.whoConverts) \(ConverterText.matchedValues) \
+            When neither is installed, ARW files stay as they are. To make them convert, tell the user: \
+            \(ToolLocator.dnglabInstallLine)
             2. It sets the DefaultScale tag of every DNG to "<factor> 1". A DNG that has this value \
             already is skipped.
 
@@ -156,7 +158,7 @@ enum ToolCatalog {
             file, Adobe DNG Converter is not installed, and the note says what the DNG lacks. \
             "stopped" true means that the run was cancelled and left work undone.
 
-            For photos that are in Lightroom already, tell the user: Metadata › Read Metadata from File.
+            When photos are in Lightroom already, tell the user this line: \(RunSummary.lightroomHint)
             """,
         arguments: [
             folder,

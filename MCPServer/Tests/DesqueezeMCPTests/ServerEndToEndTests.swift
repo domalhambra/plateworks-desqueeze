@@ -71,30 +71,46 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertTrue(try XCTUnwrap(tools[1]["description"] as? String).contains("desqueeze_remove"),
                       "run names the tool that reverses it")
 
-        // Design 13: dnglab converts first, and Adobe DNG Converter is the
-        // optional backup. Each description says what is true now.
+        // Design 13.5: "dnglab converts first" is short for the table, and
+        // is not the rule. Each description says it the long way, with the
+        // core's sentence, and says what is true now.
         let scanText = try XCTUnwrap(tools[0]["description"] as? String)
         for phrase in [
             "\"exiftool\", \"dnglab\" and \"dngConverter\": where the three programs are.",
             "\"dngConverter\" is the path of Adobe DNG Converter.",
             "ARW files are converted when \"dnglab\" or \"dngConverter\" has a path.",
-            "dnglab converts first.",
-            "Adobe DNG Converter is the optional backup.",
-            "When both are null, ARW files stay as they are",
+            "dnglab converts each photo that it can match. "
+                + "Adobe DNG Converter, when it is installed, converts the others.",
+            "When both are null, ARW files stay as they are, and desqueeze_run still sets the stretch of "
+                + "the DNG files.",
+            "To make the ARW files convert, tell the user: Install dnglab with: brew install dnglab",
         ] {
             XCTAssertTrue(scanText.contains(phrase), "scan: \(phrase)")
         }
+        XCTAssertTrue(scanText.contains(ConverterText.whoConverts), "scan: the core's sentence")
         let runText = try XCTUnwrap(tools[1]["description"] as? String)
         for phrase in [
-            "dnglab converts first.",
-            "the values that Adobe DNG Converter writes",
-            "Adobe DNG Converter is the optional backup",
+            "dnglab converts each photo that it can match. "
+                + "Adobe DNG Converter, when it is installed, converts the others.",
+            "Each DNG that dnglab makes gets the values that Adobe DNG Converter writes, "
+                + "so Lightroom shows the same photo.",
+            "When neither is installed, ARW files stay as they are. To make them convert, tell the user: "
+                + "Install dnglab with: brew install dnglab",
+            "tell the user this line: Photos already in Lightroom: Metadata › Read Metadata from File.",
             "\"convertedByDnglab\" and \"convertedByAdobe\"",
             "Their sum is \"converted\".",
             "A note of the kind \"convertedUnmatched\" is no failure:",
             "the note says what the DNG lacks",
         ] {
             XCTAssertTrue(runText.contains(phrase), "run: \(phrase)")
+        }
+        for sentence in [ConverterText.whoConverts, ConverterText.matchedValues, ToolLocator.dnglabInstallLine,
+                         RunSummary.lightroomHint] {
+            XCTAssertTrue(runText.contains(sentence), "run: the core's sentence \(sentence)")
+        }
+        for (name, text) in [("scan", scanText), ("run", runText)] {
+            XCTAssertFalse(text.contains("converts first"), "\(name): the short form is not the rule")
+            XCTAssertFalse(text.contains("converts the ARW files"), name)
         }
         XCTAssertEqual((run?["dry_run"]?["description"] as? String)?.contains(
             "A \"convert\" step names its converter in \"converter\": \"dnglab\" or \"adobe\"."), true)
@@ -588,6 +604,16 @@ final class ServerEndToEndTests: ServerTestCase {
         let perFile = max(Date().timeIntervalSince(firstFileDone), 0.001)
         // Enough files for 3 seconds of work after the first file.
         let copies = max(14, Int(3 / perFile) + 2)
+        // Each copy is 11.5 MB. A timing near the floor would make thousands
+        // of them and fill the disk. Past this limit the Mac is too fast for
+        // the test, and the in-process twin pins the rule.
+        let mostCopies = 60
+        if copies > mostCopies {
+            throw XCTSkip("This Mac is too fast for this test: \(copies) files of 11.5 MB would be needed "
+                + "(\(perFile) seconds a file; the limit is \(mostCopies)). The in-process twin, "
+                + "AnsweringTransportTests.testTheStreamStaysOpenWhileACallIsInWorkLongerThanThePatience, "
+                + "pins the rule.")
+        }
         for number in 3...copies { try copyFixture("sample.dng", as: "\(number).dng") }
 
         let run = try server.send("tools/call", toolCall("desqueeze_run", ["folder": folder.path, "factor": 1.5],

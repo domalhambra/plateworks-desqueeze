@@ -72,9 +72,7 @@ enum Program {
             // The Trash in normal use. The test folder when the test
             // variable names one.
             let (backups, testFolder) = try FileBackups.fromEnvironment(environment)
-            return .serve(backups: backups, notice: testFolder.map {
-                "Test mode: backups go to \($0.path), not to the Trash."
-            })
+            return .serve(backups: backups, notice: testFolder.map(FileBackups.testModeNotice(folder:)))
         } catch let error as FileBackups.TestFolderError {
             // The server stops before it reads a message. The words are the
             // core's, so the command line tool says the same.

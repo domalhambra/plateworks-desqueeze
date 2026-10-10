@@ -105,7 +105,13 @@ final class ToolErrorTests: ServerTestCase {
             let text = try refused("desqueeze_run", ["folder": folder.path, "factor": value, "dry_run": true])
             XCTAssertTrue(text.hasPrefix("The factor must be a number from 1 to 4, with at most four decimal places."),
                           "\(value): \(text)")
+            XCTAssertTrue(text.contains(" It was "), "the wording of the tool, from the core: \(text)")
         }
+        // The same sentence as the command line tool's, with the text as given.
+        XCTAssertEqual(try refused("desqueeze_run", ["folder": folder.path, "factor": 5, "dry_run": true]),
+                       "The factor must be a number from 1 to 4, with at most four decimal places. It was 5.")
+        XCTAssertEqual(try refused("desqueeze_run", ["folder": folder.path, "factor": 1.33333, "dry_run": true]),
+                       "The factor must be a number from 1 to 4, with at most four decimal places. It was 1.33333.")
     }
 
     // MARK: The arguments

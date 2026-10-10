@@ -105,7 +105,7 @@ enum ToolCall: Equatable, Sendable {
                     "The argument \"factor\" must be a number, such as 1.5. Text in quotes is not a number.")
             }
             guard let factor = SqueezeFactor(text: text) else {
-                throw ToolFailure("The factor must be \(SqueezeFactor.ruleText). It was \(text).")
+                throw ToolFailure(SqueezeFactor.errorMessage(got: text))
             }
             return factor
         }
