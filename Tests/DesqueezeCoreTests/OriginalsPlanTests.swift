@@ -158,24 +158,45 @@ final class OriginalsPlanTests: XCTestCase {
 
     // MARK: A name that is too long (design 13.9)
 
-    /// A base name of this many bytes, with the extension of an ARW.
-    func arw(baseOf bytes: Int) -> String { String(repeating: "a", count: bytes) + ".ARW" }
+    /// A base name of this many letters, with the extension of an ARW.
+    func arw(baseOf letters: Int, of letter: String = "a") -> String {
+        String(repeating: letter, count: letters) + ".ARW"
+    }
 
-    // The work file of an ARW has the base name and 20 bytes more, and a
-    // file name has at most 255 bytes.
+    // The longest name that the app makes for an ARW is exiftool's
+    // temporary file beside the work file: the base name and 33 more
+    // units. A file name has at most 255 UTF-16 units, in its decomposed
+    // form. So a base name of 222 units is the longest.
     func testTheRuleForANameThatIsTooLong() {
         let folder = h.folder
-        XCTAssertFalse(ConverterOutput.workNameIsTooLong(for: folder.appendingPathComponent(arw(baseOf: 235))))
-        XCTAssertTrue(ConverterOutput.workNameIsTooLong(for: folder.appendingPathComponent(arw(baseOf: 236))))
-        // Bytes of UTF-8, not characters.
-        let wide = String(repeating: "é", count: 118) + ".ARW"
-        XCTAssertTrue(ConverterOutput.workNameIsTooLong(for: folder.appendingPathComponent(wide)))
+        func tooLong(_ name: String) -> Bool {
+            ConverterOutput.nameIsTooLong(for: folder.appendingPathComponent(name))
+        }
+        XCTAssertFalse(tooLong(arw(baseOf: 222)))
+        XCTAssertTrue(tooLong(arw(baseOf: 223)))
+        // Units of UTF-16, not bytes: "あ" is three bytes and one unit.
+        XCTAssertFalse(tooLong(arw(baseOf: 222, of: "\u{3042}")))
+        XCTAssertTrue(tooLong(arw(baseOf: 223, of: "\u{3042}")))
+        // The decomposed form: "é" is one unit as typed, and two on the disk.
+        XCTAssertFalse(tooLong(arw(baseOf: 111, of: "\u{E9}")))
+        XCTAssertTrue(tooLong(arw(baseOf: 112, of: "\u{E9}")))
+    }
+
+    // The rule has no number of its own for the 33 units: it measures the
+    // name that the two functions of the core make. So this test spells
+    // that name, and holds the functions to it.
+    func testTheLongestNameIsExiftoolsTemporaryFileBesideTheWorkFile() {
+        let arw = h.folder.appendingPathComponent("frame 1.ARW")
+        let work = ConverterOutput.workURL(for: arw)
+        XCTAssertEqual(ConverterOutput.exiftoolLeftoverURL(for: work).lastPathComponent,
+                       ".frame 1.desqueeze-work.dng_exiftool_tmp")
+        XCTAssertEqual(ConverterOutput.longestFileName, 255)
     }
 
     // A real run starts no converter for such an ARW, and says "The file
     // name is too long." The dry run must not plan a conversion for it.
     func testAPlanHasNoConvertStepForAnARWWhoseNameIsTooLongAndGivesTheNoteOfTheRun() {
-        let long = arw(baseOf: 236)
+        let long = arw(baseOf: 223)
         let state = h.snapshot(pending: [long, "X.ARW"])
 
         // The run, on the real converters with a scripted runner: no
@@ -209,10 +230,55 @@ final class OriginalsPlanTests: XCTestCase {
         XCTAssertEqual(planned.summary, summary, "the plan and the run give one summary")
     }
 
-    // A name at the limit still converts.
+    // A name at the limit still converts, in each way of counting: 222
+    // letters, 222 "あ", and 111 "é".
     func testAPlanStillConvertsAnARWWhoseNameIsAtTheLimit() {
-        let plan = dryRun(h.snapshot(pending: [arw(baseOf: 235)]))
-        XCTAssertEqual(plan.steps.map(\.action), [.convert, .write, .trashOriginal])
-        XCTAssertEqual(plan.summary.failed, 0)
+        for name in [arw(baseOf: 222), arw(baseOf: 222, of: "\u{3042}"), arw(baseOf: 111, of: "\u{E9}")] {
+            let plan = dryRun(h.snapshot(pending: [name]))
+            XCTAssertEqual(plan.steps.map(\.action), [.convert, .write, .trashOriginal], name)
+            XCTAssertEqual(plan.summary.failed, 0, name)
+        }
+    }
+
+    // The dry run and the run give one answer at each side of the boundary
+    // (design 13.9): the same function decides for both. The run is on the
+    // real converter of Adobe's program, with a fake disk and a fake
+    // program, so no file is written.
+    func testThePlanAndTheRunGiveOneAnswerAtEachSideOfTheBoundary() {
+        let note = "The file name is too long. Shorten it, then run again."
+        for (name, converts) in [(arw(baseOf: 222), true), (arw(baseOf: 223), false),
+                                 (arw(baseOf: 235), false),
+                                 (arw(baseOf: 222, of: "\u{3042}"), true), (arw(baseOf: 223, of: "\u{3042}"), false),
+                                 (arw(baseOf: 111, of: "\u{E9}"), true), (arw(baseOf: 112, of: "\u{E9}"), false)] {
+            h = JobHarness()
+            let state = h.snapshot(pending: [name])
+            let what = "\(name.count - 4) letters of \(name.prefix(1))"
+
+            let disk = FakeDisk()
+            let runner = FakeRunner()
+            runner.handler = { call in
+                disk.paths.insert(FakeAdobe.output(of: call.arguments))
+                return ProcessResult(exitCode: 0, stdout: "", stderr: "")
+            }
+            let adobe = AdobeConverter(
+                executable: ScriptedTools.adobe, runner: runner, discardLeftover: { _ in },
+                fileExists: { disk.exists($0) }, fileSize: { disk.size($0) },
+                fileIsRegular: { disk.isRegularFile($0) },
+                rename: { from, to in
+                    disk.move(from.path, to: to.path)
+                    return .moved
+                })
+            let summary = DesqueezeJob(tag: h.tag, converters: RawConverters(dnglab: nil, adobe: adobe, facts: nil),
+                                       backups: h.backups)
+                .run(state, factor: factor, convert: true, trashOriginals: false)
+            XCTAssertEqual(runner.calls.count, converts ? 1 : 0, "the run: \(what)")
+            XCTAssertEqual(summary.notes.map(\.detail), converts ? [] : [note], "the run: \(what)")
+
+            h = JobHarness()
+            let plan = dryRun(state, trashOriginals: false)
+            XCTAssertEqual(names(plan, .convert), converts ? [name] : [], "the plan: \(what)")
+            XCTAssertEqual(plan.summary.notes.map(\.detail), converts ? [] : [note], "the plan: \(what)")
+            XCTAssertEqual(plan.summary, summary, "the plan and the run give one summary: \(what)")
+        }
     }
 }

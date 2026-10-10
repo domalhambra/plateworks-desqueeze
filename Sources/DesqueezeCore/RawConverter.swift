@@ -23,8 +23,8 @@ public enum ConvertError: Error, Equatable {
     ///   exiftool's leftover beside it.
     /// - A folder or a link has the name of that work file or of that
     ///   leftover. The app does not remove it.
-    /// - The name of the work file would be longer than a file name can be
-    ///   (design 13.9).
+    /// - A name that the conversion needs would be longer than a file name
+    ///   can be (design 13.9).
     ///
     /// `partial` is as for `failed`.
     case failedForAll(String, partial: URL? = nil)
@@ -174,18 +174,33 @@ public enum ConverterOutput {
         return arw.deletingLastPathComponent().appendingPathComponent(".\(base).desqueeze-work.dng")
     }
 
-    /// The most bytes of UTF-8 that a file name can have on the volumes of
-    /// a Mac. The name of the work file is the base name of the ARW and 20
-    /// bytes more, so a base name of more than 235 bytes has no work file
-    /// (design 13.9).
+    /// The most UTF-16 units that a file name can have on the volumes of a
+    /// Mac (design 13.9). Measured 2026-10-10 on APFS, HFS+ and ExFAT: a
+    /// name of 255 "あ", which is 765 bytes of UTF-8, is made, and a name of
+    /// 256 is refused. So the limit is not in bytes.
     public static let longestFileName = 255
 
-    /// True when the name of the work file of `arw` has more bytes than a
-    /// file name can have (design 13.9). No converter starts for such an
-    /// ARW (`ConverterRules`, rule 0), and the dry run plans no conversion
-    /// for it. Both ask here, so the two cannot disagree.
-    public static func workNameIsTooLong(for arw: URL) -> Bool {
-        workURL(for: arw).lastPathComponent.utf8.count > longestFileName
+    /// The longest name that the app makes for `arw`: the temporary file
+    /// that exiftool makes beside the work file while it writes dnglab's
+    /// match, `.<base>.desqueeze-work.dng_exiftool_tmp`. It comes from the
+    /// two functions that make those names, so it follows a change of
+    /// either one.
+    static func longestName(for arw: URL) -> String {
+        exiftoolLeftoverURL(for: workURL(for: arw)).lastPathComponent
+    }
+
+    /// True when the longest name that the app makes for `arw` is longer
+    /// than a file name can be (design 13.9). No converter starts for such
+    /// an ARW (`ConverterRules`, rule 0), and the dry run plans no
+    /// conversion for it. Both ask here, so the two cannot disagree.
+    ///
+    /// The name is counted in UTF-16 units of its decomposed form. HFS+
+    /// stores an accented letter as its two parts, so "é" is two units
+    /// there. The rule is one for both converters, also for Adobe DNG
+    /// Converter, which starts no exiftool on the work file: a name must
+    /// not convert with one converter and fail with the other.
+    public static func nameIsTooLong(for arw: URL) -> Bool {
+        longestName(for: arw).decomposedStringWithCanonicalMapping.utf16.count > longestFileName
     }
 
     /// What a note says after it names a file to delete, when that file is
@@ -244,11 +259,13 @@ public enum ConverterOutput {
 /// as a partial output, and a DNG that this conversion did not make is never
 /// touched.
 ///
-/// 0. **A name that is too long** (design 13.9). When the name of the work
-///    file has more bytes than a file name can have, no program is started
-///    and the disk is asked nothing. A program would fail on that name with
-///    the system's words, or with words about the photo. The failure holds
-///    for every converter, and the sentence says what to do.
+/// 0. **A name that is too long** (design 13.9). The longest name that a
+///    conversion needs is exiftool's temporary file beside the work file
+///    (`ConverterOutput.longestName`). When it has more UTF-16 units than a
+///    file name can have, no program is started and the disk is asked
+///    nothing. A program would fail on that name with the system's words,
+///    or with words about the photo. The failure holds for every converter,
+///    and the sentence says what to do.
 /// 1. **Before the start.** When anything has the name `<base>.dng`, the
 ///    program is not started. That refusal reports no partial output: the
 ///    thing at the name is not ours.
@@ -295,9 +312,9 @@ struct ConverterRules: Sendable {
     /// before the start, and at the rename of the work file.
     static let nameTaken = "A DNG with this name exists already. Not converted."
 
-    /// What every converter says when the name of the work file would be
-    /// longer than a file name can be (rule 0). The only place that makes
-    /// this sentence.
+    /// What every converter says when a name that the conversion needs
+    /// would be longer than a file name can be (rule 0). The only place
+    /// that makes this sentence.
     static let nameTooLong = "The file name is too long. Shorten it, then run again."
 
     /// What a converter says about a file that an earlier run or an earlier
@@ -352,7 +369,7 @@ struct ConverterRules: Sendable {
         let work = ConverterOutput.workURL(for: arw)
         // Rule 0, before any question to the disk: no file can have this
         // name, so no converter could write it.
-        guard !ConverterOutput.workNameIsTooLong(for: arw) else {
+        guard !ConverterOutput.nameIsTooLong(for: arw) else {
             throw ConvertError.failedForAll(Self.nameTooLong)
         }
         // The scan sends only pending files. This guard holds the rule at the

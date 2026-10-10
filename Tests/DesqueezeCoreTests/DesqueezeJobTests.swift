@@ -914,13 +914,14 @@ final class DesqueezeJobTests: XCTestCase {
     // MARK: A file name that is too long (design 13.9)
 
     // A real folder, and the real converters on scripted programs. The base
-    // name has 240 letters, so the work file's name would have 260 bytes: 5
-    // more than a file name can have. Neither converter starts for that
-    // ARW, the note says what to do, and the run goes on to the next file.
+    // name has 223 letters, so exiftool's temporary file beside the work
+    // file would have a name of 256 units: one more than a file name can
+    // have. Neither converter starts for that ARW, the note says what to
+    // do, and the run goes on to the next file.
     func testAnARWWithANameThatIsTooLongIsNotConvertedAndTheRunGoesOn() throws {
         let real = try RealShoot()
         defer { removeTemporaryFolder(real.shoot) }
-        let longName = String(repeating: "n", count: 240) + ".ARW"
+        let longName = String(repeating: "n", count: 223) + ".ARW"
         let long = real.shoot.appendingPathComponent(longName)
         try Data("raw bytes".utf8).write(to: long)
         let files = try FileBackups.fromEnvironment([FileBackups.testFolderVariable: real.trash.path]).backups

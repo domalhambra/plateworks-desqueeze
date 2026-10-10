@@ -303,9 +303,10 @@ final class RawConverterTests: XCTestCase {
 
     func arw(base: String) -> URL { URL(fileURLWithPath: "/tmp/Shoot 1/\(base).ARW") }
 
-    // A file name can have 255 bytes. The work file's name is the base name
-    // with 20 more: a period before it, and `.desqueeze-work.dng` after it.
-    func testAnARWWhoseWorkFileNameIsTooLongStartsNoConverterAndTouchesNothing() {
+    // A file name can have 255 UTF-16 units, and the longest name that the
+    // app makes for an ARW is exiftool's temporary file beside the work
+    // file: the base name and 33 more units. A base of 240 is too long.
+    func testAnARWWhoseNameIsTooLongStartsNoConverterAndTouchesNothing() {
         converterWritesItsFile()
         let long = arw(base: String(repeating: "n", count: 240))
         XCTAssertThrowsError(try converter().convert(long)) {
@@ -319,31 +320,69 @@ final class RawConverterTests: XCTestCase {
         XCTAssertEqual(disk.paths, [])
     }
 
-    func testTheLongestBaseNameThatConvertsHas235Bytes() throws {
-        converterWritesItsFile()
-        let longest = arw(base: String(repeating: "n", count: 235))
-        XCTAssertEqual(ConverterOutput.workURL(for: longest).lastPathComponent.utf8.count, 255)
-        XCTAssertEqual(try converter().convert(longest).dng, ConverterOutput.url(for: longest))
-        XCTAssertEqual(runner.calls.count, 1)
+    /// The longest name that the app makes for an ARW with this base name,
+    /// spelled here and not taken from the core: exiftool's temporary file
+    /// beside the hidden work file.
+    func longestName(base: String) -> String { ".\(base).desqueeze-work.dng_exiftool_tmp" }
 
+    /// Converts an ARW with this base name, and says whether the converter
+    /// started. A refusal must be the sentence of the long name.
+    func converts(base: String, file: StaticString = #filePath, line: UInt = #line) -> Bool {
         runner.calls = []
-        XCTAssertThrowsError(try converter().convert(arw(base: String(repeating: "n", count: 236)))) {
-            XCTAssertEqual($0 as? ConvertError, .failedForAll(Self.nameTooLong))
+        disk.paths = []
+        do {
+            let dng = try converter().convert(arw(base: base)).dng
+            XCTAssertEqual(dng, ConverterOutput.url(for: arw(base: base)), file: file, line: line)
+            XCTAssertEqual(runner.calls.count, 1, file: file, line: line)
+            return true
+        } catch {
+            XCTAssertEqual(error as? ConvertError, .failedForAll(Self.nameTooLong), file: file, line: line)
+            XCTAssertEqual(runner.calls, [], "the converter must not start", file: file, line: line)
+            return false
         }
-        XCTAssertEqual(runner.calls, [])
     }
 
-    // The limit is in bytes of UTF-8, as the file system counts. 118
-    // letters of two bytes each are 236 bytes.
-    func testTheLengthOfANameIsCountedInBytesAndNotInLetters() {
+    // The boundary (design 13.9). A base of 222 letters gives exiftool's
+    // temporary file a name of 255 units, and 223 gives 256. Until
+    // 2026-10-10 the rule counted the work file alone, so a base of 223 to
+    // 235 letters started the converter and then failed in exiftool.
+    func testTheLongestBaseNameThatConvertsHas222Letters() {
         converterWritesItsFile()
-        let base = String(repeating: "\u{E9}", count: 118)
-        XCTAssertEqual(base.count, 118)
-        XCTAssertEqual(base.utf8.count, 236)
-        XCTAssertThrowsError(try converter().convert(arw(base: base))) {
-            XCTAssertEqual($0 as? ConvertError, .failedForAll(Self.nameTooLong))
-        }
-        XCTAssertEqual(runner.calls, [])
+        let longest = String(repeating: "n", count: 222)
+        XCTAssertEqual(longestName(base: longest).utf16.count, 255)
+        XCTAssertTrue(converts(base: longest))
+        XCTAssertFalse(converts(base: longest + "n"), "223 letters: exiftool's temporary file would have 256 units")
+        XCTAssertFalse(converts(base: String(repeating: "n", count: 235)),
+                       "the work file alone fits, and exiftool's temporary file does not")
+    }
+
+    // The file system counts UTF-16 units, not bytes of UTF-8. A name of
+    // 222 "あ" has 666 bytes, and it is one unit for each letter: it
+    // converts. Measured 2026-10-10 on APFS, HFS+ and ExFAT.
+    func testTheLengthOfANameIsCountedInUTF16UnitsAndNotInBytes() {
+        converterWritesItsFile()
+        let longest = String(repeating: "\u{3042}", count: 222)
+        XCTAssertEqual(longestName(base: longest).utf16.count, 255)
+        XCTAssertEqual(longestName(base: longest).utf8.count, 699)
+        XCTAssertTrue(converts(base: longest), "699 bytes, and 255 units")
+        XCTAssertFalse(converts(base: longest + "\u{3042}"))
+    }
+
+    // HFS+ stores an accented letter as its two parts, so the name is
+    // counted in its decomposed form. "é" is one unit as typed, and two
+    // units on the disk: 111 of them are 222 units, and 112 are 224.
+    func testTheLengthOfANameIsCountedInItsDecomposedForm() {
+        converterWritesItsFile()
+        let longest = String(repeating: "\u{E9}", count: 111)
+        XCTAssertEqual(longest.utf16.count, 111, "one unit for each letter, as typed")
+        XCTAssertEqual(longestName(base: longest).decomposedStringWithCanonicalMapping.utf16.count, 255)
+        XCTAssertTrue(converts(base: longest))
+        let tooLong = longest + "\u{E9}"
+        XCTAssertEqual(longestName(base: tooLong).utf16.count, 145, "far under the limit, counted as typed")
+        XCTAssertFalse(converts(base: tooLong), "112 letters are 224 units on the disk")
+        // The same letters, typed in the decomposed form already.
+        XCTAssertTrue(converts(base: String(repeating: "e\u{301}", count: 111)))
+        XCTAssertFalse(converts(base: String(repeating: "e\u{301}", count: 112)))
     }
 
     // MARK: A leftover file of exiftool (design 13.3)

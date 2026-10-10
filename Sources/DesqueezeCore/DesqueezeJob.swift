@@ -30,8 +30,8 @@ import Foundation
 /// program took the name `<base>.dng` while the converter worked, or a
 /// leftover file is in the way: `<base>.dng_exiftool_tmp`, a work file that
 /// the Trash refused, or a folder or a link at the name of the work file.
-/// Or the name of the work file would be longer than a file name can be
-/// (design 13.9).
+/// Or a name that the conversion needs would be longer than a file name can
+/// be (design 13.9).
 /// The ARW is then failed with that converter's words, and the next
 /// converter does not start. The same holds when the Trash refuses the work
 /// file of a failed conversion: a work file that cannot be removed stops
@@ -305,9 +305,9 @@ public struct DesqueezeJob: Sendable {
     /// It walks the files in the order of `run`, and asks the same questions.
     /// It assumes that each write passes, and that each conversion passes
     /// with the first converter of its list. One conversion is known to
-    /// fail before any program starts: an ARW whose work file would have a
-    /// name that is too long (design 13.9). The plan gives it no `convert`
-    /// step, and the note of the run.
+    /// fail before any program starts: an ARW whose name is too long for
+    /// the files that a conversion makes (design 13.9). The plan gives it
+    /// no `convert` step, and the note of the run.
     func plan(_ snapshot: FolderSnapshot, factor: SqueezeFactor, convert: Bool, trashOriginals: Bool,
               remove: Bool = false) -> RunPlan {
         let factor = Self.factor(factor, remove: remove)
@@ -320,7 +320,7 @@ public struct DesqueezeJob: Sendable {
         for pending in arwsToConvert(snapshot, convert: convert && !remove) {
             // The rule of `ConverterRules`, rule 0, which every converter
             // follows: no program starts, and the ARW is failed.
-            guard !ConverterOutput.workNameIsTooLong(for: pending.arw) else {
+            guard !ConverterOutput.nameIsTooLong(for: pending.arw) else {
                 plan.summary.failed += 1
                 plan.summary.notes.append(.notConverted(pending.arw.lastPathComponent,
                                                         detail: ConverterRules.nameTooLong))

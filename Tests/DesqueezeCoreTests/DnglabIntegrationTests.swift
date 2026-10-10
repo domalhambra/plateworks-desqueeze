@@ -605,13 +605,14 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
         }
     }
 
-    // A real photo under a name of 240 letters (design 13.9). The work
-    // file's name would be longer than a file name can be. Before this
-    // rule, dnglab failed with the system's words, and Adobe DNG Converter
-    // then said that it may not support the file. Now neither starts: only
-    // exiftool runs, for the scan and for the facts.
+    // A real photo under a name of 223 letters (design 13.9): the first
+    // length that is too long. exiftool's temporary file beside the work
+    // file would have 256 units, and a file name can have 255. Before the
+    // rule of 2026-10-10, dnglab converted this photo, and exiftool then
+    // failed in the match with the system's words. Now no converter
+    // starts: only exiftool runs, for the scan and for the facts.
     func testARealRunStartsNoConverterForAnARWWithANameThatIsTooLong() throws {
-        let longName = String(repeating: "n", count: 240) + ".ARW"
+        let longName = String(repeating: "n", count: 223) + ".ARW"
         let arw = try copyFixture(as: longName)
         let arwBefore = try Data(contentsOf: arw)
         let runner = RecordingRunner()
@@ -629,6 +630,41 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
         XCTAssertEqual([summary.converted, summary.set, summary.failed, summary.unconvertedARWs], [0, 0, 1, 1])
         XCTAssertEqual(Set(runner.programs), ["exiftool"], "no converter starts: \(runner.programs)")
         XCTAssertEqual(try names(), [longName], "the folder holds what it held")
+        XCTAssertEqual(try Data(contentsOf: arw), arwBefore, "the ARW must not change")
+    }
+
+    // The longest name that converts, with the real dnglab and the real
+    // exiftool: a base of 222 letters. The work file has 242 units, and
+    // exiftool's temporary file beside it has 255, the most that a file
+    // name can have. The photo converts, gets the name of its ARW and the
+    // stretch, and nothing is left beside the two files. dnglab alone: no
+    // Adobe DNG Converter starts here.
+    func testARealPhotoWithTheLongestNameConvertsAndIsTaggedAndLeavesNoFile() throws {
+        let base = String(repeating: "n", count: 222)
+        let arw = try copyFixture(as: base + ".ARW")
+        let arwBefore = try Data(contentsOf: arw)
+        XCTAssertEqual(ConverterOutput.exiftoolLeftoverURL(for: ConverterOutput.workURL(for: arw))
+            .lastPathComponent.utf16.count, 255)
+        let runner = RecordingRunner()
+        let tag = ScaleTag(exiftool: exiftool, runner: runner)
+        let job = DesqueezeJob(
+            tag: tag,
+            converters: RawConverters(exiftool: exiftool, dnglab: dnglab, adobe: nil, runner: runner,
+                                      backups: backups),
+            backups: backups)
+
+        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true, trashOriginals: false)
+
+        XCTAssertEqual([summary.converted, summary.convertedByDnglab, summary.set, summary.failed,
+                        summary.unconvertedARWs], [1, 1, 1, 0, 0], "\(summary.notes)")
+        XCTAssertEqual(summary.notes.filter { $0.kind != .convertedUnmatched }, [],
+                       "only a frame that the table does not cover has a note")
+        XCTAssertTrue(runner.programs.contains("dnglab"), "\(runner.programs)")
+        let dng = folder.appendingPathComponent(base + ".dng")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted(),
+                       [base + ".ARW", base + ".dng"], "no work file, no temporary file and no backup is left")
+        XCTAssertEqual(try read(["IFD0:OriginalRawFileName"], in: dng), [base + ".ARW"])
+        XCTAssertEqual(try tag.read(dng), Scale(horizontal: 1.5, vertical: 1))
         XCTAssertEqual(try Data(contentsOf: arw), arwBefore, "the ARW must not change")
     }
 
