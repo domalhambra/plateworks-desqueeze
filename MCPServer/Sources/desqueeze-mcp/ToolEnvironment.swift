@@ -17,11 +17,12 @@ struct ToolEnvironment: Sendable {
     var backups: BackupHandling
 
     /// Does one tool call, and waits for it. It blocks its thread while
-    /// exiftool and the converter run.
+    /// exiftool and the converters run.
     ///
     /// - Returns: the tool result. A report is a success, also when it holds
     ///   files that failed. A call that could give no report is a tool error
-    ///   with a sentence, and it changed no file.
+    ///   with a sentence, and it changed no file: a folder that could not be
+    ///   read, or a run while another run works in the folder.
     func result(of call: ToolCall, cancel: CancelFlag = CancelFlag(),
                 progress: (RunProgress) -> Void = { _ in }) -> CallTool.Result {
         do {

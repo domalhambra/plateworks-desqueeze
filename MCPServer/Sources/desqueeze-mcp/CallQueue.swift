@@ -3,11 +3,13 @@ import os
 
 /// Runs one tool call at a time.
 ///
-/// The job assumes one run in a folder at a time: two at once can give false
-/// notes (design 12.2). A call that arrives while another runs waits for it.
+/// One run works in a folder at a time (design 13.9). The core holds that
+/// rule with a lock on the folder, and a second run in the folder would be
+/// a tool error. So a call that arrives while another runs waits for it,
+/// and two calls of one client never meet in a folder.
 ///
 /// The work runs on a serial dispatch queue, which has a thread of its own.
-/// A run blocks its thread while exiftool and the converter work. On a
+/// A run blocks its thread while exiftool and a converter work. On a
 /// thread of the Swift concurrency pool, that would hold up the library's
 /// message loop, and a cancel or a ping could not be read.
 ///
