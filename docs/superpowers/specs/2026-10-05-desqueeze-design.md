@@ -768,11 +768,19 @@ and the exit code stays 0. Its note kind is `convertedUnmatched`.
 | Tool | How the app finds it | When it is missing |
 |---|---|---|
 | exiftool | As section 6. | As section 6. |
-| dnglab | `/opt/homebrew/bin/dnglab`, then `/usr/local/bin/dnglab`, then each folder in `PATH` | With Adobe installed: Adobe converts every ARW, and one line says "dnglab is faster and opens no window: `brew install dnglab`". With neither: the ARW files are not converted, the DNG files still run, and the message gives `brew install dnglab`. |
+| dnglab | `/opt/homebrew/bin/dnglab`, then `/usr/local/bin/dnglab`, then each folder in `PATH` | With Adobe installed: Adobe converts every ARW, and one quiet line says "dnglab is faster and opens no window. Install it with: brew install dnglab". With neither: the ARW files are not converted, the DNG files still run, and the message gives `brew install dnglab`. |
 | Adobe DNG Converter | As section 6. It is not part of the app. | One quiet line where the folder summary is, and in the scan text of the command line tool: "Adobe DNG Converter is not installed. It is an optional backup for photos that dnglab cannot match." No error, and no line when no ARW is pending. |
 
 The Run button's N counts the pending ARW files when one converter or the
 other is installed.
+
+"dnglab converts first" is short for the table of 13.4: dnglab converts each
+photo that it can match, and Adobe DNG Converter, when it is installed,
+converts the others. Every text for a user or a model says it the long way.
+
+With neither converter, the counts line carries the warning symbol, and the
+install line below it carries the information symbol: one warning for one
+condition.
 
 ### 13.6 Reports
 
