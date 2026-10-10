@@ -1,8 +1,9 @@
 // swift-tools-version:5.9
 import PackageDescription
 
-// No target here has a dependency outside this package. The MCP server
-// target alone may link one (design, section 12.2).
+// No target here has a dependency outside this package. The MCP server links
+// the MCP library, so it is a package of its own, in `MCPServer/`, and takes
+// `DesqueezeCore` from this package by path (design, section 12.2).
 let package = Package(
     name: "DesqueezeCore",
     platforms: [.macOS(.v14)],

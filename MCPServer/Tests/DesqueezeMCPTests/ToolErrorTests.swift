@@ -1,0 +1,173 @@
+import DesqueezeCore
+import XCTest
+
+/// Each tool error of design 12.2: `isError` is true, the text is a plain
+/// sentence and not JSON, and no file changed.
+///
+/// These tests need exiftool, because a server with no exiftool gives that
+/// error first. They need no photo: the folder holds two small files, and a
+/// call that reached a tool by mistake would change them or fail on them.
+final class ToolErrorTests: ServerTestCase {
+    var server: ServerProcess!
+    var before: [String: [String]] = [:]
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        try requireExiftool()
+        try Data("a photo".utf8).write(to: folder.appendingPathComponent("a.dng"))
+        try Data("a raw photo".utf8).write(to: folder.appendingPathComponent("b.ARW"))
+        before = try state(of: folder)
+        server = try start()
+    }
+
+    /// Calls the tool, and checks that the call is a tool error that changed
+    /// nothing. Returns the sentence.
+    func refused(_ name: String, _ arguments: [String: Any], file: StaticString = #filePath,
+                 line: UInt = #line) throws -> String {
+        let result = try call(server, name, arguments, progressToken: "none", timeout: ServerProcess.shortWait,
+                              file: file, line: line)
+        XCTAssertTrue(result.isError, "isError must be true: \(result.text)", file: file, line: line)
+        XCTAssertEqual(result.progress.count, 0, "no step was done", file: file, line: line)
+        XCTAssertFalse(result.text.hasPrefix("{"), "a sentence, not JSON", file: file, line: line)
+        XCTAssertTrue(result.text.hasSuffix("."), "a whole sentence: \(result.text)", file: file, line: line)
+        XCTAssertEqual(try state(of: folder), before, "no file changed", file: file, line: line)
+        XCTAssertEqual(try names(in: discard), [], file: file, line: line)
+        return result.text
+    }
+
+    // MARK: The folder
+
+    func testARelativeFolderIsRefused() throws {
+        for path in ["Shoot with spaces", "./photos", "~/Pictures", ".", ""] {
+            for (name, arguments) in calls(folder: path) {
+                let text = try refused(name, arguments)
+                XCTAssertTrue(text.contains("absolute path"), "\(name) \(path): \(text)")
+            }
+        }
+    }
+
+    func testAFolderThatDoesNotExistIsRefused() throws {
+        let missing = base.appendingPathComponent("No such folder").path
+        for (name, arguments) in calls(folder: missing) {
+            let text = try refused(name, arguments)
+            XCTAssertEqual(text, "This folder could not be read: \(missing). Nothing is at this path.", name)
+        }
+    }
+
+    func testAFileIsRefused() throws {
+        let file = folder.appendingPathComponent("a.dng").path
+        for (name, arguments) in calls(folder: file) {
+            let text = try refused(name, arguments)
+            XCTAssertEqual(text, "This folder could not be read: \(file). It is a file, not a folder.", name)
+        }
+    }
+
+    func testAPackageIsRefused() throws {
+        let package = base.appendingPathComponent("Thing.app")
+        try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+        try Data("a photo".utf8).write(to: package.appendingPathComponent("inside.dng"))
+        for (name, arguments) in calls(folder: package.path) {
+            let text = try refused(name, arguments)
+            XCTAssertTrue(text.hasPrefix("This folder could not be read: \(package.path). It is a package"),
+                          "\(name): \(text)")
+        }
+        XCTAssertEqual(try Data(contentsOf: package.appendingPathComponent("inside.dng")), Data("a photo".utf8))
+    }
+
+    /// The three tools, each with `folder` and with what else it needs.
+    func calls(folder path: String) -> [(String, [String: Any])] {
+        [("desqueeze_scan", ["folder": path]),
+         ("desqueeze_run", ["folder": path, "factor": 1.5]),
+         ("desqueeze_run", ["folder": path, "factor": 1.5, "dry_run": true]),
+         ("desqueeze_remove", ["folder": path])]
+    }
+
+    // MARK: The factor
+
+    func testARunWithNoFactorIsRefused() throws {
+        let text = try refused("desqueeze_run", ["folder": folder.path])
+        XCTAssertTrue(text.contains("factor"), text)
+        XCTAssertTrue(text.contains("There is no default"), text)
+    }
+
+    func testAFactorThatIsNotANumberIsRefused() throws {
+        let wrong: [Any] = ["1.5", "", true, NSNull(), [1.5], ["value": 1.5]]
+        for value in wrong {
+            let text = try refused("desqueeze_run", ["folder": folder.path, "factor": value])
+            XCTAssertTrue(text.contains("factor") && text.contains("must be a number"), "\(value): \(text)")
+        }
+    }
+
+    func testAFactorOutsideTheRuleIsRefused() throws {
+        // Below 1, above 4, and more than four decimal places.
+        let wrong: [Any] = [0, 0.5, 0.9999, 4.0001, 5, -1.5, 1e9, 1.33333, 1.00001, 2.123456789]
+        for value in wrong {
+            let text = try refused("desqueeze_run", ["folder": folder.path, "factor": value, "dry_run": true])
+            XCTAssertTrue(text.hasPrefix("The factor must be a number from 1 to 4, with at most four decimal places."),
+                          "\(value): \(text)")
+        }
+    }
+
+    // MARK: The arguments
+
+    func testAnUnknownArgumentIsRefused() throws {
+        let scan = try refused("desqueeze_scan", ["folder": folder.path, "factor": 1.5])
+        XCTAssertTrue(scan.contains("\"factor\""), scan)
+        let run = try refused("desqueeze_run", ["folder": folder.path, "factor": 1.5, "dryRun": true])
+        XCTAssertTrue(run.contains("\"dryRun\"") && run.contains("dry_run"), "it names the arguments it has: \(run)")
+        let remove = try refused("desqueeze_remove", ["folder": folder.path, "convert": false])
+        XCTAssertTrue(remove.contains("\"convert\""), remove)
+    }
+
+    func testAnArgumentOfTheWrongTypeIsRefused() throws {
+        let folderTexts = [
+            try refused("desqueeze_scan", ["folder": 5]),
+            try refused("desqueeze_scan", ["folder": [folder.path]]),
+            try refused("desqueeze_remove", ["folder": true]),
+        ]
+        for text in folderTexts { XCTAssertTrue(text.contains("\"folder\" must be text"), text) }
+
+        let flagTexts = [
+            try refused("desqueeze_run", ["folder": folder.path, "factor": 1.5, "dry_run": "true"]),
+            try refused("desqueeze_run", ["folder": folder.path, "factor": 1.5, "convert": 0]),
+            try refused("desqueeze_remove", ["folder": folder.path, "dry_run": 1]),
+            try refused("desqueeze_remove", ["folder": folder.path, "dry_run": NSNull()]),
+        ]
+        for text in flagTexts { XCTAssertTrue(text.contains("must be true or false"), text) }
+    }
+
+    func testAMissingFolderArgumentIsRefused() throws {
+        for name in Self.toolNames {
+            let text = try refused(name, name == "desqueeze_run" ? ["factor": 1.5] : [:])
+            XCTAssertTrue(text.contains("\"folder\""), "\(name): \(text)")
+        }
+        // No `arguments` at all.
+        let id = try server.send("tools/call", ["name": "desqueeze_scan"])
+        XCTAssertTrue(try toolResult(server, id: id, timeout: ServerProcess.shortWait).isError)
+    }
+
+    // MARK: A scan that cannot run
+
+    // The folder is there, and it cannot be listed. The scan fails, so every
+    // tool gives a tool error, and no file is tried.
+    func testAScanThatCannotRunIsAToolError() throws {
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: folder.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path) }
+
+        for (name, arguments) in calls(folder: folder.path) {
+            let result = try call(server, name, arguments, timeout: ServerProcess.shortWait)
+            XCTAssertTrue(result.isError, "\(name): \(result.text)")
+            XCTAssertTrue(result.text.hasPrefix("This folder could not be read: \(folder.path). "), result.text)
+        }
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+        XCTAssertEqual(try state(of: folder), before, "no file changed")
+    }
+
+    // After every refusal, the server still works.
+    func testTheServerGoesOnAfterAToolError() throws {
+        _ = try refused("desqueeze_run", ["folder": folder.path])
+        XCTAssertTrue(try server.result(of: "ping").isEmpty)
+        XCTAssertEqual(try (server.result(of: "tools/list")["tools"] as? [Any])?.count, 3)
+    }
+}
