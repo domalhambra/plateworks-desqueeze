@@ -80,6 +80,18 @@ final class CommandsTests: XCTestCase {
             + "and the result so far is still printed."), text)
     }
 
+    // One run in a folder at a time (design 13.9). A scan and a dry run take
+    // no lock, so the help says what they can show. One line, and the exit
+    // code of a run that did not start.
+    func testHelpSaysWhatAScanShowsWhileARunWorksAndThatASecondRunGivesOne() {
+        h.run("--help")
+        XCTAssertTrue(h.out.lines.contains("While a run works, a scan or a dry run can show a folder in change."),
+                      h.out.text)
+        let text = h.out.lines.map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: " ")
+        XCTAssertTrue(text.contains("a run or a dry run met a read-only folder, another run works in the folder, "
+            + "or exiftool is missing."), text)
+    }
+
     // The core makes the sentences, and the help only wraps them. A word is
     // never cut, and no line is wider than the rule.
     func testWrappedBreaksAtSpacesAndNeverCutsAWord() {
@@ -221,6 +233,43 @@ final class CommandsTests: XCTestCase {
         }
         XCTAssertEqual(h.tools.commands, [], "no tool ran")
         XCTAssertEqual(h.discarded.lines, [])
+    }
+
+    // MARK: One run in a folder at a time (design 13.9)
+
+    // The test holds the lock that a run takes, as another run in this
+    // process would. The lock is the system's own, on a temporary folder.
+    func testARunWhileAnotherRunWorksInTheFolderGivesOneWithTheSentenceAndStartsNoProgram() throws {
+        let sentence = "Another Desqueeze run is working in this folder. Wait for it to end, then run again."
+        try h.touch("A.dng", "X.ARW")
+        h.tools.scales = ["A.dng": "1 1"]
+        guard case .held(let other) = FolderLock.system.take(h.shoot) else { return XCTFail("the lock of the test") }
+        defer { other.release() }
+
+        for arguments in [["run", "Shoot 1", "--factor", "1.5"], ["remove", "Shoot 1"]] {
+            XCTAssertEqual(h.run(arguments), 1, "\(arguments)")
+            XCTAssertEqual(h.err.lines, ["desqueeze: \(sentence)"], "\(arguments)")
+            XCTAssertEqual(h.out.lines, [], "\(arguments)")
+        }
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5", "--json"), 1)
+        let json = try h.json()
+        XCTAssertEqual(json["error"] as? String, sentence)
+        XCTAssertTrue(json["detail"] is NSNull, "the error object has both keys")
+        XCTAssertEqual(json.count, 2)
+        XCTAssertEqual(h.tools.commands, [], "no call to exiftool and none to a converter")
+        XCTAssertEqual(h.discarded.writes, [])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: h.shoot.path).sorted(), ["A.dng", "X.ARW"])
+
+        // A scan and a dry run change no file, so they take no lock.
+        XCTAssertEqual(h.run("scan", "Shoot 1"), 0)
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5", "--dry-run"), 0)
+        XCTAssertEqual(h.run("remove", "Shoot 1", "--dry-run"), 0)
+        XCTAssertEqual(h.tools.scales, ["A.dng": "1 1"])
+
+        // The other run ended.
+        other.release()
+        XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5"), 0)
+        XCTAssertEqual(h.out.lines.first, "1 converted · 2 set · 0 skipped · 0 failed")
     }
 
     // MARK: The tools

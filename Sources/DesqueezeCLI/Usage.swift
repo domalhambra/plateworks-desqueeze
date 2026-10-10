@@ -45,6 +45,7 @@ public enum Usage {
 
         \(wrapped("Progress goes to standard error. Control-C, or a closed Terminal window, stops a run "
             + "after the current file, and the result so far is still printed."))
+        While a run works, a scan or a dry run can show a folder in change.
 
         A change is reversible: remove sets each DNG back. No pixel changes.
         \(RunSummary.lightroomHint)
@@ -53,8 +54,8 @@ public enum Usage {
           0  The command completed, no file failed, and no file was blocked. A
              scan that completed gives 0, also for a read-only folder.
           1  A file failed or was blocked, the run was stopped, the folder could
-             not be read, a run or a dry run met a read-only folder, or exiftool
-             is missing.
+             not be read, a run or a dry run met a read-only folder, another run
+             works in the folder, or exiftool is missing.
           2  The command line was wrong.
         """
 

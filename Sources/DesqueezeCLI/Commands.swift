@@ -144,6 +144,11 @@ public enum DesqueezeTool {
             let result = try work(operations, url)
             environment.standardOutput(result.output)
             return result.exitCode
+        } catch is FolderLock.Busy {
+            // Another run works in the folder (design 13.9). This one did
+            // not start. The sentence is the core's, so the window and the
+            // MCP server say the same.
+            return fail(FolderLock.busyMessage, detail: nil, invocation, environment)
         } catch {
             // Only a scan throws. No file was tried.
             return fail(FolderText.unreadable(path: url.path), detail: describe(error), invocation, environment)
