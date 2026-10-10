@@ -77,12 +77,14 @@ public enum FolderScan {
     /// DNG is waiting to be renamed back. A conversion would make a second
     /// DNG of the same photo, with an older backup beside it.
     ///
-    /// Each claim blocks conversion, on purpose. Neither converter
-    /// overwrites a DNG. For a name that is taken, Adobe DNG Converter
-    /// writes a duplicate, `<base>_1.dng`, and dnglab refuses with exit code
-    /// 6. So a wrong "pending" makes a duplicate or a failed file, and a
-    /// wrong "claimed" only leaves one ARW waiting. Known limit: a DNG that
-    /// was renamed to another shot's base name claims that shot's ARW too.
+    /// Each claim blocks conversion, on purpose. No converter writes over a
+    /// DNG, and none gets a name that is taken: each one writes the hidden
+    /// work file of the ARW, and it does not start when anything has the
+    /// name `<base>.dng` (`ConverterRules`). So a wrong "pending" makes a
+    /// failed file, "A DNG with this name exists already", or a second DNG
+    /// of a photo whose DNG has another name. A wrong "claimed" only leaves
+    /// one ARW waiting. Known limit: a DNG that was renamed to another
+    /// shot's base name claims that shot's ARW too.
     public static func pending(arws: [URL], dngs: [DNGFile], orphanBackups: [URL]) -> [URL] {
         var claimedBaseNames = Set<String>()
         var claimedFileNames = Set<String>()
