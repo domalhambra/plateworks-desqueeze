@@ -44,8 +44,10 @@ final class Gate: @unchecked Sendable {
     }
 }
 
-/// Acts like exiftool on a folder of empty files. `readFolder` returns no
-/// rows, so no scale is known and every run writes every DNG.
+/// Acts like exiftool on a folder of empty files. `readFolder` gives a row
+/// for each file that this fake wrote, with the scale that it wrote, as a
+/// real scan reads it. A file that it never wrote has no row: its scale is
+/// unknown, and a run writes it.
 final class FakeTag: ScaleTagging, @unchecked Sendable {
     /// Holds each write.
     let writeGate = Gate()
@@ -106,8 +108,17 @@ final class FakeTag: ScaleTagging, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         if readsFail { throw TagError.toolFailed("Error: the fake cannot read this folder") }
-        // No row: each scale is unknown, and the job tries each write.
-        return []
+        // A row for each file of this folder that was written. A file with
+        // no row has an unknown scale, and the job tries its write.
+        // Both paths with their links resolved: the scan can name a file
+        // through `/private`, and the folder not.
+        let here = folder.resolvingSymlinksInPath().path
+        return written
+            .filter { URL(fileURLWithPath: $0.key).deletingLastPathComponent().resolvingSymlinksInPath().path == here }
+            .map { path, factor in
+                TagRow(fileName: URL(fileURLWithPath: path).lastPathComponent,
+                       scale: Scale(horizontal: factor.value, vertical: 1), originalRawFileName: nil)
+            }
     }
 
     func write(_ factor: SqueezeFactor, to file: URL) throws {
@@ -166,6 +177,20 @@ struct FakeConverter: RawConverter {
     }
 }
 
+/// The facts of each ARW, as a test sets them. It starts no program.
+struct FakeFacts: ARWFactsReading {
+    /// The facts of a frame from an adapted lens at ISO 800: a full match,
+    /// so dnglab gets the ARW.
+    static let fullMatch = ARWFacts(
+        model: "ILCE-7SM3", iso: 800, daylightLevels: ARWFacts.DaylightLevels(red: 2597, green: 1024, blue: 1556),
+        distortionCorrection: ARWFacts.noCorrectionData, rawFileType: ARWFacts.compressedRaw)
+
+    /// By ARW name. A name with no entry has no facts, and no full match.
+    var facts: [String: ARWFacts]
+
+    func read(_ arws: [URL]) -> [String: ARWFacts] { facts }
+}
+
 /// One model with its fakes, in temporary folders of its own.
 @MainActor
 final class ModelHarness {
@@ -192,12 +217,15 @@ final class ModelHarness {
     ///   - dnglab: the fake that stands for dnglab. Nil: it is not installed.
     ///   - adobe: the fake that stands for Adobe DNG Converter. Nil: it is
     ///     not installed.
-    init(hasExiftool: Bool = true, dnglab: FakeConverter? = nil, adobe: FakeConverter? = nil) throws {
+    ///   - facts: the facts of each ARW, by name. Empty: no ARW has facts,
+    ///     so none has a full match.
+    init(hasExiftool: Bool = true, dnglab: FakeConverter? = nil, adobe: FakeConverter? = nil,
+         facts: [String: ARWFacts] = [:]) throws {
         base = FileManager.default.temporaryDirectory
             .appendingPathComponent("desqueeze-app-tests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        // No reader of the facts: every ARW has none, and no program starts.
-        converters = RawConverters(dnglab: dnglab, adobe: adobe, facts: nil)
+        // The reader of the facts is a fake too: no program starts.
+        converters = RawConverters(dnglab: dnglab, adobe: adobe, facts: FakeFacts(facts: facts))
         model = makeModel(hasExiftool: hasExiftool)
         watch = model.$phase.removeDuplicates().sink { [weak self] in self?.phases.append($0) }
     }

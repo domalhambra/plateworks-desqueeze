@@ -293,7 +293,9 @@ final class AppModel: ObservableObject {
     func run() {
         guard canRun else { return }
         guard let factor else {
-            customError = "Enter \(SqueezeFactor.ruleText)."
+            // The rule and the hint about a comma are the core's, so the
+            // command line tool says the same.
+            customError = "Enter \(SqueezeFactor.ruleText).\(SqueezeFactor.hint(for: customText))"
             return
         }
         customError = nil

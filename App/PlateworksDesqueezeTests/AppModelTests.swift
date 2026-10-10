@@ -447,6 +447,21 @@ final class AppModelTests: XCTestCase {
         XCTAssertNil(h.model.customError)
     }
 
+    // "1,5" breaks the rule, and the rule alone does not say how. The words
+    // are the core's, so the command line tool says them too.
+    func testAFactorWithACommaGetsTheRuleAndTheHintAboutThePeriod() async throws {
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        await h.load(try h.folder("Shoot", files: ["a.dng"]))
+
+        h.model.customText = "1,5"
+        h.model.run()
+        XCTAssertEqual(h.model.customError, "Enter a number from 1 to 4, with at most four decimal places. "
+            + "Use a period for the decimal point.")
+        XCTAssertEqual(h.model.phase, .idle)
+        XCTAssertEqual(h.tag.writes, [])
+    }
+
     func testARunSavesItsFactorAndTheNextModelStartsWithIt() async throws {
         let h = try ModelHarness()
         defer { h.cleanUp() }
@@ -574,6 +589,50 @@ final class AppModelTests: XCTestCase {
 
     // dnglab alone, and a frame with no full match (design 13.4). The file
     // is converted. Its note informs, and the result keeps its "done" mark.
+    // MARK: The lines under the counts of a result (design 4.4)
+
+    // One ARW has a full match, so dnglab gets it. The other has none, so
+    // Adobe DNG Converter gets it. The window then says how many each
+    // converted, with the line that the command line tool prints.
+    func testAfterARunInWhichBothConvertersWorkedTheResultSaysHowManyEachConverted() async throws {
+        let h = try ModelHarness(dnglab: FakeConverter(), adobe: FakeConverter(),
+                                 facts: ["a.ARW": FakeFacts.fullMatch])
+        defer { h.cleanUp() }
+        await h.load(try h.folder("Shoot", files: ["a.ARW", "b.ARW"]))
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.summary?.countsLine, "2 converted · 2 set · 0 skipped · 0 failed")
+        XCTAssertEqual(h.model.summary?.convertersLine, "Converted with dnglab: 1. With Adobe DNG Converter: 1.")
+    }
+
+    func testAfterARunInWhichOneConverterWorkedTheResultHasNoLineAboutTheConverters() async throws {
+        let h = try await loaded(dnglab: false, adobe: true)
+        defer { h.cleanUp() }
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.summary?.converted, 1)
+        XCTAssertNil(h.model.summary?.convertersLine)
+    }
+
+    // The Lightroom line is for a run that set a photo. A run that set
+    // nothing does not show it, as in the command line tool.
+    func testTheLightroomLineShowsOnlyAfterARunThatSetAPhoto() async throws {
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        await h.load(try h.folder("Shoot", files: ["a.dng"]))
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.summary?.set, 1)
+        XCTAssertEqual(h.model.summary?.lightroomLine,
+                       "Photos already in Lightroom: Metadata › Read Metadata from File.")
+
+        // The second run finds the photo at the factor, and sets nothing.
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.summary?.countsLine, "0 set · 1 skipped · 0 failed")
+        XCTAssertNil(h.model.summary?.lightroomLine, "a run that set nothing")
+    }
+
     func testAResultWithOnlyNotesOfADNGWithNoFullMatchDoesNotNeedAttention() async throws {
         let h = try ModelHarness(dnglab: FakeConverter(unmatched: .noLensCorrection))
         defer { h.cleanUp() }

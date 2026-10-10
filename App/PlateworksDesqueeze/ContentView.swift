@@ -283,12 +283,23 @@ struct ContentView: View {
             SymbolLine(summary.needsAttention ? .attention : (summary.cancelled ? .stopped : .done),
                        summary.countsLine)
                 .font(.callout.weight(.medium))
+            // Both converters did work: how many photos each converted. The
+            // core makes the line, and the command line tool shows the same.
+            if let converters = summary.convertersLine {
+                Text(converters)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             if let left = model.unconvertedLine(summary) {
                 Text(left).font(.callout)
             }
-            Text(RunSummary.lightroomHint)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            // Only after a run that set a photo (design 4.4). The core
+            // decides, so the tool shows the line for the same runs.
+            if let lightroom = summary.lightroomLine {
+                Text(lightroom)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             if !summary.notes.isEmpty {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
