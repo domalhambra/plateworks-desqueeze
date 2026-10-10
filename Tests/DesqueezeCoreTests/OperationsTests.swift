@@ -288,6 +288,7 @@ final class OperationsTests: XCTestCase {
             "exiftool", "exiftool", // the match: the write, then the read-back
             "exiftool", "exiftool", // X.dng: the scale, then its check
         ])
+        guard runner.calls.count == 7 else { return XCTFail("\(runner.calls.count) calls, not 7") }
         XCTAssertEqual(runner.calls[2].arguments.map { URL(fileURLWithPath: $0).lastPathComponent },
                        ["convert", "--embed-raw", "false", "X.ARW", ".X.desqueeze-work.dng"])
         XCTAssertEqual(runner.calls[3].arguments.last.map { URL(fileURLWithPath: $0).lastPathComponent },
