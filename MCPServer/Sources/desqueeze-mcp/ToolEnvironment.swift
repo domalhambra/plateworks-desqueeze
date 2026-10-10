@@ -47,11 +47,16 @@ struct ToolEnvironment: Sendable {
             return try ReportJSON.text(try scanned(folder) { try operations.scan(folder) })
         case .run(_, let factor, let convert, let dryRun):
             return try ReportJSON.text(try scanned(folder) {
-                // The server never moves an original (design 14.1).
+                // The server never moves an original (design 14.1). The
+                // value is written here, and no argument of a tool reaches
+                // it: an agent must not be able to remove a user's
+                // originals, by request or by mistake.
                 try operations.run(folder, factor: factor, convert: convert, trashOriginals: false, dryRun: dryRun,
                                    cancel: cancel, progress: progress)
             })
         case .remove(_, let dryRun):
+            // Remove never moves an original, in any front end: the core's
+            // `remove` takes no such request (design 14.2).
             return try ReportJSON.text(try scanned(folder) {
                 try operations.remove(folder, dryRun: dryRun, cancel: cancel, progress: progress)
             })

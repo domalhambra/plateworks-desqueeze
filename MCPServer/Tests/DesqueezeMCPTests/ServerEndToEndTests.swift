@@ -21,6 +21,9 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertNil(capabilities["resources"])
         XCTAssertNil(capabilities["prompts"])
         XCTAssertEqual((result["instructions"] as? String)?.contains("desqueeze_scan"), true)
+        // Design 14.1: the first thing that a model reads says it too.
+        XCTAssertEqual((result["instructions"] as? String)?.contains(
+            "This server never moves an original ARW file to the Trash, and it has no argument for that."), true)
         XCTAssertTrue(try server.result(of: "ping").isEmpty, "a ping gets an empty result")
     }
 
@@ -60,6 +63,10 @@ final class ServerEndToEndTests: ServerTestCase {
                 XCTAssertTrue(description.contains("reversible"), name)
                 XCTAssertTrue(description.contains("ARW files are never changed"), name)
                 XCTAssertTrue(description.contains("dry_run"), name)
+                // Design 12.2 and 14.1: the server never moves an original.
+                XCTAssertTrue(description.contains(
+                    "This server never moves an original ARW file to the Trash, and it has no argument for that. "
+                        + "Only the user can ask for it, in the window or with the command line tool."), name)
             }
         }
         let run = try XCTUnwrap(tools[1]["inputSchema"] as? [String: Any])["properties"] as? [String: [String: Any]]
@@ -122,6 +129,15 @@ final class ServerEndToEndTests: ServerTestCase {
         for (name, text) in [("scan", scanText), ("run", runText)] {
             XCTAssertFalse(text.contains("converts first"), "\(name): the short form is not the rule")
             XCTAssertFalse(text.contains("converts the ARW files"), name)
+        }
+        XCTAssertTrue(runText.contains("\"trashOriginals\" is always false and \"originalsInTrash\" is always 0 "
+            + "in a result of this server."), runText)
+        // No tool has an argument that could ask for the originals.
+        for tool in tools {
+            let schema = try XCTUnwrap(tool["inputSchema"] as? [String: Any])
+            let properties = try XCTUnwrap(schema["properties"] as? [String: Any])
+            XCTAssertEqual(properties.keys.filter { $0.lowercased().contains("trash")
+                || $0.lowercased().contains("original") }, [], "\(tool["name"] ?? "")")
         }
         XCTAssertEqual((run?["dry_run"]?["description"] as? String)?.contains(
             "A \"convert\" step names its converter in \"converter\": \"dnglab\" or \"adobe\"."), true)
@@ -315,6 +331,44 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertEqual(try scanned(), ["already here.dng": "1 1", "frame.dng": "1 1"])
         XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent("frame.ARW")), arwBefore,
                        "the ARW is never changed")
+    }
+
+    // The server has no argument for the originals (design 14.1). A call
+    // that carries one is refused by the rule for an argument that the tool
+    // does not have: it is a tool error, no step runs, and no ARW moves.
+    // The folder holds a real photo that would convert, so a server that
+    // took the argument would move it.
+    func testACallThatAsksToMoveTheOriginalsIsRefusedAndMovesNoARW() throws {
+        try requireFixturesAndTools()
+        try makeShoot()
+        let before = try state(of: folder)
+        let server = try start()
+
+        for name in ["trash_originals", "trashOriginals", "trash-originals"] {
+            let run = try call(server, "desqueeze_run", ["folder": folder.path, "factor": 1.5, name: true],
+                               progressToken: name)
+            XCTAssertTrue(run.isError, "\(name): \(run.text)")
+            XCTAssertEqual(run.text, "desqueeze_run has no argument \"\(name)\". "
+                + "Its arguments are: folder, factor, convert, dry_run.")
+            XCTAssertEqual(run.progress.count, 0, "no step was done")
+            XCTAssertEqual(try names(in: folder), ["already here.dng", "frame.ARW"], "the ARW is where it was")
+            XCTAssertEqual(try state(of: folder), before, "no file changed")
+            XCTAssertEqual(try names(in: discard), [], "nothing was moved")
+        }
+        // A dry run and a remove with the argument are refused too.
+        let dry = try call(server, "desqueeze_run",
+                           ["folder": folder.path, "factor": 1.5, "dry_run": true, "trash_originals": true])
+        XCTAssertTrue(dry.isError, dry.text)
+        let remove = try call(server, "desqueeze_remove", ["folder": folder.path, "trash_originals": true])
+        XCTAssertTrue(remove.isError, remove.text)
+        XCTAssertEqual(try state(of: folder), before)
+
+        // The same call with no such argument runs, and the ARW stays.
+        let run = try call(server, "desqueeze_run", ["folder": folder.path, "factor": 1.5, "dry_run": true])
+        XCTAssertFalse(run.isError, run.text)
+        XCTAssertEqual(try run.json()["trashOriginals"] as? Bool, false)
+        XCTAssertEqual((try run.json()["steps"] as? [NSDictionary])?.map { $0["action"] as? String },
+                       ["convert", "write", "write"])
     }
 
     // `convert` false leaves the ARW, and the report counts it.

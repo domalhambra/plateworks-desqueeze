@@ -67,6 +67,11 @@ struct ToolDefinition: Sendable {
 /// is reversible with `desqueeze_remove`, and to call `desqueeze_scan`
 /// first. Short, plain sentences: a model reads them before every call.
 ///
+/// No tool has an argument that moves an original ARW to the Trash (design
+/// 14.1), and `ToolCall` refuses an argument that a tool does not have. The
+/// descriptions of the two tools that change files say so, with one
+/// sentence (`neverMovesAnOriginal`), and so do the instructions.
+///
 /// The descriptions name dnglab first (design 13.6), and say who converts the
 /// long way, with the core's sentence (`ConverterText.whoConverts`): "dnglab
 /// converts first" is not the rule. Every sentence that the tool also says is
@@ -99,6 +104,13 @@ enum ToolCatalog {
     /// the rule, with the counts of the result. Run and remove both say it.
     private static let lightroomRule = "When \"set\" is above 0 and dry_run was false, tell the user this line: "
         + "\(RunSummary.lightroomHint) Do not say it after a dry run, or when \"set\" is 0."
+
+    /// What run, remove and the instructions say about the originals
+    /// (design 12.2 and 14.1). The window and the command line tool can
+    /// move an original to the Trash, on the user's request for one run.
+    /// This server cannot.
+    static let neverMovesAnOriginal = "This server never moves an original ARW file to the Trash, and it has "
+        + "no argument for that. Only the user can ask for it, in the window or with the command line tool."
 
     /// Run and remove change files and destroy nothing: a change is
     /// reversible, and the original is kept until the check passes. A second
@@ -147,7 +159,7 @@ enum ToolCatalog {
             already is skipped.
 
             It works on the top level of the folder only. Subfolders are not read. ARW files are never \
-            changed. No pixel changes: the tag is metadata.
+            changed. \(neverMovesAnOriginal) No pixel changes: the tag is metadata.
 
             The change is reversible: desqueeze_remove sets every DNG back to no stretch. It does not \
             delete a DNG that this tool converted. Each DNG is written with a backup beside it. The \
@@ -163,7 +175,8 @@ enum ToolCatalog {
             "converted". A file that failed or was blocked is in the notes. It does not make the call \
             an error. A note of the kind "convertedUnmatched" is no failure: dnglab converted the \
             file, Adobe DNG Converter is not installed, and the note says what the DNG lacks. \
-            "stopped" true means that the run was cancelled and left work undone.
+            "stopped" true means that the run was cancelled and left work undone. "trashOriginals" is \
+            always false and "originalsInTrash" is always 0 in a result of this server.
 
             \(lightroomRule)
             """,
@@ -188,7 +201,8 @@ enum ToolCatalog {
             reverses desqueeze_run.
 
             What it changes: one metadata tag in each DNG that has a stretch. It converts nothing and \
-            deletes nothing. ARW files are never changed. It works on the top level of the folder only.
+            deletes nothing. ARW files are never changed. \(neverMovesAnOriginal) It works on the top \
+            level of the folder only.
 
             The change is reversible: desqueeze_run with the factor sets the stretch again. Each DNG is \
             written with a backup beside it. The backup goes to the Trash only after the new tag reads \
@@ -208,6 +222,7 @@ enum ToolCatalog {
     static let instructions = """
         Plateworks Desqueeze sets the DefaultScale tag of DNG photos, so Lightroom shows anamorphic \
         photos at the correct shape. Call desqueeze_scan first. Use dry_run true before a run that \
-        changes files. desqueeze_remove reverses desqueeze_run. The server runs one tool call at a time.
+        changes files. desqueeze_remove reverses desqueeze_run. The server runs one tool call at a time. \
+        \(neverMovesAnOriginal)
         """
 }
