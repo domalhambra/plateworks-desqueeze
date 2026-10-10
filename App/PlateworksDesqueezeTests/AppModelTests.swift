@@ -174,6 +174,61 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(h.announcements, [FolderText.unreadable])
     }
 
+    // MARK: One run in a folder at a time (design 13.9)
+
+    // The test holds the lock that a run takes, as the command line tool
+    // does while it works in the folder. The lock is the system's own, on a
+    // temporary folder.
+    func testARunWhileAnotherRunWorksInTheFolderShowsTheSentenceAndReturnsToIdle() async throws {
+        let sentence = "Another Desqueeze run is working in this folder. Wait for it to end, then run again."
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        let folder = try h.folder("Shoot", files: ["a.dng", "b.dng"])
+        await h.load(folder)
+        guard case .held(let other) = FolderLock.system.take(folder) else { return XCTFail("the lock of the test") }
+        defer { other.release() }
+
+        for click in [h.model.run, h.model.remove] {
+            click()
+            XCTAssertEqual(h.model.phase, .running)
+            await h.runEnds()
+            XCTAssertEqual(h.model.folderMessages, [sentence], "where the message of a failed scan shows")
+            XCTAssertNil(h.model.summary, "no run, so no result")
+            XCTAssertEqual(h.tag.writes, [], "no file was tried")
+            XCTAssertEqual(h.announcements.last, sentence)
+            // The folder is not unreadable: its counts are there, from a new
+            // scan, and the buttons are on again.
+            XCTAssertEqual(h.model.countsLine, "2 DNG")
+            XCTAssertTrue(h.model.canRun)
+            XCTAssertTrue(h.model.canRemove)
+        }
+        XCTAssertEqual(h.phases, [.idle, .running, .rescanning, .idle, .running, .rescanning, .idle])
+
+        // The other run ended. The next click runs, and the sentence is gone.
+        other.release()
+        h.model.run()
+        XCTAssertEqual(h.model.folderMessages, [], "the sentence goes at the next click")
+        await h.runEnds()
+        XCTAssertEqual(h.model.summary?.set, 2)
+        XCTAssertEqual(h.model.folderMessages, [])
+        XCTAssertEqual(h.announcements.last, "2 set · 0 skipped · 0 failed")
+    }
+
+    func testANewFolderTakesTheSentenceOfARefusedRunAway() async throws {
+        let h = try ModelHarness()
+        defer { h.cleanUp() }
+        let folder = try h.folder("Shoot", files: ["a.dng"])
+        await h.load(folder)
+        guard case .held(let other) = FolderLock.system.take(folder) else { return XCTFail("the lock of the test") }
+        defer { other.release() }
+        h.model.run()
+        await h.runEnds()
+        XCTAssertEqual(h.model.folderMessages.count, 1)
+
+        await h.load(try h.folder("Other", files: ["c.dng"]))
+        XCTAssertEqual(h.model.folderMessages, [])
+    }
+
     // MARK: Remove
 
     // The folder has one ARW with no DNG. Remove has no ARW work, so it

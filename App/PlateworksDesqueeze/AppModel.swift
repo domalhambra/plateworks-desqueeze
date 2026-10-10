@@ -43,6 +43,10 @@ final class AppModel: ObservableObject {
     /// The newest step that the job completed. Nil before its first step.
     @Published private(set) var progress: RunProgress?
     @Published private(set) var summary: RunSummary?
+    /// Why the last click on Run or Remove started no run: another run works
+    /// in the folder (design 13.9). The sentence is the core's. Nil after a
+    /// run that started, and after a new folder loads.
+    @Published private(set) var runRefusal: String?
     @Published private(set) var phase = RunPhase.idle
 
     /// Reads and writes the tag. Nil when exiftool is not installed.
@@ -153,10 +157,11 @@ final class AppModel: ObservableObject {
     /// kind of note is about a file to look at.
     nonisolated static func isInformation(_ note: FileNote) -> Bool { note.kind == .convertedUnmatched }
 
-    /// The messages about the loaded folder. All come from the newest scan.
+    /// The messages about the loaded folder. They come from the newest
+    /// scan, and from a click on Run or Remove that started no run.
     var folderMessages: [String] {
         if scanFailed { return [FolderText.unreadable] }
-        return snapshot?.messages ?? []
+        return (runRefusal.map { [$0] } ?? []) + (snapshot?.messages ?? [])
     }
 
     /// The count in the run button: DNG files, plus ARW files that can convert.
@@ -250,6 +255,7 @@ final class AppModel: ObservableObject {
         scanFailed = false
         dropMessage = nil
         summary = nil
+        runRefusal = nil
         progress = nil
         scan(url)
     }
@@ -385,33 +391,42 @@ final class AppModel: ObservableObject {
         job = (flag, work, now())
         phase = .running
         summary = nil
+        runRefusal = nil
         progress = nil
 
         Task {
             for await update in updates { progress = update }
-            let result = try? await work.value
+            let outcome = await work.result
+            let result = try? outcome.get()
+            // Another run works in the folder: in the command line tool, the
+            // MCP server, or a second window. This run did not start.
+            var refused = false
+            if case .failure(let error) = outcome, error is FolderLock.Busy { refused = true }
             job = nil
             // No scan for a window that is about to close: the scan would
             // leave an exiftool process behind the app.
             guard !isQuitting else { return }
             // The job has returned. Cancel has nothing to stop now.
             phase = .rescanning
-            if result == nil {
+            if result == nil, !refused {
                 // The job's own scan failed, so no file was tried.
                 snapshot = nil
                 scanFailed = true
             } else {
+                // Also after a refusal: the other run changes the folder,
+                // and a scan is allowed while it works.
                 await scan(folder).value
             }
             // The result and the new counts arrive together.
             summary = result
+            runRefusal = refused ? FolderLock.busyMessage : nil
             progress = nil
             phase = .idle
             // VoiceOver hears the counts. The result line is new on the
             // screen, and nothing else says so.
-            // With no result, the run's own scan failed, and the window shows
-            // the sentence of an unreadable folder.
-            announce(result?.countsLine ?? FolderText.unreadable)
+            // With no result, the run did not start, or its own scan failed.
+            // The window shows the sentence that VoiceOver hears.
+            announce(result?.countsLine ?? runRefusal ?? FolderText.unreadable)
         }
     }
 }
