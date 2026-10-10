@@ -98,6 +98,17 @@ final class ToolErrorTests: ServerTestCase {
         }
     }
 
+    // A JSON number has no comma, so "1,5" can only come as text. The
+    // refusal then adds the core's words about the period, as the command
+    // line tool and the window do.
+    func testAFactorWithACommaIsRefusedWithTheHintAboutThePeriod() throws {
+        XCTAssertEqual(try refused("desqueeze_run", ["folder": folder.path, "factor": "1,5"]),
+                       "The argument \"factor\" must be a number, such as 1.5. Text in quotes is not a number. "
+                           + "Use a period for the decimal point.")
+        XCTAssertEqual(try refused("desqueeze_run", ["folder": folder.path, "factor": "1.5"]),
+                       "The argument \"factor\" must be a number, such as 1.5. Text in quotes is not a number.")
+    }
+
     func testAFactorOutsideTheRuleIsRefused() throws {
         // Below 1, above 4, and more than four decimal places.
         let wrong: [Any] = [0, 0.5, 0.9999, 4.0001, 5, -1.5, 1e9, 1.33333, 1.00001, 2.123456789]

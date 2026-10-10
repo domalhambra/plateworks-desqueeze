@@ -101,8 +101,12 @@ enum ToolCall: Equatable, Sendable {
             case .int(let number): text = String(number)
             case .double(let number): text = number.description
             default:
+                // A JSON number has no comma, so "1,5" can only come as
+                // text. The core's hint then says what is wrong with it.
+                var hint = ""
+                if case .string(let given) = value { hint = SqueezeFactor.hint(for: given) }
                 throw ToolFailure(
-                    "The argument \"factor\" must be a number, such as 1.5. Text in quotes is not a number.")
+                    "The argument \"factor\" must be a number, such as 1.5. Text in quotes is not a number." + hint)
             }
             guard let factor = SqueezeFactor(text: text) else {
                 throw ToolFailure(SqueezeFactor.errorMessage(got: text))

@@ -93,6 +93,13 @@ enum ToolCatalog {
         description: dryRun.description
             + " A \"convert\" step names its converter in \"converter\": \"dnglab\" or \"adobe\".")
 
+    /// When the model gives the user the Lightroom line: the rule of design
+    /// 4.4, which `RunSummary.lightroomLine` holds for the window and the
+    /// command line tool. The server prints JSON only, so the model applies
+    /// the rule, with the counts of the result. Run and remove both say it.
+    private static let lightroomRule = "When \"set\" is above 0 and dry_run was false, tell the user this line: "
+        + "\(RunSummary.lightroomHint) Do not say it after a dry run, or when \"set\" is 0."
+
     /// Run and remove change files and destroy nothing: a change is
     /// reversible, and the original is kept until the check passes. A second
     /// call with the same arguments changes nothing more.
@@ -158,7 +165,7 @@ enum ToolCatalog {
             file, Adobe DNG Converter is not installed, and the note says what the DNG lacks. \
             "stopped" true means that the run was cancelled and left work undone.
 
-            When photos are in Lightroom already, tell the user this line: \(RunSummary.lightroomHint)
+            \(lightroomRule)
             """,
         arguments: [
             folder,
@@ -191,6 +198,8 @@ enum ToolCatalog {
             the steps. Then call it with dry_run false.
 
             The result is the same JSON object as the result of desqueeze_run, with "factor" "1".
+
+            \(lightroomRule)
             """,
         arguments: [folder, dryRun],
         annotations: changesFiles)

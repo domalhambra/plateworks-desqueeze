@@ -108,6 +108,17 @@ final class ServerEndToEndTests: ServerTestCase {
                          RunSummary.lightroomHint] {
             XCTAssertTrue(runText.contains(sentence), "run: the core's sentence \(sentence)")
         }
+        // Design 4.4: the Lightroom line is for a run that set at least one
+        // photo, and never for a dry run. The server prints JSON only, so
+        // the description gives the model that rule, for run and for remove.
+        let lightroomRule = "When \"set\" is above 0 and dry_run was false, tell the user this line: "
+            + "Photos already in Lightroom: Metadata › Read Metadata from File. "
+            + "Do not say it after a dry run, or when \"set\" is 0."
+        let removeText = try XCTUnwrap(tools[2]["description"] as? String)
+        for (name, text) in [("run", runText), ("remove", removeText)] {
+            XCTAssertTrue(text.contains(lightroomRule), "\(name): \(text)")
+            XCTAssertFalse(text.contains("When photos are in Lightroom already"), "\(name): the rule before 4.4")
+        }
         for (name, text) in [("scan", scanText), ("run", runText)] {
             XCTAssertFalse(text.contains("converts first"), "\(name): the short form is not the rule")
             XCTAssertFalse(text.contains("converts the ARW files"), name)
