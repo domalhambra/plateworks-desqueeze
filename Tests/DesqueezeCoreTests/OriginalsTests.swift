@@ -2,8 +2,8 @@ import XCTest
 @testable import DesqueezeCore
 
 /// The rule for one original (design 14.2), with no job and no tool: the
-/// function that decides, the six sentences of design 14.3, the record of a
-/// file, and the check of a DNG.
+/// function that decides, the eight sentences of design 14.3, the record of
+/// a file, and the check of a DNG.
 final class OriginalsTests: XCTestCase {
     let factor = SqueezeFactor(1.5)!
 
@@ -14,10 +14,14 @@ final class OriginalsTests: XCTestCase {
         var order: [String] = []
     }
 
-    func decide(fullMatch: Bool = true, atTheFactor: Bool = true, dng: DNGCheck = .passed,
+    func decide(fullMatch: Bool = true, atTheFactor: Bool = true, thisRuns: Bool = true, dng: DNGCheck = .passed,
                 original: OriginalState = .same, asked: Asked = Asked()) -> OriginalDecision {
         OriginalDecision.decide(
             hasFullMatch: fullMatch, dngIsAtTheFactor: atTheFactor,
+            dngIsThisRuns: {
+                asked.order.append("this run's")
+                return thisRuns
+            },
             dng: {
                 asked.order.append("dng")
                 return dng
@@ -48,22 +52,45 @@ final class OriginalsTests: XCTestCase {
         XCTAssertEqual(decide(original: .notARegularFile), .keep(.notARegularFile))
     }
 
+    func testAnOriginalThatIsGoneIsNotMovedAndIsNotSaidToStay() {
+        XCTAssertEqual(decide(original: .gone), .keep(.gone))
+    }
+
     func testLine5ADNGThatDidNotPassItsCheckKeepsTheOriginalWithTheDetail() {
         XCTAssertEqual(decide(dng: .failed(detail: "Error: File not found")),
                        .keep(.dngNotChecked(detail: "Error: File not found")))
     }
 
+    // The DNG passes the check of line 5, and it is not the file that this
+    // run made: the case of the review of 2026-10-10.
+    func testLine6ADNGThatIsNotThisRunsFileKeepsTheOriginal() {
+        XCTAssertEqual(decide(thisRuns: false), .keep(.dngChanged))
+    }
+
     // No line alone is enough: with every other line failed, the one that
     // holds does not move the file.
     func testNoSingleLineMovesAnOriginal() {
-        for (fullMatch, atTheFactor, dng, original) in [
-            (true, false, DNGCheck.failed(detail: "x"), OriginalState.changed),
-            (false, true, DNGCheck.failed(detail: "x"), OriginalState.changed),
-            (false, false, DNGCheck.passed, OriginalState.changed),
-            (false, false, DNGCheck.failed(detail: "x"), OriginalState.same),
+        for (fullMatch, atTheFactor, thisRuns, dng, original) in [
+            (true, false, false, DNGCheck.failed(detail: "x"), OriginalState.changed),
+            (false, true, false, DNGCheck.failed(detail: "x"), OriginalState.changed),
+            (false, false, true, DNGCheck.failed(detail: "x"), OriginalState.changed),
+            (false, false, false, DNGCheck.passed, OriginalState.changed),
+            (false, false, false, DNGCheck.failed(detail: "x"), OriginalState.same),
         ] {
-            let decision = decide(fullMatch: fullMatch, atTheFactor: atTheFactor, dng: dng, original: original)
+            let decision = decide(fullMatch: fullMatch, atTheFactor: atTheFactor, thisRuns: thisRuns, dng: dng,
+                                  original: original)
             XCTAssertNotEqual(decision, .move)
+        }
+    }
+
+    // Each line alone, with every other line good, keeps the file.
+    func testEachLineAloneKeepsAnOriginal() {
+        XCTAssertNotEqual(decide(fullMatch: false), .move)
+        XCTAssertNotEqual(decide(atTheFactor: false), .move)
+        XCTAssertNotEqual(decide(thisRuns: false), .move)
+        XCTAssertNotEqual(decide(dng: .failed(detail: "x")), .move)
+        for state in [OriginalState.changed, .notARegularFile, .gone] {
+            XCTAssertNotEqual(decide(original: state), .move)
         }
     }
 
@@ -76,20 +103,31 @@ final class OriginalsTests: XCTestCase {
         XCTAssertEqual(asked.order, [])
     }
 
-    // The second read of the ARW is the last thing before the move.
+    // The order of design 14.2: 6, 5, 4. The DNG is checked first, in two
+    // questions: it is this run's file, and it passes its check. The second
+    // read of the ARW is the last thing before the move.
     func testTheDNGIsCheckedFirstAndTheOriginalIsReadLast() {
         let asked = Asked()
         XCTAssertEqual(decide(asked: asked), .move)
-        XCTAssertEqual(asked.order, ["dng", "original"])
+        XCTAssertEqual(asked.order, ["this run's", "dng", "original"])
+    }
+
+    // The tags of a DNG that is not this run's file say nothing: exiftool
+    // is not asked, and the ARW is not read.
+    func testAfterLine6FailedTheDNGIsNotCheckedAndTheOriginalIsNotRead() {
+        let asked = Asked()
+        XCTAssertEqual(decide(thisRuns: false, dng: .failed(detail: "x"), original: .changed, asked: asked),
+                       .keep(.dngChanged))
+        XCTAssertEqual(asked.order, ["this run's"])
     }
 
     func testAfterAFailedCheckOfTheDNGTheOriginalIsNotRead() {
         let asked = Asked()
         _ = decide(dng: .failed(detail: "x"), original: .changed, asked: asked)
-        XCTAssertEqual(asked.order, ["dng"])
+        XCTAssertEqual(asked.order, ["this run's", "dng"])
     }
 
-    // MARK: The six sentences (design 14.3)
+    // MARK: The eight sentences (design 14.3)
 
     func note(_ reason: OriginalDecision.KeepReason) -> FileNote { .originalKept("frame.ARW", because: reason) }
 
@@ -121,6 +159,20 @@ final class OriginalsTests: XCTestCase {
         XCTAssertEqual(note(.dngNotChecked(detail: "Error: File not found")), FileNote(
             name: "frame.ARW", kind: .originalKept,
             message: "The original stays, because its DNG could not be checked.", detail: "Error: File not found"))
+    }
+
+    func testTheSentenceOfLine6() {
+        XCTAssertEqual(note(.dngChanged), FileNote(
+            name: "frame.ARW", kind: .originalKept,
+            message: "The original stays, because its DNG changed during the run.", detail: nil))
+    }
+
+    // "It stays" would be false for an ARW that is not there.
+    func testTheSentenceForAnOriginalThatIsGoneDoesNotSayThatItStays() {
+        XCTAssertEqual(note(.gone), FileNote(
+            name: "frame.ARW", kind: .originalKept,
+            message: "The original was not in the folder at the end of the run. The app did not move it.",
+            detail: nil))
     }
 
     func testTheSentenceForATrashThatRefusedHasTheSystemsWords() {
@@ -204,10 +256,33 @@ final class OriginalsTests: XCTestCase {
                                                                               nanoseconds: 5, number: 8)), .changed)
     }
 
-    func testAFileThatIsGoneOrWasNeverRecordedIsChanged() {
-        XCTAssertEqual(OriginalState(recorded: recorded, now: nil), .changed)
+    func testAFileThatWasNeverRecordedIsChanged() {
         XCTAssertEqual(OriginalState(recorded: nil, now: recorded), .changed)
-        XCTAssertEqual(OriginalState(recorded: nil, now: nil), .changed)
+    }
+
+    // Nothing has the name now. That is not "changed": the note for
+    // "changed" says that the file stays.
+    func testAFileThatIsNotThereIsGone() {
+        XCTAssertEqual(OriginalState(recorded: recorded, now: nil), .gone)
+        XCTAssertEqual(OriginalState(recorded: nil, now: nil), .gone)
+        XCTAssertEqual(OriginalState(recorded: FakeFiles.notAFile, now: nil), .gone)
+    }
+
+    // The comparison of lines 4 and 6: both records, and every fact equal.
+    func testTwoRecordsAreTheSameFileOnlyWhenBothAreThereAndEqual() {
+        let same = FakeFiles.file(size: 100, modified: 1_000, nanoseconds: 5, number: 7)
+        XCTAssertTrue(FileRecord.isTheSameFile(recorded: recorded, now: same))
+        XCTAssertFalse(FileRecord.isTheSameFile(recorded: recorded, now: nil))
+        XCTAssertFalse(FileRecord.isTheSameFile(recorded: nil, now: recorded))
+        XCTAssertFalse(FileRecord.isTheSameFile(recorded: nil, now: nil), "no record is no proof")
+        for other in [FakeFiles.file(size: 101, modified: 1_000, nanoseconds: 5, number: 7),
+                      FakeFiles.file(size: 100, modified: 1_001, nanoseconds: 5, number: 7),
+                      FakeFiles.file(size: 100, modified: 1_000, nanoseconds: 6, number: 7),
+                      FakeFiles.file(size: 100, modified: 1_000, nanoseconds: 5, number: 8),
+                      FileRecord(isRegularFile: false, size: 100, modifiedSeconds: 1_000, modifiedNanoseconds: 5,
+                                 fileNumber: 7)] {
+            XCTAssertFalse(FileRecord.isTheSameFile(recorded: recorded, now: other), "\(other)")
+        }
     }
 
     func testALinkOrAFolderIsNeverTheSame() {
@@ -440,5 +515,39 @@ final class OriginalsTests: XCTestCase {
         XCTAssertEqual(state.convertibleARWs(converterAvailable: true), 2)
         XCTAssertEqual(state.convertibleARWs(converterAvailable: false), 0)
         XCTAssertEqual(h.snapshot(dngs: [h.dng("A.dng")]).convertibleARWs(converterAvailable: true), 0)
+    }
+
+    // An ARW whose name is too long gets no converter (design 13.9), so no
+    // run can move it. The box and its count follow the rule of the run and
+    // of the plan: 222 letters convert, and 223 do not.
+    func testAnARWWhoseNameIsTooLongIsNoOriginalThatCanMove() {
+        let h = JobHarness()
+        let longest = String(repeating: "n", count: 222) + ".ARW"
+        let tooLong = String(repeating: "n", count: 223) + ".ARW"
+        XCTAssertEqual(h.snapshot(pending: [tooLong]).convertibleARWs(converterAvailable: true), 0,
+                       "the box does not show for this folder")
+        XCTAssertEqual(h.snapshot(pending: [longest]).convertibleARWs(converterAvailable: true), 1)
+        let mixed = h.snapshot(dngs: [h.dng("A.dng")], pending: ["X.ARW", longest, tooLong])
+        XCTAssertEqual(mixed.convertibleARWs(converterAvailable: true), 2)
+        XCTAssertEqual(mixed.convertibleARWs(converterAvailable: false), 0)
+
+        // The plan has a step for the same ARW files, and for no other.
+        let plan = h.job().plan(mixed, factor: factor, convert: true, trashOriginals: true)
+        XCTAssertEqual(plan.steps.filter { $0.action == .convert }.count, 2)
+        XCTAssertEqual(plan.steps.filter { $0.action == .trashOriginal }.map(\.name), ["X.ARW", longest])
+        XCTAssertEqual(plan.summary.originalsInTrash, mixed.convertibleARWs(converterAvailable: true))
+    }
+
+    // The run button still counts an ARW whose name is too long: the run
+    // takes the file, and its note says what to do. With the file out of
+    // the count, a folder that holds only this file would have no button
+    // to press, and no word about why.
+    func testTheRunCountKeepsAnARWWhoseNameIsTooLong() {
+        let h = JobHarness()
+        let tooLong = String(repeating: "n", count: 223) + ".ARW"
+        XCTAssertEqual(h.snapshot(pending: [tooLong]).runCount(converterAvailable: true), 1)
+        XCTAssertEqual(h.snapshot(pending: [tooLong]).runCount(converterAvailable: false), 0)
+        XCTAssertEqual(h.snapshot(dngs: [h.dng("A.dng")], pending: ["X.ARW", tooLong])
+            .runCount(converterAvailable: true), 3)
     }
 }

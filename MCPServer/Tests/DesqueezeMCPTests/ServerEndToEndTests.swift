@@ -899,7 +899,8 @@ final class ServerEndToEndTests: ServerTestCase {
         XCTAssertEqual(server.unfinishedOutput, "", "the output ends with a line end")
         XCTAssertGreaterThanOrEqual(server.outputLines.count, 14)
         for line in server.outputLines { XCTAssertTrue(Self.isJSONRPC(line), "not a JSON-RPC line: \(line)") }
-        XCTAssertTrue(server.errorText.contains("Test mode: backups go to \(discard.path), not to the Trash."),
+        XCTAssertTrue(server.errorText.contains(
+                          "Test mode: every file that would go to the Trash goes to \(discard.path)."),
                       "the notice is on standard error: \(server.errorText)")
     }
 }

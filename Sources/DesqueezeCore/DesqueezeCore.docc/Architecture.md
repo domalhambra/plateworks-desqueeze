@@ -110,12 +110,16 @@ behind each step.
 8. **Move the originals, only on request.** This step exists only when the
    caller gave `trashOriginals` as true, and never for Remove. It starts
    after the tag of the last DNG, and not after a cancel. For each ARW that
-   this run converted, ``OriginalDecision/decide(hasFullMatch:dngIsAtTheFactor:dng:original:)``
-   says "move" or "keep". The check of the DNG is ``DNGCheck``, with one
-   exiftool read (``ScaleTagging/readOriginalCheck(_:)``). The ARW is
-   compared with its ``FileRecord`` from before the conversion, as the last
-   thing before the move. The move is ``BackupHandling/trashFile(_:)``,
-   once. An ARW that stays gets a note of the kind `originalKept`.
+   this run converted, ``OriginalDecision/decide(hasFullMatch:dngIsAtTheFactor:dngIsThisRuns:dng:original:)``
+   says "move" or "keep". The DNG must be the file that this run made: the
+   run takes its ``FileRecord`` after the conversion and after the tag step,
+   and compares the first before the tag step and the second here
+   (``FileRecord/isTheSameFile(recorded:now:)``). The check of the DNG is
+   ``DNGCheck``, with one exiftool read
+   (``ScaleTagging/readOriginalCheck(_:)``). The ARW is compared with its
+   ``FileRecord`` from before the conversion, as the last thing before the
+   move. The move is ``BackupHandling/trashFile(_:)``, once. An ARW that
+   stays gets a note of the kind `originalKept`.
 
 A cancel is honored between files, never in the middle of one. The result
 is a ``RunSummary``: the counts, and the notes.

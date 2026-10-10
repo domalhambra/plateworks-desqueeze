@@ -169,7 +169,7 @@ final class ExitCodeTests: XCTestCase {
         h.tools.scales = ["A.dng": "1 1"]
         h.testBackupFolder = h.base
         XCTAssertEqual(h.run("run", "Shoot 1", "--factor", "1.5", "--json"), 0)
-        XCTAssertEqual(h.err.lines.first, "Test mode: backups go to \(h.base.path), not to the Trash.")
+        XCTAssertEqual(h.err.lines.first, "Test mode: every file that would go to the Trash goes to \(h.base.path).")
         _ = try h.json()
 
         h.testBackupFolder = nil

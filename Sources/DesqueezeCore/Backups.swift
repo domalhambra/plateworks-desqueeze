@@ -8,9 +8,10 @@ public protocol BackupHandling: Sendable {
     /// Replaces the DNG with its backup. The backup file is consumed.
     func restoreBackup(for dng: URL) throws
     /// Moves a file that is not a backup to the Trash. The job uses it for
-    /// the partial output of a failed conversion (design 4.3), and each
-    /// converter for the work file that an earlier run left, and exiftool's
-    /// leftover beside it (design 13.3).
+    /// the partial output of a failed conversion (design 4.3), and for an
+    /// original ARW on request (design 14.2). Each converter uses it for
+    /// the work file that an earlier run left, and exiftool's leftover
+    /// beside it (design 13.3).
     /// It goes where a backup goes, so a test that injects the Trash for
     /// backups injects it for these files too.
     func trashFile(_ file: URL) throws
@@ -74,11 +75,11 @@ public struct FileBackups: BackupHandling {
 /// - Its value must be an absolute path to a folder that exists. Any other
 ///   value is an error, and the tool stops before it reads a photo folder.
 ///   So `=1`, or an empty value, starts nothing.
-/// - A backup, the partial output of a failed conversion, or the leftover
-///   work file of an earlier run is moved to that folder. Nothing is ever
-///   removed, and no file there is replaced. The
-///   worst case is a file in a folder that the person named, in place of the
-///   Trash.
+/// - Every file that would go to the Trash is moved to that folder: a
+///   backup, the partial output of a failed conversion, the leftover work
+///   file of an earlier run, and an original ARW on request (design 14.2).
+///   Nothing is ever removed, and no file there is replaced. The worst case
+///   is a file in a folder that the person named, in place of the Trash.
 /// - A front end that takes the folder must say so on standard error.
 /// - Only `fromEnvironment` reads the variable. The window never calls it.
 extension FileBackups {
@@ -86,9 +87,13 @@ extension FileBackups {
     public static let testFolderVariable = "DESQUEEZE_TEST_BACKUP_FOLDER"
 
     /// The notice that a front end gives on standard error when it takes the
-    /// folder. The tool and the MCP server both say it.
+    /// folder. The tool and the MCP server both say it. The only place that
+    /// makes the sentence.
+    ///
+    /// It does not say "backups": the folder gets every file that the
+    /// Trash would get, and an original ARW is one of them.
     public static func testModeNotice(folder: URL) -> String {
-        "Test mode: backups go to \(folder.path), not to the Trash."
+        "Test mode: every file that would go to the Trash goes to \(folder.path)."
     }
 
     /// The variable is set, and its value is not an absolute path to a folder.

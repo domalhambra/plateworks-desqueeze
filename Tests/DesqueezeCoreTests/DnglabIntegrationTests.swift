@@ -784,6 +784,81 @@ final class DnglabRunIntegrationTests: RealDnglabTestCase {
         XCTAssertEqual(summary.originalsLine, "Originals moved to the Trash: 0 of 1.")
     }
 
+    /// True once, from any thread.
+    final class Once: @unchecked Sendable {
+        private let lock = NSLock()
+        private var done = false
+
+        func first() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            if done { return false }
+            done = true
+            return true
+        }
+    }
+
+    // The case of the review of 2026-10-10, with the real tools (design
+    // 14.2, line 6). After the conversion, an outside rename puts the DNG
+    // of another `frame.ARW` at `frame.dng`. That DNG names `frame.ARW`,
+    // and the tag step gives it the chosen factor, so line 5 passes for it.
+    // Before line 6, the ARW moved, though its own DNG was gone. Now it
+    // stays: the DNG at the name is not the file that this run made.
+    //
+    // The hook is the job's read of the disk. The rename comes directly
+    // after the first record of the DNG, so it is between the conversion
+    // and the tag step.
+    func testARealDNGOfAnotherFrameThatTakesTheNameAfterTheConversionKeepsTheARW() throws {
+        let arw = try copyFixture(as: "frame.ARW")
+        let facts = try factsOfACoveredFrame(arw)
+        let before = try Data(contentsOf: arw)
+        // Another conversion of a file with the same name, in another
+        // folder: a second DNG that names `frame.ARW`.
+        let elsewhere = folder.deletingLastPathComponent().appendingPathComponent("Another shoot")
+        try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: true)
+        let other = try converter.convert(try copyFixture(as: "frame.ARW", into: elsewhere), facts: facts).dng
+        let otherNumber = try XCTUnwrap(FileRecord.read(atPath: other.path)).fileNumber
+        let (trash, backups) = try makeTrash()
+        let dng = folder.appendingPathComponent("frame.dng")
+        let once = Once()
+        let job = DesqueezeJob(
+            tag: tag,
+            converters: RawConverters(exiftool: exiftool, dnglab: dnglab, adobe: nil, backups: backups),
+            backups: backups,
+            fileRecord: { path in
+                let record = FileRecord.read(atPath: path)
+                let url = URL(fileURLWithPath: path)
+                if url.lastPathComponent == "frame.dng", url.deletingLastPathComponent().lastPathComponent
+                    == "Shoot with spaces", once.first() {
+                    // The outside rename. It replaces the run's own DNG.
+                    _ = rename(other.path, path)
+                }
+                return record
+            })
+
+        let summary = try job.run(folder: folder, factor: SqueezeFactor(1.5)!, convert: true, trashOriginals: true)
+
+        XCTAssertEqual(try names(), ["frame.ARW", "frame.dng"], "the ARW stays")
+        XCTAssertEqual(try Data(contentsOf: arw), before, "with its bytes")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: trash.path), ["frame.dng_original"],
+                       "only the backup of the tag step went to the injected trash")
+        XCTAssertEqual(summary.notes, [FileNote(
+            name: "frame.ARW", kind: .originalKept,
+            message: "The original stays, because its DNG changed during the run.", detail: nil)])
+        XCTAssertEqual(summary.originalsLine, "Originals moved to the Trash: 0 of 1.")
+        // The DNG at the name is tagged as any DNG in the folder is.
+        XCTAssertEqual([summary.converted, summary.set, summary.failed], [1, 1, 0])
+        XCTAssertEqual(try tag.read(dng), Scale(horizontal: 1.5, vertical: 1))
+        // It is the other frame's DNG, in the file that exiftool wrote from
+        // it: the backup in the trash is the file that was renamed in.
+        XCTAssertEqual(FileRecord.read(atPath: trash.appendingPathComponent("frame.dng_original").path)?.fileNumber,
+                       otherNumber)
+        // Line 5 alone holds for it. Only line 6 keeps the ARW.
+        XCTAssertEqual(DNGCheck.check("frame.dng", record: FileRecord.read(atPath: dng.path), arw: "frame.ARW",
+                                      factor: SqueezeFactor(1.5)!, tags: { try self.tag.readOriginalCheck(dng) }),
+                       .passed)
+    }
+
     // dnglab alone, and a file that is no photo: failed, with dnglab's words.
     // dnglab made no DNG, so the folder holds what it held.
     //

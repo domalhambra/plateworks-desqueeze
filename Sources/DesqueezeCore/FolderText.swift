@@ -154,16 +154,30 @@ extension FolderSnapshot {
     }
 
     /// The photos a run works on: the DNG files, plus the pending ARW files
-    /// that can convert. With neither converter the ARW files are not in it.
+    /// that a converter gets. With neither converter the ARW files are not
+    /// in it.
+    ///
+    /// A pending ARW whose name is too long is in it (design 13.9). The run
+    /// takes that file and converts nothing, and its note says what to do.
+    /// With the file out of this count, a folder that holds only such a
+    /// file would have no run button to press, and no word about why. The
+    /// originals are counted apart, by `convertibleARWs`.
     public func runCount(converterAvailable: Bool) -> Int {
-        dngs.count + convertibleARWs(converterAvailable: converterAvailable)
+        dngs.count + (converterAvailable ? pendingARWs.count : 0)
     }
 
     /// The pending ARW files that a run can convert, and so the originals
-    /// that a run can move to the Trash (design 14.4): every pending ARW
-    /// when one converter or the other is installed, and 0 with neither.
+    /// that a run can move to the Trash (design 14.4). It is 0 with neither
+    /// converter. An ARW whose name is too long for the files of a
+    /// conversion is not in it (design 13.9): no converter starts for it.
+    ///
+    /// The rule for the name is `ConverterOutput.nameIsTooLong`, which the
+    /// run and the dry run ask. So the box of the window does not show for
+    /// a folder in which no ARW can convert, and its count is the count of
+    /// the `trashOriginal` steps of a dry run.
     public func convertibleARWs(converterAvailable: Bool) -> Int {
-        converterAvailable ? pendingARWs.count : 0
+        guard converterAvailable else { return 0 }
+        return pendingARWs.filter { !ConverterOutput.nameIsTooLong(for: $0) }.count
     }
 
     /// The messages about this folder, as the window shows them: at most

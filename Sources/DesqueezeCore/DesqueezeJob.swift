@@ -61,6 +61,10 @@ import Foundation
 /// Remove never moves an original, whatever it is given. With the request,
 /// the run has a fifth step, after the tag of the last DNG: for each ARW
 /// that this run converted, `OriginalDecision.decide` says "move" or "keep".
+/// For that, the run records each ARW before its conversion, and each new
+/// DNG after its conversion and after its tag step: an ARW moves only when
+/// it is the file that was converted, and its DNG is the file that this run
+/// made (lines 4 and 6). A DNG that is not the run's own is still tagged.
 /// The ARW moves through `BackupHandling.trashFile`, the function that takes
 /// a backup, so no test reaches the Trash. An ARW that stays gets an
 /// `originalKept` note. A refusal of the Trash keeps the ARW with that note:
@@ -98,10 +102,12 @@ public struct DesqueezeJob: Sendable {
     ///   outside the folder, so every front end takes it by leaving it out.
     /// - Parameter fileRecord: what the disk says about the file at a path,
     ///   read without following a link. The run asks it about an ARW before
-    ///   the conversion and before the move, and about the DNG before the
-    ///   move (design 14.2, lines 4 and 5), and only when it was asked to
-    ///   move the originals. The default is `FileRecord.read`, which changes
-    ///   no file. Tests inject it to drive each outcome.
+    ///   the conversion and before the move (design 14.2, line 4). It asks
+    ///   it about the DNG of that ARW five times: after the conversion,
+    ///   before and after the tag step, and twice before the move (lines 6
+    ///   and 5). It asks only when it was asked to move the originals. The
+    ///   default is `FileRecord.read`, which changes no file. Tests inject
+    ///   it to drive each outcome.
     /// - Parameter verbose: gets one line when the volume gave no lock for
     ///   the folder, with the number of the error
     ///   (`FolderLock.noLockLine`). Give it the sink of the
@@ -300,6 +306,18 @@ public struct DesqueezeJob: Sendable {
         /// Line 4: the record from before the conversion. Nil when the disk
         /// gave none, and in a plan, which reads no ARW.
         let recorded: FileRecord?
+        /// Line 6, the first record: the DNG directly after the conversion
+        /// passed. Nil when the disk gave none, and in a plan, which reads
+        /// no DNG.
+        let dngAsMade: FileRecord?
+        /// Line 6: true when the DNG was the file of `dngAsMade` directly
+        /// before its tag step. False until the tag loop asks, so a DNG
+        /// that the loop never reached is not this run's.
+        var dngHeldUntilItsTagStep = false
+        /// Line 6, the second record: the DNG directly after its tag step
+        /// ended. exiftool writes a new file, so it differs from
+        /// `dngAsMade` after a write. Nil until the tag step has ended.
+        var dngAsTagged: FileRecord?
     }
 
     /// Remove writes `.noStretch` and nothing else. The wrong state, Remove
@@ -356,7 +374,8 @@ public struct DesqueezeJob: Sendable {
             let dng = ConverterOutput.url(for: pending.arw)
             let unmatched = first == .dnglab ? AdobeMatch.match(pending.facts).failed : nil
             Self.count(pending, to: dng, by: first, unmatched: unmatched, &plan.summary, &dngs)
-            originals.append(Original(arw: pending.arw, dng: dng, hasFullMatch: unmatched == nil, recorded: nil))
+            originals.append(Original(arw: pending.arw, dng: dng, hasFullMatch: unmatched == nil, recorded: nil,
+                                      dngAsMade: nil))
         }
         // The path of each DNG whose tag step ends with the DNG at the
         // factor: a write that passes, or a skip.
@@ -370,11 +389,11 @@ public struct DesqueezeJob: Sendable {
         }
         guard movesOriginals else { return plan }
         for original in originals {
-            // The function of the run. The plan reads no file for lines 4
-            // and 5: it plans a run in which they hold.
+            // The function of the run. The plan reads no file for lines 6,
+            // 5 and 4: it plans a run in which they hold.
             let decision = OriginalDecision.decide(
                 hasFullMatch: original.hasFullMatch, dngIsAtTheFactor: atTheFactor.contains(original.dng.path),
-                dng: { .passed }, original: { .same })
+                dngIsThisRuns: { true }, dng: { .passed }, original: { .same })
             switch decision {
             case .move:
                 plan.steps.append(RunPlan.Step(name: original.arw.lastPathComponent, action: .trashOriginal))
@@ -418,6 +437,9 @@ public struct DesqueezeJob: Sendable {
         // Only a run that moves the originals fills this list. With the
         // option off it stays empty, so the fifth step has no file.
         var originals: [Original] = []
+        // The place in `originals` of each ARW, by the path of its DNG. The
+        // tag loop finds the DNG files of this run with it (line 6).
+        var originalOfDNG: [String: Int] = [:]
 
         for pending in arws {
             if cancel.isCancelled {
@@ -476,11 +498,17 @@ public struct DesqueezeJob: Sendable {
                 }
             }
             if let made {
+                // Line 6 of design 14.2, the first record: the DNG directly
+                // after its conversion passed, before anything else is
+                // done. Not asked when the originals stay.
+                let dngAsMade = movesOriginals ? fileRecord(made.conversion.dng.path) : nil
                 Self.count(pending, to: made.conversion.dng, by: made.converter,
                            unmatched: made.conversion.unmatched, &summary, &dngs)
                 if movesOriginals {
+                    originalOfDNG[made.conversion.dng.path] = originals.count
                     originals.append(Original(arw: pending.arw, dng: made.conversion.dng,
-                                              hasFullMatch: made.conversion.unmatched == nil, recorded: recorded))
+                                              hasFullMatch: made.conversion.unmatched == nil, recorded: recorded,
+                                              dngAsMade: dngAsMade))
                 }
             } else {
                 summary.failed += 1
@@ -508,7 +536,19 @@ public struct DesqueezeJob: Sendable {
                 summary.cancelled = true
                 return summary
             }
+            // Line 6 of design 14.2, for a DNG that this run made and whose
+            // original can move. Directly before the tag step reads or
+            // writes the DNG, it must be the file of the first record. The
+            // answer changes nothing here: the DNG is tagged as any DNG in
+            // the folder is. Only its ARW stays, at the fifth step.
+            let own = originalOfDNG[dng.url.path]
+            if let own {
+                originals[own].dngHeldUntilItsTagStep = FileRecord.isTheSameFile(
+                    recorded: originals[own].dngAsMade, now: fileRecord(dng.url.path))
+            }
             if tagOne(dng, factor, &summary) { atTheFactor.insert(dng.url.path) }
+            // The second record, directly after the tag step ended.
+            if let own { originals[own].dngAsTagged = fileRecord(dng.url.path) }
             completed += 1
             progress(RunProgress(completed: completed, total: total, name: dng.name))
         }
@@ -533,9 +573,13 @@ public struct DesqueezeJob: Sendable {
     /// when `OriginalDecision.decide` says so, and it stays with an
     /// `originalKept` note in every other case.
     ///
-    /// The two reads of lines 5 and 4 happen here, directly before the move,
-    /// and only when the lines before them hold. The second read of the ARW
-    /// is the last thing before the move.
+    /// The reads of lines 6, 5 and 4 happen here, directly before the move,
+    /// in that order, and each one only when the lines before it hold. The
+    /// second read of the ARW is the last thing before the move.
+    ///
+    /// Line 6 has two parts. The first was answered before the tag step of
+    /// the DNG (`Original.dngHeldUntilItsTagStep`). The second is asked
+    /// here: the DNG must be the file that the tag step left.
     ///
     /// The move is `BackupHandling.trashFile`, once. When it throws, the ARW
     /// is where it was: it is not deleted, and no other way is tried.
@@ -544,6 +588,10 @@ public struct DesqueezeJob: Sendable {
         let name = original.arw.lastPathComponent
         let decision = OriginalDecision.decide(
             hasFullMatch: original.hasFullMatch, dngIsAtTheFactor: dngIsAtTheFactor,
+            dngIsThisRuns: {
+                original.dngHeldUntilItsTagStep
+                    && FileRecord.isTheSameFile(recorded: original.dngAsTagged, now: fileRecord(original.dng.path))
+            },
             dng: {
                 DNGCheck.check(original.dng.lastPathComponent, record: fileRecord(original.dng.path), arw: name,
                                factor: factor, tags: { try tag.readOriginalCheck(original.dng) })

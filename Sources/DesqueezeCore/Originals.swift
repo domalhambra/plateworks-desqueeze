@@ -4,9 +4,15 @@ import Foundation
 /// size, its modification date, and its file number.
 ///
 /// The run records this for an ARW before its conversion, and reads it again
-/// directly before the ARW moves to the Trash (design 14.2, line 4). The
-/// read is `lstat`, which does not follow a link: a link to an ARW is a
-/// link, and never the ARW.
+/// directly before the ARW moves to the Trash (design 14.2, line 4). It
+/// records it for the DNG of that ARW too, after the conversion and after
+/// the tag step, and reads it again before the tag step and before the move
+/// (line 6). The read is `lstat`, which does not follow a link: a link to
+/// an ARW is a link, and never the ARW.
+///
+/// Two equal records do not prove equal bytes (design 14.7): a program that
+/// writes a file in place, keeps its size, and puts the date back is not
+/// seen.
 public struct FileRecord: Equatable, Sendable {
     /// True only for a regular file. False for a folder and for a symbolic
     /// link, also a link that points at a regular file.
@@ -40,6 +46,16 @@ public struct FileRecord: Equatable, Sendable {
                           modifiedSeconds: Int(info.st_mtimespec.tv_sec),
                           modifiedNanoseconds: Int(info.st_mtimespec.tv_nsec), fileNumber: UInt64(info.st_ino))
     }
+
+    /// True when `now` is the file of `recorded`: both records are there,
+    /// and all their facts are equal. Pure: it reads no file.
+    ///
+    /// A file with no record cannot be shown to be the same file. So nil on
+    /// either side is false, also nil on both.
+    public static func isTheSameFile(recorded: FileRecord?, now: FileRecord?) -> Bool {
+        guard let recorded, let now else { return false }
+        return recorded == now
+    }
 }
 
 /// Whether an ARW is still the file that was converted (design 14.2, line
@@ -48,11 +64,14 @@ public enum OriginalState: Equatable, Sendable {
     /// A regular file with the size, the modification date and the file
     /// number that the run recorded before the conversion.
     case same
-    /// One of the three differs, or nothing has the name now, or the run
-    /// has no record from before the conversion.
+    /// One of the three differs, or the run has no record from before the
+    /// conversion.
     case changed
     /// A folder or a link has the name now. It never goes to the Trash.
     case notARegularFile
+    /// Nothing has the name now: the ARW is not in the folder. The run has
+    /// nothing to move, and "it stays" would be false (design 14.3).
+    case gone
 
     /// Compares the two records of one ARW. Pure: it reads no file.
     ///
@@ -61,14 +80,14 @@ public enum OriginalState: Equatable, Sendable {
     ///   - now: the record from directly before the move.
     public init(recorded: FileRecord?, now: FileRecord?) {
         guard let now else {
-            self = .changed
+            self = .gone
             return
         }
         guard now.isRegularFile else {
             self = .notARegularFile
             return
         }
-        self = recorded == now ? .same : .changed
+        self = FileRecord.isTheSameFile(recorded: recorded, now: now) ? .same : .changed
     }
 }
 
@@ -143,7 +162,9 @@ public enum DNGCheck: Equatable, Sendable {
 /// What the run does with one original: the ARW of a conversion that this
 /// run made (design 14.2).
 ///
-/// The run and the dry run both ask `decide`, so the two cannot disagree.
+/// The run and the dry run both ask `decide`, so one rule decides for both.
+/// The dry run gives it the answers of a run in which every step passes. So
+/// the two differ only where a step of the real run fails (design 14.7).
 public enum OriginalDecision: Equatable, Sendable {
     /// Every line of design 14.2 holds. The ARW goes to the Trash.
     case move
@@ -162,12 +183,17 @@ public enum OriginalDecision: Equatable, Sendable {
         case notARegularFile
         /// Line 5: the check of the DNG did not pass.
         case dngNotChecked(detail: String)
+        /// Line 6: `<base>.dng` is not the file that this run made.
+        case dngChanged
+        /// The ARW is not in the folder at the fifth step. The run did not
+        /// move it, and the sentence does not say that it stays.
+        case gone
         /// Every line held, and the Trash refused the ARW. `decide` never
         /// gives this one: the run knows it only after it tried the move.
         case trashRefused(detail: String)
 
         /// The plain sentence of design 14.3. The only place that makes
-        /// these six sentences.
+        /// these eight sentences.
         public var sentence: String {
             switch self {
             case .noFullMatch: return "The original stays, because its DNG has no full match."
@@ -175,6 +201,9 @@ public enum OriginalDecision: Equatable, Sendable {
             case .changed: return "The original changed during the run, so it stays."
             case .notARegularFile: return "The original is not a regular file, so it stays."
             case .dngNotChecked: return "The original stays, because its DNG could not be checked."
+            case .dngChanged: return "The original stays, because its DNG changed during the run."
+            case .gone:
+                return "The original was not in the folder at the end of the run. The app did not move it."
             case .trashRefused: return "The original could not go to the Trash, so it stays."
             }
         }
@@ -185,7 +214,7 @@ public enum OriginalDecision: Equatable, Sendable {
         public var detail: String? {
             switch self {
             case .dngNotChecked(let detail), .trashRefused(let detail): return detail
-            case .noFullMatch, .dngNotComplete, .changed, .notARegularFile: return nil
+            case .noFullMatch, .dngNotComplete, .changed, .notARegularFile, .dngChanged, .gone: return nil
             }
         }
     }
@@ -193,31 +222,38 @@ public enum OriginalDecision: Equatable, Sendable {
     /// The rule of design 14.2, for one ARW that this run converted (line
     /// 1). It reads no file: its caller gives what the run knows.
     ///
-    /// The lines are asked in this order: 2, 3, 5, 4. The first one that
+    /// The lines are asked in this order: 2, 3, 6, 5, 4. The first one that
     /// does not hold decides, and the ones after it are not asked. So an
-    /// ARW that stays for line 2 or 3 costs no read. Line 4 is last, so
-    /// nothing stands between the second read of the ARW and its move.
+    /// ARW that stays for line 2 or 3 costs no read at the fifth step. Line
+    /// 6 stands before line 5: the tags of a DNG say nothing until the DNG
+    /// is known to be this run's file. Line 4 is last, so nothing stands
+    /// between the second read of the ARW and its move.
     ///
-    /// The dry run gives `.passed` and `.same`: it plans a run in which
-    /// every step passes.
+    /// The dry run gives `true`, `.passed` and `.same`: it plans a run in
+    /// which every step passes.
     ///
     /// - Parameters:
     ///   - hasFullMatch: line 2. False when the conversion has a
     ///     `convertedUnmatched` note.
     ///   - dngIsAtTheFactor: line 3. True when the tag step set the tag and
     ///     read it back, or the DNG was at the factor already.
+    ///   - dngIsThisRuns: line 6. True when `<base>.dng` is the file that
+    ///     this run made: its record from after the conversion held before
+    ///     the tag step, and its record from after the tag step holds now.
     ///   - dng: line 5, the check of the DNG.
     ///   - original: line 4, the ARW now against its record from before the
     ///     conversion.
-    public static func decide(hasFullMatch: Bool, dngIsAtTheFactor: Bool, dng: () -> DNGCheck,
-                              original: () -> OriginalState) -> OriginalDecision {
+    public static func decide(hasFullMatch: Bool, dngIsAtTheFactor: Bool, dngIsThisRuns: () -> Bool,
+                              dng: () -> DNGCheck, original: () -> OriginalState) -> OriginalDecision {
         guard hasFullMatch else { return .keep(.noFullMatch) }
         guard dngIsAtTheFactor else { return .keep(.dngNotComplete) }
+        guard dngIsThisRuns() else { return .keep(.dngChanged) }
         if case .failed(let detail) = dng() { return .keep(.dngNotChecked(detail: detail)) }
         switch original() {
         case .same: return .move
         case .changed: return .keep(.changed)
         case .notARegularFile: return .keep(.notARegularFile)
+        case .gone: return .keep(.gone)
         }
     }
 }

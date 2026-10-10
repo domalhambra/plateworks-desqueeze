@@ -204,6 +204,6 @@ final class EndToEndFailureTests: BuiltToolTestCase {
     func testTheToolSaysWhenItDoesNotUseTheTrash() throws {
         try makeShoot()
         let result = try desqueeze("scan", folder.path)
-        XCTAssertEqual(result.stderr, "Test mode: backups go to \(discard.path), not to the Trash.\n")
+        XCTAssertEqual(result.stderr, "Test mode: every file that would go to the Trash goes to \(discard.path).\n")
     }
 }

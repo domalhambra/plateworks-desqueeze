@@ -14,7 +14,7 @@ class BuiltToolTestCase: XCTestCase {
     static let fixtures = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("fixtures")
-    static let testModeLine = "Test mode: backups go to"
+    static let testModeLine = "Test mode: every file that would go to the Trash goes to"
 
     struct Output {
         let stdout: String

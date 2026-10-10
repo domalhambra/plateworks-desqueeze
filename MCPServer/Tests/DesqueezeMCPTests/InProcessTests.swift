@@ -31,7 +31,7 @@ final class StartupTests: XCTestCase {
             arguments: [], environment: [FileBackups.testFolderVariable: folder]) else {
             return XCTFail("a folder that exists must start the server")
         }
-        XCTAssertEqual(notice, "Test mode: backups go to \(folder), not to the Trash.")
+        XCTAssertEqual(notice, "Test mode: every file that would go to the Trash goes to \(folder).")
     }
 
     // In normal use the variable is not set: the backups are the Trash, and

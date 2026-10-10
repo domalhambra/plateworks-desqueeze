@@ -84,9 +84,15 @@ final class OriginalsJobTests: XCTestCase {
         XCTAssertEqual(calls, [
             // Line 4: the record, before the converter starts.
             "record X.ARW", "convert X.ARW",
-            "write 1.5 1 X.dng", "read X.dng", "trash X.dng",
-            // Line 5, then line 4 again, then the move.
-            "record X.dng", "check X.dng", "record X.ARW", "trashFile X.ARW",
+            // Line 6: the first record of the DNG, directly after the
+            // conversion.
+            "record X.dng",
+            // Line 6: the first record must hold directly before the tag
+            // step. Then the tag step, and the second record directly
+            // after it.
+            "record X.dng", "write 1.5 1 X.dng", "read X.dng", "trash X.dng", "record X.dng",
+            // Line 6, then line 5, then line 4 again, then the move.
+            "record X.dng", "record X.dng", "check X.dng", "record X.ARW", "trashFile X.ARW",
         ])
         XCTAssertEqual(h.backups.filesGiven, [h.folder.appendingPathComponent("X.ARW")])
         XCTAssertTrue(summary.trashOriginals)
@@ -106,9 +112,9 @@ final class OriginalsJobTests: XCTestCase {
             $0.hasPrefix("write ") || $0.hasPrefix("read ") || $0.hasPrefix("trash ")
         })
         XCTAssertLessThan(lastTagCall, firstMove)
-        XCTAssertEqual(calls.suffix(8), [
-            "record X.dng", "check X.dng", "record X.ARW", "trashFile X.ARW",
-            "record Y.dng", "check Y.dng", "record Y.ARW", "trashFile Y.ARW",
+        XCTAssertEqual(calls.suffix(10), [
+            "record X.dng", "record X.dng", "check X.dng", "record X.ARW", "trashFile X.ARW",
+            "record Y.dng", "record Y.dng", "check Y.dng", "record Y.ARW", "trashFile Y.ARW",
         ])
         XCTAssertEqual(summary.originalsInTrash, 2)
         XCTAssertEqual(summary.set, 4)
@@ -226,7 +232,7 @@ final class OriginalsJobTests: XCTestCase {
             [FakeFiles.file(modified: 1_000), FakeFiles.file(modified: 1_001)],
             [FakeFiles.file(nanoseconds: 0), FakeFiles.file(nanoseconds: 1)],
             [FakeFiles.file(number: 7), FakeFiles.file(number: 8)],
-            [FakeFiles.file(), nil],
+            // No record from before the conversion counts as changed.
             [nil, FakeFiles.file()],
         ]
         for records in changes {
@@ -239,6 +245,24 @@ final class OriginalsJobTests: XCTestCase {
                 detail: nil)], "\(records)")
             XCTAssertEqual(summary.originalsInTrash, 0)
             XCTAssertEqual(summary.originalsLine, "Originals moved to the Trash: 0 of 1.")
+        }
+    }
+
+    // "It stays" would be false for an ARW that is not there (design 14.3).
+    func testAnARWThatIsGoneAtTheFifthStepGetsItsOwnSentenceAndNothingReachesTheTrash() {
+        // Each: the record before the conversion, then the one before the move.
+        for records: [FileRecord?] in [[FakeFiles.file(), nil], [nil, nil]] {
+            h = JobHarness()
+            h.files.records["X.ARW"] = records
+            let summary = run(h.snapshot(pending: ["X.ARW"]))
+            XCTAssertEqual(h.backups.filesGiven, [], "\(records)")
+            XCTAssertEqual(summary.notes, [FileNote(
+                name: "X.ARW", kind: .originalKept,
+                message: "The original was not in the folder at the end of the run. The app did not move it.",
+                detail: nil)], "\(records)")
+            XCTAssertEqual(summary.originalsInTrash, 0)
+            XCTAssertEqual(summary.originalsLine, "Originals moved to the Trash: 0 of 1.")
+            XCTAssertFalse(summary.needsAttention)
         }
     }
 
@@ -262,7 +286,10 @@ final class OriginalsJobTests: XCTestCase {
                                               (FakeFiles.file(size: 0), "X.dng has no bytes.")]
         for (record, detail) in cases {
             h = JobHarness()
-            h.files.records["X.dng"] = [record]
+            // The four reads of line 6 give the same file. The fifth read
+            // is the one of line 5.
+            let made = FakeFiles.file()
+            h.files.records["X.dng"] = [made, made, made, made, record]
             let summary = run(h.snapshot(pending: ["X.ARW"]))
             XCTAssertEqual(h.backups.filesGiven, [], detail)
             XCTAssertEqual(summary.notes, [FileNote(
@@ -300,6 +327,159 @@ final class OriginalsJobTests: XCTestCase {
             // After a failed check of the DNG, the ARW is not read again.
             XCTAssertEqual(calls.filter { $0 == "record X.ARW" }.count, 1, detail)
         }
+    }
+
+    // MARK: Line 6: the DNG is the file that this run made
+
+    /// The note of line 6 (design 14.3).
+    let dngChanged = FileNote(name: "X.ARW", kind: .originalKept,
+                              message: "The original stays, because its DNG changed during the run.", detail: nil)
+    /// The DNG as the conversion made it, and as the tag step left it:
+    /// exiftool writes a new file, so every fact differs.
+    let made = FakeFiles.file(size: 100, modified: 1_000, nanoseconds: 0, number: 7)
+    let tagged = FakeFiles.file(size: 104, modified: 1_002, nanoseconds: 5, number: 8)
+
+    // The reads of the DNG, in order: after the conversion, before the tag
+    // step, after the tag step, then line 6 and line 5 at the fifth step.
+
+    // The fourth break to try: line 6 is skipped. This is the case of the
+    // review of 2026-10-10: another photo's DNG took the name after the
+    // conversion, and it would pass line 5.
+    func testLine6ADNGThatWasReplacedBetweenItsConversionAndItsTagStepKeepsItsOriginalAndIsStillTagged() {
+        for other: FileRecord? in [
+            FakeFiles.file(size: 101, modified: 1_000, nanoseconds: 0, number: 7),
+            FakeFiles.file(size: 100, modified: 1_001, nanoseconds: 0, number: 7),
+            FakeFiles.file(size: 100, modified: 1_000, nanoseconds: 1, number: 7),
+            FakeFiles.file(size: 100, modified: 1_000, nanoseconds: 0, number: 9),
+        ] {
+            h = JobHarness()
+            // The other file stays at the name to the end of the run.
+            h.files.records["X.dng"] = [made, other]
+            let summary = run(h.snapshot(pending: ["X.ARW"]))
+            XCTAssertEqual(h.backups.filesGiven, [], "\(String(describing: other))")
+            XCTAssertEqual(summary.notes, [dngChanged], "\(String(describing: other))")
+            // The DNG is tagged as any DNG in the folder is.
+            XCTAssertEqual(calls.filter { $0.hasSuffix(" X.dng") && !$0.hasPrefix("record ") },
+                           ["write 1.5 1 X.dng", "read X.dng", "trash X.dng"])
+            XCTAssertEqual([summary.converted, summary.set, summary.failed, summary.blocked], [1, 1, 0, 0])
+            // Line 6 stands before lines 5 and 4: neither is asked.
+            XCTAssertFalse(calls.contains("check X.dng"))
+            XCTAssertEqual(calls.filter { $0 == "record X.ARW" }.count, 1, "only the record before the conversion")
+            XCTAssertEqual(summary.originalsLine, "Originals moved to the Trash: 0 of 1.")
+            XCTAssertFalse(summary.needsAttention)
+        }
+    }
+
+    func testLine6ADNGThatWasReplacedBetweenItsTagStepAndTheFifthStepKeepsItsOriginal() {
+        for now: FileRecord? in [
+            FakeFiles.file(size: 105, modified: 1_002, nanoseconds: 5, number: 8),
+            FakeFiles.file(size: 104, modified: 1_003, nanoseconds: 5, number: 8),
+            FakeFiles.file(size: 104, modified: 1_002, nanoseconds: 6, number: 8),
+            FakeFiles.file(size: 104, modified: 1_002, nanoseconds: 5, number: 9),
+            // The file of the first record is back. It is not the file
+            // that the tag step left.
+            made,
+            // Nothing has the name now.
+            nil,
+        ] {
+            h = JobHarness()
+            h.files.records["X.dng"] = [made, made, tagged, now]
+            let summary = run(h.snapshot(pending: ["X.ARW"]))
+            XCTAssertEqual(h.backups.filesGiven, [], "\(String(describing: now))")
+            XCTAssertEqual(summary.notes, [dngChanged], "\(String(describing: now))")
+            XCTAssertEqual(summary.set, 1)
+            XCTAssertFalse(calls.contains("check X.dng"))
+            XCTAssertEqual(calls.filter { $0 == "record X.ARW" }.count, 1)
+        }
+    }
+
+    // A DNG with no record cannot be shown to be the run's own.
+    func testLine6ADNGWithNoRecordKeepsItsOriginal() {
+        let cases: [[FileRecord?]] = [
+            // No record after the conversion.
+            [nil, made, tagged, tagged, tagged],
+            [nil, nil, tagged, tagged, tagged],
+            // No record after the tag step.
+            [made, made, nil, tagged, tagged],
+            [made, made, nil, nil, nil],
+        ]
+        for records in cases {
+            h = JobHarness()
+            h.files.records["X.dng"] = records
+            let summary = run(h.snapshot(pending: ["X.ARW"]))
+            XCTAssertEqual(h.backups.filesGiven, [], "\(records)")
+            XCTAssertEqual(summary.notes, [dngChanged], "\(records)")
+        }
+    }
+
+    // exiftool writes a new file, so the second record differs from the
+    // first. The second one is the one that must hold at the fifth step.
+    //
+    // A known limit (design 14.7): the run cannot tell exiftool's new file
+    // from a file that another program put at the name while the tag step
+    // worked. Both are "another file after the tag step". Such a file is
+    // taken as the run's own, and only line 5 can still keep the ARW.
+    func testLine6ATagStepThatWroteChangesTheRecordAndTheOriginalMoves() {
+        h.files.records["X.dng"] = [made, made, tagged]
+        let summary = run(h.snapshot(pending: ["X.ARW"]))
+        XCTAssertEqual(originalsGiven, ["X.ARW"])
+        XCTAssertEqual(summary.notes, [])
+        XCTAssertEqual(summary.originalsInTrash, 1)
+        XCTAssertEqual(calls.filter { $0 == "record X.dng" }.count, 5)
+    }
+
+    // At factor 1 the new DNG is at the value already. The tag step writes
+    // nothing, the DNG is the file of the first record to the end, and the
+    // original moves.
+    func testLine6ATagStepThatWasSkippedLeavesTheRecordAndTheOriginalMoves() {
+        h.files.records["X.dng"] = [made]
+        let summary = h.job().run(h.snapshot(pending: ["X.ARW"]), factor: .noStretch, convert: true,
+                                  trashOriginals: true)
+        XCTAssertEqual(summary.skipped, 1)
+        XCTAssertEqual(calls, [
+            "record X.ARW", "convert X.ARW", "record X.dng",
+            // The tag step: no write. The two records around it.
+            "record X.dng", "record X.dng",
+            "record X.dng", "record X.dng", "check X.dng", "record X.ARW", "trashFile X.ARW",
+        ])
+        XCTAssertEqual(originalsGiven, ["X.ARW"])
+        XCTAssertEqual(summary.notes, [])
+    }
+
+    // The same skip, and the DNG is another file at the fifth step.
+    func testLine6ADNGThatWasReplacedAfterASkippedTagStepKeepsItsOriginal() {
+        h.files.records["X.dng"] = [made, made, made, tagged]
+        let summary = h.job().run(h.snapshot(pending: ["X.ARW"]), factor: .noStretch, convert: true,
+                                  trashOriginals: true)
+        XCTAssertEqual(h.backups.filesGiven, [])
+        XCTAssertEqual(summary.notes, [dngChanged])
+    }
+
+    // Line 3 stands before line 6: a DNG that changed and whose tag step
+    // failed keeps its original for line 3.
+    func testLine3IsAskedBeforeLine6() {
+        h.files.records["X.dng"] = [made, tagged]
+        h.tag.failWrites = ["X.dng"]
+        let summary = run(h.snapshot(pending: ["X.ARW"]))
+        XCTAssertEqual(h.backups.filesGiven, [])
+        XCTAssertEqual(summary.notes.last?.message, "The original stays, because its DNG is not complete.")
+    }
+
+    // One DNG changed, and the next original still moves. A DNG that an
+    // earlier run made has no record: the run does not ask the disk about it.
+    func testLine6IsAskedForEachDNGOfThisRunAndForNoOther() {
+        h.files.records["X.dng"] = [made, tagged]
+        let summary = run(h.snapshot(dngs: [h.dng("A.dng")], pending: ["X.ARW", "Y.ARW"]))
+        XCTAssertEqual(originalsGiven, ["Y.ARW"])
+        XCTAssertEqual(summary.notes, [dngChanged])
+        XCTAssertEqual(summary.set, 3)
+        XCTAssertFalse(calls.contains("record A.dng"))
+    }
+
+    // With the option off, the run asks the disk nothing about a DNG.
+    func testWithTheOptionOffNoDNGIsRecorded() {
+        _ = run(h.snapshot(pending: ["X.ARW"]), trashOriginals: false)
+        XCTAssertEqual(calls, ["convert X.ARW", "write 1.5 1 X.dng", "read X.dng", "trash X.dng"])
     }
 
     // The Trash refuses: the ARW stays with the note. One try, and no

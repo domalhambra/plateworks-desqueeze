@@ -20,10 +20,28 @@ final class BackupTestFolderTests: XCTestCase {
     override func tearDown() { removeTemporaryFolder(folder) }
 
     // The tool and the MCP server both say this on standard error. The
-    // sentence is made once, here.
+    // sentence is made once, here. It does not say "backups": an original
+    // on its way to the Trash goes to the folder too, and so does a work
+    // file (design 14.2).
     func testTheTestModeNoticeNamesTheFolder() {
-        XCTAssertEqual(FileBackups.testModeNotice(folder: URL(fileURLWithPath: "/tmp/Discarded backups")),
-                       "Test mode: backups go to /tmp/Discarded backups, not to the Trash.")
+        let notice = FileBackups.testModeNotice(folder: URL(fileURLWithPath: "/tmp/Discarded backups"))
+        XCTAssertEqual(notice, "Test mode: every file that would go to the Trash goes to /tmp/Discarded backups.")
+        XCTAssertFalse(notice.contains("backups go"), "not only backups go there")
+    }
+
+    // The sentence is true: the function that takes a backup takes an
+    // original and a work file to the same folder.
+    func testWithTheVariableAnOriginalAndAWorkFileGoToThatFolderToo() throws {
+        let backups = try testBackups()
+        let arw = folder.appendingPathComponent("one.ARW")
+        let work = folder.appendingPathComponent(".one.desqueeze-work.dng")
+        try Data("the original".utf8).write(to: arw)
+        try Data("a work file".utf8).write(to: work)
+        try backups.trashFile(arw)
+        try backups.trashFile(work)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path), [])
+        XCTAssertEqual(try discarded(), [".one.desqueeze-work.dng", "one.ARW"])
+        XCTAssertEqual(try Data(contentsOf: discard.appendingPathComponent("one.ARW")), Data("the original".utf8))
     }
 
     func environment(_ value: String) -> [String: String] {
