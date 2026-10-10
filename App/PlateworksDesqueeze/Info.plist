@@ -29,7 +29,7 @@
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>Desqueeze sets a tag on the DNG photos in the folder you choose.</string>
 	<key>NSHumanReadableCopyright</key>
-	<string></string>
+	<string>Copyright © 2026 Plateworks. MIT License.</string>
 	<key>NSNetworkVolumesUsageDescription</key>
 	<string>Desqueeze sets a tag on the DNG photos in the folder you choose.</string>
 	<key>NSRemovableVolumesUsageDescription</key>

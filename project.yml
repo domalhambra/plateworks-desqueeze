@@ -32,7 +32,7 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.photography
-        NSHumanReadableCopyright: ""
+        NSHumanReadableCopyright: "Copyright © 2026 Plateworks. MIT License."
         # macOS asks before an app reads these folders. The text says why.
         NSDesktopFolderUsageDescription: Desqueeze sets a tag on the DNG photos in the folder you choose.
         NSDocumentsFolderUsageDescription: Desqueeze sets a tag on the DNG photos in the folder you choose.
