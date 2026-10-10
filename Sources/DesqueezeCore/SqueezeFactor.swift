@@ -21,9 +21,13 @@ public struct SqueezeFactor: Equatable, Hashable, Sendable {
     /// Text with a comma gets `decimalPointHint` after it: the rule alone
     /// does not say what is wrong with "1,5".
     ///
+    /// The text is in quotes, so the sentence reads correctly for any text:
+    /// `It was "1.5,".` for text that ends with a comma, and `It was "".`
+    /// for no text.
+    ///
     /// - Parameter text: the text as it was given.
     public static func errorMessage(got text: String) -> String {
-        "The factor must be \(ruleText). It was \(text).\(hint(for: text))"
+        "The factor must be \(ruleText). It was \"\(text)\".\(hint(for: text))"
     }
 
     /// What every front end adds for text with a comma in it. The only

@@ -126,7 +126,8 @@ final class ArgumentsTests: XCTestCase {
     func testAFactorOutOfRangeOrNotANumberIsAUsageError() {
         for bad in ["0.99", "4.0001", "0", "5", "abc", "1.33333", "1.5x", "-1.5", "1e0", " ", "inf", "nan"] {
             XCTAssertEqual(usageError("run", "Shoot", "--factor", bad),
-                           "The factor must be a number from 1 to 4, with at most four decimal places. It was \(bad).",
+                           "The factor must be a number from 1 to 4, with at most four decimal places. "
+                               + "It was \"\(bad)\".",
                            bad)
         }
     }
@@ -136,9 +137,12 @@ final class ArgumentsTests: XCTestCase {
     func testAFactorWithACommaIsAUsageErrorThatSaysToUseAPeriod() {
         let rule = "The factor must be a number from 1 to 4, with at most four decimal places."
         XCTAssertEqual(usageError("run", "Shoot", "--factor", "1,5"),
-                       "\(rule) It was 1,5. Use a period for the decimal point.")
+                       "\(rule) It was \"1,5\". Use a period for the decimal point.")
         XCTAssertEqual(usageError("run", "Shoot", "--factor=1,33"),
-                       "\(rule) It was 1,33. Use a period for the decimal point.")
+                       "\(rule) It was \"1,33\". Use a period for the decimal point.")
+        // The sentence reads correctly for text that ends with a comma.
+        XCTAssertEqual(usageError("run", "Shoot", "--factor", "1.5,"),
+                       "\(rule) It was \"1.5,\". Use a period for the decimal point.")
     }
 
     func testAFactorGivenTwiceIsAUsageError() {

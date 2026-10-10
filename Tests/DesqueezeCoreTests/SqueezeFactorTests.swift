@@ -42,17 +42,37 @@ final class SqueezeFactorTests: XCTestCase {
     // The tool and the MCP server refuse a factor with this one sentence.
     func testTheMessageForAFactorThatBreaksTheRule() {
         XCTAssertEqual(SqueezeFactor.errorMessage(got: "5"),
-                       "The factor must be a number from 1 to 4, with at most four decimal places. It was 5.")
+                       "The factor must be a number from 1 to 4, with at most four decimal places. It was \"5\".")
         XCTAssertEqual(SqueezeFactor.errorMessage(got: "1.23456"),
-                       "The factor must be \(SqueezeFactor.ruleText). It was 1.23456.")
+                       "The factor must be \(SqueezeFactor.ruleText). It was \"1.23456\".")
+    }
+
+    // The text is in quotes, so the sentence reads correctly for any text:
+    // one that ends with a comma or a period, one with a space in it, and
+    // no text at all. Without the quotes, "1.5," gave "It was 1.5,. Use a
+    // period", and no text gave "It was .".
+    func testTheMessageReadsCorrectlyForAnyText() {
+        let rule = "The factor must be a number from 1 to 4, with at most four decimal places."
+        XCTAssertEqual(SqueezeFactor.errorMessage(got: "1.5,"),
+                       "\(rule) It was \"1.5,\". Use a period for the decimal point.")
+        XCTAssertEqual(SqueezeFactor.errorMessage(got: "1."), "\(rule) It was \"1.\".")
+        XCTAssertEqual(SqueezeFactor.errorMessage(got: ""), "\(rule) It was \"\".")
+        XCTAssertEqual(SqueezeFactor.errorMessage(got: " "), "\(rule) It was \" \".")
+        XCTAssertEqual(SqueezeFactor.errorMessage(got: "one and a half"), "\(rule) It was \"one and a half\".")
+        for text in ["1.5,", "1.", "", " ", "1,5", "5", "1,5.", "?"] {
+            let message = SqueezeFactor.errorMessage(got: text)
+            XCTAssertFalse(message.contains(",."), "\(text): \(message)")
+            XCTAssertFalse(message.contains(".."), "\(text): \(message)")
+            XCTAssertFalse(message.contains(" ."), "\(text): \(message)")
+        }
     }
 
     // "1,5" breaks the rule, and the rule alone does not say how. Every
     // front end adds these words, from here.
     func testAFactorWithACommaGetsTheHintAboutThePeriod() {
         XCTAssertEqual(SqueezeFactor.errorMessage(got: "1,5"),
-                       "The factor must be a number from 1 to 4, with at most four decimal places. It was 1,5. "
-                           + "Use a period for the decimal point.")
+                       "The factor must be a number from 1 to 4, with at most four decimal places. "
+                           + "It was \"1,5\". Use a period for the decimal point.")
         XCTAssertEqual(SqueezeFactor.decimalPointHint, "Use a period for the decimal point.")
         XCTAssertEqual(SqueezeFactor.hint(for: "1,5"), " Use a period for the decimal point.")
         XCTAssertEqual(SqueezeFactor.hint(for: " 1,33 "), " Use a period for the decimal point.")
