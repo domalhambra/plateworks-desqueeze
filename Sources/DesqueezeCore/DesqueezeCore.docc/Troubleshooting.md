@@ -252,7 +252,21 @@ from 1 to 4, with at most four decimal places."
 
 The tool looks for exiftool and dnglab in `/opt/homebrew/bin`, then in
 `/usr/local/bin`, then in each folder of `PATH`. `desqueeze scan` shows
-where it found each program.
+where it found each program. The window looks inside its own app first:
+the app of the download has exiftool and dnglab there.
+
+## The downloaded app
+
+No release is published yet. These are the limits of the app that the
+release script makes.
+
+| What you see | Why, and what to do |
+|---|---|
+| The app does not start on an Intel Mac. | The download is for a Mac with Apple silicon. There is none for an Intel Mac, and a build from source on an Intel Mac was not tested either. |
+| The app does not start on a macOS older than 14. | The app needs macOS 14 or later. |
+| "Desqueeze needs exiftool, and it is not installed." in the downloaded app | The exiftool inside the app is a Perl script, and it needs the Perl of macOS, `/usr/bin/perl`. Apple has said that a later macOS can come without it. With no Perl there, the window looks for exiftool on the Mac, as a build from source does. Run `brew install exiftool`, then open the window again. To see if the Mac has that Perl, run `/usr/bin/perl -v`. |
+| The app uses its own exiftool and dnglab, not the newer ones of Homebrew. | That is on purpose: the versions inside are the tested ones. You cannot replace a program inside the app. A newer one comes only with a new release. To use the programs of the Mac, build the app from source. |
+| The app does not say that a new release exists. | The app makes no network connection, so it has no update check. Look at the Releases page of the repo on GitHub. |
 
 ## A run does not end
 

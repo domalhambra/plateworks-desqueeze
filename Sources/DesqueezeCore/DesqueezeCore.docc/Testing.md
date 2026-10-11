@@ -223,3 +223,10 @@ each factor, a second run, Remove, and one photo opened in Lightroom at each
 factor. The design lists the steps, in its section 9. The real Trash is also
 checked by hand, and so is the box for the originals in the window: tick it
 only on a copy of a folder, because the window uses the real Trash.
+
+The download has no suite either. `scripts/make_release.sh --local` makes
+the app with exiftool and dnglab inside, and stops when a program inside
+does not give its pinned version. A run in the window of that app, on
+copies, is by hand. The steps of the script that need the Developer ID run
+only on the Mac that has it. `docs/changing-things.md` in the repo has the
+steps.

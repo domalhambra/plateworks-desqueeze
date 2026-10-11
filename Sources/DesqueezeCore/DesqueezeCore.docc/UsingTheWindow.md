@@ -183,12 +183,22 @@ sentence.
 
 ## The messages about missing programs
 
-The window looks for the three programs each time it opens. It looks for
-exiftool and dnglab in `/opt/homebrew/bin`, then in `/usr/local/bin`, then
+The window looks for the three programs each time it opens. For exiftool
+and dnglab, it looks inside its own app first. The app of the download has
+both programs there, and an app that you built from source has none. The
+exiftool inside is a Perl script, so the window takes it only when the Perl
+of macOS, `/usr/bin/perl`, can be run. Then the window looks
+in `/opt/homebrew/bin`, then in `/usr/local/bin`, then
 in each folder of `PATH`. An app that Finder starts gets a short `PATH`, so
 in practice it finds the two programs in the two Homebrew folders. It asks
 macOS where Adobe DNG Converter is, so it finds that app wherever it is
 installed.
+
+The app of the download always uses the two programs inside itself, also
+when Homebrew has other versions. You cannot make it use another copy. In
+that app, the message about exiftool can show only on a Mac whose macOS has
+no Perl, and the lines about dnglab do not show. <doc:Troubleshooting> says
+what to do.
 
 | Missing | What the window shows | What still works |
 |---|---|---|

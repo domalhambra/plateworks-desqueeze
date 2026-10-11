@@ -35,8 +35,12 @@ on a folder, and the tool and the server print the same JSON.
 
 **Three external programs do the file work.** exiftool reads and writes the
 tags. dnglab converts an ARW to a DNG. Adobe DNG Converter is the optional
-backup for a photo that dnglab cannot match. None of them is in the repo or
-in the built app. ``ToolLocator`` finds them on the Mac at run time.
+backup for a photo that dnglab cannot match. None of them is in the repo.
+The app of the download has exiftool and dnglab inside, and an app that is
+built from source has none. ``ToolLocator`` finds the programs at run time.
+The window gives it the two places inside its bundle, and a copy there comes
+first. Then it looks on the Mac. The command line tool and the MCP server
+give no place, so they look on the Mac only.
 
 ## The parts of the core
 
@@ -158,7 +162,7 @@ The app is not a package. XcodeGen writes the Xcode project from
 
 | Front end | Source | What it adds to the core |
 |---|---|---|
-| The window | `App/PlateworksDesqueeze/` | The state of one window: the folder, the factor, the one job in flight, Cancel, and a quit during a run. It also asks Launch Services where Adobe DNG Converter is. |
+| The window | `App/PlateworksDesqueeze/` | The state of one window: the folder, the factor, the one job in flight, Cancel, and a quit during a run. It also asks Launch Services where Adobe DNG Converter is, and it gives the core the two places of exiftool and dnglab inside its own bundle. |
 | `desqueeze` | `Sources/DesqueezeCLI/`, `Sources/desqueeze/` | A hand-written parser, the layout of the text for a person, and the exit codes. |
 | `desqueeze-mcp` | `MCPServer/Sources/desqueeze-mcp/` | The three tools as a client sees them, the check of the arguments of a call, one call at a time, and an answer for every call before the program ends. |
 

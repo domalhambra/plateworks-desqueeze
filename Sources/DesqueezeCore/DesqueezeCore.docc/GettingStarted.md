@@ -1,6 +1,6 @@
 # Getting started
 
-Build the tool from source, and make a first run on a copy of a folder.
+Get the tool, and make a first run on a copy of a folder.
 
 ## Overview
 
@@ -15,13 +15,36 @@ The tool is for you when all of these are true:
   their previews stay squeezed. Other raw editors were not tested.
 - Your photos are DNG files from any camera, or ARW files from a Sony camera.
 - Your lens squeezes the width, by a factor from 1 to 4.
-- You have a Mac, and you can build from source with Xcode.
+- You have a Mac. Until a release is published, you also need Xcode, to
+  build from source.
 
 The tool does not stretch pixels and does not export an image. It does not
 read subfolders. It does not convert raw files other than Sony ARW. It does
 not set a vertical stretch.
 
+## Download the window
+
+No release is published yet. Until the first one is, build from source: the
+next two sections have the steps.
+
+The repo has a script that makes the download. It is one disk image,
+`Desqueeze-<version>.dmg`, for the Releases page of the repo on GitHub. It
+holds the app of the window, for a Mac with Apple silicon and macOS 14 or
+later. The script signs the app with a Developer ID, and Apple notarizes
+it. exiftool and dnglab are inside the app, so you install nothing more.
+
+To install from a disk image, open it and drag Desqueeze to the Applications
+folder. Then go to "Make the first run on a copy", and use the window.
+<doc:UsingTheWindow> describes each part of it.
+
+The download holds the window only. The command line tool and the MCP
+server are a build from source. Adobe DNG Converter is never inside the
+app: <doc:CamerasAndLenses> says when it is used.
+
 ## Install what the tool needs
+
+This section and the next are for a build from source. The app of the
+download needs none of these programs.
 
 | Program | Needed for | Install |
 |---|---|---|
@@ -66,8 +89,9 @@ xcodebuild -project PlateworksDesqueeze.xcodeproj -scheme PlateworksDesqueeze -c
 The app is then at `build/Build/Products/Release/Desqueeze.app`. Copy it to
 the Applications folder, and open it. The build signs the app for the Mac
 that built it. It is not signed with a Developer ID and it is not notarized,
-so build it on the Mac that uses it. <doc:UsingTheWindow> describes each
-part of the window.
+so build it on the Mac that uses it. An app that you build has no program
+inside: it uses the exiftool and the dnglab of the Mac. <doc:UsingTheWindow>
+describes each part of the window.
 
 ### The MCP server
 
