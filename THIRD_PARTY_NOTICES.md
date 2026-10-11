@@ -40,9 +40,11 @@ program and the SHA-256 of its files, and it stops when one differs.
 | The license texts | | `Contents/Resources/licenses/` | |
 
 **dnglab.** The app holds the binary of the Homebrew package as a separate
-program. It is not changed, and nothing is linked with it: the app starts
-it as a process of its own. The release script signs it, as it signs the
-app. The app holds dnglab's license text, `dnglab-LICENSE.txt`, and its
+program. Nothing is linked with it: the app starts it as a process of its
+own. Its code is not changed. The release script signs it, as it signs the
+app. That replaces the code signature of the file, and changes nothing
+else. So the SHA-256 of the copy in the app differs from the SHA-256 of the
+file of Homebrew. The app holds dnglab's license text, `dnglab-LICENSE.txt`, and its
 list of authors, `dnglab-AUTHORS.txt`. The steps of a release put the source
 archive of that dnglab version on the release page, as a file beside the
 disk image, so the source is at the same place as the binary. The dnglab

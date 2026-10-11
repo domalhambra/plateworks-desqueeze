@@ -382,7 +382,11 @@ For each release:
 
    The first step is the check. Each thing that is missing gets one
    sentence, and nothing is built. The last lines of a good run are the
-   path of the disk image and its SHA-256.
+   path of the disk image and its SHA-256. The script never removes a disk
+   image: when one for this version is there already, it stops at the
+   check. Move the disk image away, or cut a new version. When a staple
+   fails six times, the notary service has accepted the file and its
+   ticket is late: start the script again later.
 7. Get the source archive of the dnglab version that is inside (design
    15.6). The formula file in Homebrew's dnglab package, `dnglab.rb` in its
    folder `.brew`, names the archive and its SHA-256. Check the hash of the
@@ -419,7 +423,11 @@ order is: measure first, then pin.
    where Homebrew wrote its own path, its first line names a Perl of macOS,
    and exiftool's own modules are the folder Image and the two files of
    `File::RandomAccess`. See that dnglab still links only libraries of
-   macOS: `otool -L "$(brew --prefix dnglab)/bin/dnglab"`.
+   macOS: `otool -L "$(brew --prefix dnglab)/bin/dnglab"`. See that it
+   starts on the oldest macOS of the app:
+   `xcrun vtool -show-build "$(brew --prefix dnglab)/bin/dnglab"`. The line
+   `minos` must be 14.0 or lower, the deployment target in `project.yml`.
+   The script makes this check too, in its step 1.
 4. **Pin.** Change the versions in `scripts/make_release.sh`. Read them with
    `dnglab --version` and `exiftool -ver`. Then run
    `scripts/make_release.sh --local`: it stops at the check, and gives each
@@ -439,7 +447,9 @@ change: `App/PlateworksDesqueeze/BundledTools.swift` and
 `App/PlateworksDesqueezeTests/BundledToolsTests.swift` fails when they
 differ. To change the order in which the window looks, change the design
 first (15.4), then `Tests/DesqueezeCoreTests/ToolLocatorTests.swift`, then
-`Sources/DesqueezeCore/ToolLocator.swift`.
+`Sources/DesqueezeCore/ToolLocator.swift`. The window gets its three
+programs from one function, `WindowTools.find`, and `AppModel.live` only
+calls it. Keep it so: a rule that is in `AppModel.live` has no test.
 
 ## Check the window by hand
 
@@ -457,7 +467,9 @@ saved settings.
 
 The arguments are in `LaunchOptions`, at the end of
 `App/PlateworksDesqueeze/AppModel.swift`. An argument that hides a program
-hides it wherever it is, also the copy inside the app of the download.
+hides it wherever it is, also the copy inside the app of the download:
+`WindowTools.find` in `App/PlateworksDesqueeze/BundledTools.swift` does
+that, and `App/PlateworksDesqueezeTests/BundledToolsTests.swift` holds it.
 Design 9 has the full acceptance pass. The window uses the real Trash, so the backups of a hand check go
 there. No argument ticks the box "Move the original ARW files to the Trash"
 (design 14.4): tick it by hand, and only on a copy of a folder. With the

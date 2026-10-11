@@ -67,7 +67,10 @@ the downloaded app are the tested ones, so a person cannot make that app use
 another copy. `ToolLocator` holds no path of the bundle. The window gives it
 two places, as it gives it the registered Adobe app:
 `App/PlateworksDesqueeze/BundledTools.swift` makes them from the URL of the
-bundle, and `AppModel.live` passes them. A place with no file that can be
+bundle. One function of the app layer, `WindowTools.find` in the same file,
+makes the locator with them and takes away what a launch argument hides.
+`AppModel.live` calls it, and the tests call it too, so a test fails when
+the window gives no place. A place with no file that can be
 run falls through to the folders of the Mac. So an app that is built from
 source, which has no file at the two places, looks as it did before. The
 command line tool and the MCP server give no place. A launch argument that
@@ -174,8 +177,8 @@ tests check the bytes on the wire.
 
 | File | Owns | Tests |
 |---|---|---|
-| `AppModel.swift` | The window's state: the folder, the factor, the box for the originals, the one job in flight, Cancel, a run that another run kept out, the detail line of a lock call that failed, the quit during a run, the launch arguments, and which program a launch argument hides | `AppModelTests.swift` and `OriginalsModelTests.swift` in `App/PlateworksDesqueezeTests/`. `Fakes.swift` beside them holds their fakes. For the programs that a launch argument hides: `BundledToolsTests.swift`. |
-| `BundledTools.swift` | The two places of exiftool and dnglab inside the bundle of the app (design 15.3). No file work. | `BundledToolsTests.swift` in `App/PlateworksDesqueezeTests/`. One of its tests reads `scripts/make_release.sh`: the script and this file must hold the same two places. |
+| `AppModel.swift` | The window's state: the folder, the factor, the box for the originals, the one job in flight, Cancel, a run that another run kept out, the detail line of a lock call that failed, the quit during a run, and the launch arguments | `AppModelTests.swift` and `OriginalsModelTests.swift` in `App/PlateworksDesqueezeTests/`. `Fakes.swift` beside them holds their fakes. |
+| `BundledTools.swift` | The two places of exiftool and dnglab inside the bundle of the app (design 15.3). `WindowTools.find`: the one way from the URL of the bundle and the launch arguments to the three programs of the window, with what a launch argument hides. No file work. | `BundledToolsTests.swift` in `App/PlateworksDesqueezeTests/`. Its tests call `WindowTools.find`, as `AppModel.live` does. One of them reads `scripts/make_release.sh`: the script and this file must hold the same two places. |
 | `ContentView.swift` | The one view: the drop zone, the factor row, the box for the originals, the buttons, the progress bar, the result list | - |
 | `DesqueezeApp.swift` | The app and its delegate: one window, and the reply to a quit | - |
 | `Info.plist` | Written by XcodeGen from `project.yml`. A hand edit is lost. | - |
@@ -394,18 +397,21 @@ The script does eight steps, and each step stops it when it fails:
    Application" identity. The keychain profile for the notary service works.
    Each check that fails says one sentence, and the script stops after the
    last check.
-2. **Build.** `xcodegen generate`, then a Release build for arm64.
+2. **Build.** `xcodegen generate`, then a Release build for arm64. Then
+   `strip -S` takes the debug records out of the executable of the app.
 3. **Put the programs inside**, with the license texts.
 4. **Sign from the inside out:** dnglab, then the app, each with the
    hardened runtime and a secure time stamp. Never `--deep`.
 5. **Prove the bundle.** The signature is valid. The two programs, started
    from inside the bundle, give their pinned versions. The exiftool loads
-   its modules from the `lib` folder inside the bundle.
+   its modules from the `lib` folder inside the bundle. No file of the app
+   holds a path of the Mac that built it.
 6. **Notarize the app** from a zip, and staple the ticket to the app.
 7. **Make the disk image** from the stapled app, sign it, notarize it, and
    staple it.
-8. **Prove the result.** `spctl` accepts the app and the disk image. The
-   script prints the path of the disk image and its SHA-256.
+8. **Prove the result.** `spctl` accepts the app, the disk image, and the
+   app inside the disk image. The script prints the path of the disk image
+   and its SHA-256.
 
 What is inside the app, besides the build:
 
@@ -421,7 +427,25 @@ Desqueeze.app/Contents/Resources/licenses/            the license texts
   script holds two versions and three hashes: of the dnglab binary, of the
   exiftool script, and of exiftool's `lib` folder. A new version of a
   program is a new measurement first, then a new pin.
-- **dnglab is not changed.** The script signs it.
+- **The code of dnglab is not changed.** The script signs the file, with
+  an identifier of this project. That replaces its code signature, so the
+  SHA-256 of the copy in the app differs from the pin. The script compares
+  the hash before it signs.
+- **The app holds no path of the Mac that built it.** A build leaves debug
+  records in the executable, and each one holds the full path of the
+  checkout. The script strips them before it signs. Step 5 stops when one
+  is left, and when any file of the app holds the path of the checkout or
+  of the home folder. dnglab is not stripped: it holds paths of Homebrew's
+  own build, and none of this Mac.
+- **Each staple is tried again.** The notary service can accept a file
+  some seconds before its ticket can be fetched. The script tries six
+  times, 20 seconds apart, then stops.
+- **The script never removes a disk image.** When the output folder of a
+  release holds one already, the script stops at step 1. It also stops
+  when a part of the path of its output folder is a link.
+- **The app inside the disk image is assessed too.** Step 8 attaches the
+  disk image read-only at a folder of the script, not under `/Volumes`,
+  and detaches it when the script ends for any reason.
 - **One line of the exiftool script is changed: the first.** It becomes
   `#!/usr/bin/perl`. The script is the file in the folder libexec of
   Homebrew's package, which looks for `lib` beside itself. The copy on the
