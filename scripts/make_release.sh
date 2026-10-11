@@ -653,9 +653,11 @@ detach_attached() {
 }
 assess_app_inside() {
   mkdir "$2"
+  # Set before the attach, so no moment has an attached image that the
+  # trap does not know.
+  attached="$2"
   trap detach_attached EXIT
   hdiutil attach "$1" -readonly -nobrowse -noautoopen -mountpoint "$2" >/dev/null
-  attached="$2"
   spctl --assess --type execute --verbose=2 "$2/Desqueeze.app"
   detach_attached
   trap - EXIT
