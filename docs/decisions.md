@@ -6,7 +6,7 @@ is reversed, mark the old row superseded and add the new one under its own
 date.
 
 "Design" is `docs/superpowers/specs/2026-10-05-desqueeze-design.md`. "Design
-13.3" is its section 13.3. Sections 12, 13 and 14 are the newest, and they
+13.3" is its section 13.3. Sections 12 to 15 are the newest, and they
 win where they differ from an earlier section. Dom is the maintainer.
 
 ## 2026-10-05
@@ -98,6 +98,17 @@ win where they differ from an earlier section. Dom is the maintainer.
 | The notice of the test folder reads "Test mode: every file that would go to the Trash goes to …". | It said "backups go to …". An original that a run moves goes to that folder too, and so does a work file. | `Sources/DesqueezeCore/Backups.swift` |
 | One test reads the Swift files of the product and fails when a parameter named `trashOriginals` has a default value, or a property of that name starts as anything but `false`. | With a default of `true` in `DesqueezeJob.run`, every other test passed, because every caller states the value. | Design 14.6, `Tests/DesqueezeCoreTests/NoDefaultForTheOptionTests.swift` |
 | The gitignore names `*.dng_exiftool_tmp` and the capital spelling of each backup and temporary name. | exiftool's temporary file holds the photo, as its backup does. A photo must not enter the repo, also on a volume that tells letter case apart. | `.gitignore` |
+| The project has a download: one disk image on the Releases page of the repo on GitHub. It holds the window only. The command line tool and the MCP server stay a build from source. | Dom decided it. A photographer must not need Xcode and Homebrew to use the window. The tool and the server are for a person who has both. | Design 15.1 and 15.2, `scripts/make_release.sh` |
+| exiftool and dnglab are inside the app of the download. Adobe DNG Converter is never inside. | Dom decided it: a person installs nothing more. Adobe's license does not allow a copy in the app, and the app works with no copy of it. | Design 15.1 and 15.3, `THIRD_PARTY_NOTICES.md` |
+| The first download is for a Mac with Apple silicon only. | Dom decided it. The two programs inside come from one Mac with Apple silicon, and no Intel Mac was tested. | Design 15.1 and 15.8, `scripts/make_release.sh` |
+| The programs inside are copies from Homebrew on the Mac that makes the release. The release script pins the version of each one and the SHA-256 of its files, and stops when one differs. A new version is a new measurement first, then a new pin. | They are the files that the match table was measured with. A program that the script got from another place, or at another version, was not measured. | Design 15.3, `scripts/make_release.sh`, `docs/changing-things.md` |
+| The window looks in its own bundle first, and nothing overrides that: no setting, no variable, no launch argument. A place that cannot be run falls through to the folders of the Mac. The command line tool and the MCP server give no place. | The versions in the bundle are the tested ones. A build from source has no file there, so nothing changes for it. | Design 15.4, `Sources/DesqueezeCore/ToolLocator.swift`, `App/PlateworksDesqueeze/BundledTools.swift` |
+| The window takes the exiftool of its bundle only when `/usr/bin/perl` can be run. | That exiftool is a Perl script whose first line names that path. Apple has said that a later macOS can come without Perl. The window then looks for exiftool as a build from source does. | Design 15.4 and 15.8, `Sources/DesqueezeCore/ToolLocator.swift` |
+| The exiftool script in the app is the one in the folder libexec of Homebrew's package, not the one on the `PATH`. Its `lib` folder is made from exiftool's own modules only: the folder Image, and the two files of `File::RandomAccess`. No file of it is changed. | Homebrew wrote the path of its own folder into the script on the `PATH`, so that copy works at one place only. The script in libexec does not have that change: it looks for `lib` beside itself. Homebrew keeps exiftool's modules in one folder with the modules of eleven other packages, one of them compiled code, which exiftool does not need for a DNG. | Design 15.3, the header of `scripts/make_release.sh` |
+| The release script pins a third hash: one for exiftool's `lib` folder. | The design names two hashes, of the dnglab binary and of the exiftool script. The `lib` folder holds nearly all of exiftool's code, so a script that pinned only the two could put another exiftool into the app. | `scripts/make_release.sh` |
+| The release script lets xcodegen write the Xcode project at the repo root, as every build does. Everything else that it writes is in its own folder under the build folder, which has a marker file. | A project that xcodegen wrote into another folder did not build: xcodebuild looked for the package of the core beside the project. git ignores the project. | `scripts/make_release.sh` |
+| A release is made on one Mac, and published by hand. GitHub Actions makes no release. The script holds no name of a person, no Apple ID and no team. | The Developer ID stays on one Mac. The repo is public. | Design 15.5, `scripts/make_release.sh` |
+| One test of the window reads the release script: the two places of the programs in the script must be the two places of `BundledTools`. | The places are in two files. With two different places, the downloaded app does not find its own programs, and nothing says so: it takes the programs of the Mac. | `App/PlateworksDesqueezeTests/BundledToolsTests.swift` |
 
 ## Rejected and deferred
 
@@ -106,8 +117,13 @@ win where they differ from an earlier section. Dom is the maintainer.
 | A Photoshop script that stretches the photos | Rejected | It converts the raw data to a JPEG. The editing range is gone. |
 | Writing the tag into the ARW | Rejected | Adobe discards it (design 2). |
 | Adobe's embedded camera profile, copied into the dnglab DNG | Rejected | Camera Raw uses its own profile for the camera model (design 13.2). |
-| A bundled dnglab and a bundled exiftool | Deferred to a release | Version 1 finds the programs that Homebrew installed. A shipped app must carry its own (design 3). |
-| Signing and notarization | Deferred to a release | Needed only when the app is given to other people as a built app. |
+| A bundled dnglab and a bundled exiftool | Superseded on 2026-10-10. It was "Deferred to a release". | Version 1 finds the programs that Homebrew installed. A shipped app must carry its own (design 3). The download carries both (design 15.3). |
+| Signing and notarization | Superseded on 2026-10-10. It was "Deferred to a release". | Needed only when the app is given to other people as a built app. The release script does both (design 15.5). No release was made with it yet. |
+| A download for an Intel Mac, or one app for both kinds of Mac | Deferred | The first download is for Apple silicon (design 15.1). No Intel Mac was tested. |
+| An update check in the app | Left, a known limit | The app makes no network connection (design 15.1), so it cannot say that a new release exists (design 15.8). A person looks at the Releases page. |
+| A setting or a variable that makes the downloaded app use another exiftool or dnglab | Rejected | The versions in the bundle are the tested ones (design 15.4). A person who wants another version builds from source. |
+| The command line tool and the MCP server in the download | Left, a known limit | The download holds the window only (design 15.1 and 15.8). The two stay a build from source. |
+| A release made by GitHub Actions | Rejected | The Developer ID stays on one Mac (design 15.5). |
 | Match rows for other cameras | Deferred | Each camera needs its own measurement (design 13.9). `CONTRIBUTING.md` has the steps. |
 | Brand marks, an accent color, app icon art, a privacy page | Deferred to a release | These belong to a published app. Version 1 uses system colors and the system font. |
 | Subfolder scan | Deferred | Subfolders hold exports and the data of other programs. |

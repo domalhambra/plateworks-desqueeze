@@ -100,6 +100,23 @@ in short sentences, in the active voice, with one word for one thing.
 Its header comment differs, and it has no skip rule for paths outside the
 repo. Do not edit its checks here.
 
+## The download
+
+A release is made on one Mac, the maintainer's, with
+`scripts/make_release.sh`. You do not need to make one, and you cannot: the
+script needs the Developer ID. A pull request never carries a built app or
+a disk image.
+
+`scripts/make_release.sh --local` works on any Mac with Apple silicon that
+has exiftool and dnglab from Homebrew at the versions that the script pins.
+It makes the app with the two programs inside, signed ad hoc. Run it when
+you change the script, the places of the programs in the bundle, or where
+the window looks for a program. The design, section 15, is the contract,
+and `docs/changing-things.md` has the steps.
+
+Do not change a pinned version or a pinned hash in a pull request without
+the measurement that `docs/changing-things.md` asks for.
+
 ## Commit messages
 
 One line: `area: what changed`. It starts in lower case and has no period at

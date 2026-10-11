@@ -18,7 +18,7 @@ file.
 | Document | Read when |
 |---|---|
 | `architecture.md` | You are new here, or you want to know which file owns a behavior and which test covers it. The shape, the two packages, the module map, one run step by step with its safety rules, delivery, and the test suites. |
-| `changing-things.md` | You are about to change something. One section for each task: the suites, the fixtures, a sentence, a preset factor, a note kind, a JSON field, an MCP tool, a camera, a converter rule, the MCP library pin, a version, a hand check of the window, a document, a decision. |
+| `changing-things.md` | You are about to change something. One section for each task: the suites, the fixtures, a sentence, a preset factor, a note kind, a JSON field, an MCP tool, a camera, a converter rule, the MCP library pin, a version, a release, a program inside the download, a hand check of the window, a document, a decision. |
 | `decisions.md` | Something looks like a past decision, and you want the reason before you change it. Dated, with a table of rejected and deferred items at the end. |
 | `build-history.md` | You want to know how version 1 was built: the method, the order of the work, what changed on the way, and what the reviews found. It is history. |
 
@@ -26,7 +26,7 @@ file.
 
 | Document | Read when |
 |---|---|
-| `superpowers/specs/2026-10-05-desqueeze-design.md` | You change any behavior. It is the contract: the scan, the factor, the run, the window, the errors, the command line tool, the MCP server, the converters, and the option that moves the originals to the Trash. Sections 12 to 14 are the newest, and they win where they differ from an earlier section. Section 2.1 records what was tested by hand. |
+| `superpowers/specs/2026-10-05-desqueeze-design.md` | You change any behavior. It is the contract: the scan, the factor, the run, the window, the errors, the command line tool, the MCP server, the converters, the option that moves the originals to the Trash, and the download. Sections 12 to 15 are the newest, and they win where they differ from an earlier section. Section 2.1 records what was tested by hand. |
 
 One file in that folder is not Markdown:
 
@@ -43,14 +43,14 @@ governs behavior, give it a row in `CLAUDE.md` too.
 
 | Document | Read when |
 |---|---|
-| `README.md` | You want to know what the tool does, what it needs, and how to build and run it. |
+| `README.md` | You want to know what the tool does, what it needs, what the download holds, and how to build and run it. |
 | `CLAUDE.md` | You are about to change code. The rules that must not break, and the one document to read for each kind of change. |
 | `AGENTS.md` | You are a coding agent. It points to `CLAUDE.md`. |
 | `CONTRIBUTING.md` | You want to send a change, or add a camera to the match table. |
 | `PROJECT_CHARTER.md` | You want the purpose, the status and the milestones. |
 | `CHANGELOG.md` | You want to know what a version holds. |
-| `SECURITY.md` | You found a problem that can harm a person's files. |
-| `THIRD_PARTY_NOTICES.md` | You want the license of each program that the app starts and of each library that the server links. |
+| `SECURITY.md` | You found a problem that can harm a person's files, or you want to check a download. |
+| `THIRD_PARTY_NOTICES.md` | You want the license of each program that the app starts, of the two programs inside the download, and of each library that the server links. |
 | `LICENSE` | The MIT license of this repo. |
 
 ## The documentation site

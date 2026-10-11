@@ -15,9 +15,11 @@ Build: `swift build -c release` (the tool),
 `swift build -c release --package-path MCPServer` (the server), and
 `xcodegen generate`, then
 `xcodebuild -project PlateworksDesqueeze.xcodeproj -scheme PlateworksDesqueeze -configuration Release -derivedDataPath build build`
-(the app).
+(the app). The download is `scripts/make_release.sh`, on the Mac that has
+the Developer ID only. `scripts/make_release.sh --local` makes the app with
+exiftool and dnglab inside, signed ad hoc, for checks.
 
-Four rules that an agent breaks most easily:
+Five rules that an agent breaks most easily:
 
 - Never run the tool, the server, a test or exiftool on a real photo folder.
   Use a copy in a temporary folder.
@@ -27,3 +29,5 @@ Four rules that an agent breaks most easily:
 - Never let a test reach the real Trash. Give `FileBackups` a function of
   your own, or set `DESQUEEZE_TEST_BACKUP_FOLDER` to a temporary folder for a
   built tool or a built server.
+- Never start a built app on a folder that a person wants to keep. The
+  window uses the real Trash, also the app that `--local` makes.

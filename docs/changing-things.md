@@ -329,6 +329,118 @@ Tests keep them equal.
    entry is not the current version.
 5. Run `xcodegen generate`, then the three suites.
 
+## Make a release
+
+Read design 15 first, all of it. A release is the disk image that
+`scripts/make_release.sh` makes. Only the Mac that has the Developer ID can
+make one. GitHub Actions makes none. The header of the script says what each
+step does.
+
+One time, on that Mac:
+
+- Put the "Developer ID Application" certificate in the keychain. The script
+  finds it by its kind, and it needs exactly one.
+- Make the keychain profile for the notary service. The command asks for
+  the credentials, and the script never sees them:
+
+  ```bash
+  xcrun notarytool store-credentials desqueeze-notary
+  ```
+
+  For a profile with another name, set `DESQUEEZE_NOTARY_PROFILE`.
+- Install exiftool, dnglab and XcodeGen with Homebrew, at the versions that
+  the script pins.
+
+For each release:
+
+1. Cut the version (the section "Cut a version"). Give the heading in
+   `CHANGELOG.md` its date. The script stops for "Unreleased".
+2. Run the three suites with the fixtures and both converters, so the tests
+   on the real programs and the drift check run.
+3. Make the app with no Developer ID first:
+
+   ```bash
+   scripts/make_release.sh --local
+   ```
+
+   It builds for arm64, puts the two programs inside, signs ad hoc, and
+   proves the bundle. The app is in the folder release/local inside build.
+4. Make a trial in the window of that app, on copies. The window uses the
+   real Trash, so use a folder on a scratch disk image: a file that goes to
+   the Trash there goes to the Trash of that image, and leaves with it.
+   Prove that on one file first. Start the app with `-openFolder` and the
+   folder on the image (the section "Check the window by hand"). Run with a
+   factor, then Remove. While the run works, look at the process list: the
+   exiftool and the dnglab must be the two inside the app, and not the ones
+   of Homebrew.
+5. Commit everything. The script stops when the work tree is not clean.
+6. Make the release:
+
+   ```bash
+   scripts/make_release.sh
+   ```
+
+   The first step is the check. Each thing that is missing gets one
+   sentence, and nothing is built. The last lines of a good run are the
+   path of the disk image and its SHA-256.
+7. Get the source archive of the dnglab version that is inside (design
+   15.6). The formula file in Homebrew's dnglab package, `dnglab.rb` in its
+   folder `.brew`, names the archive and its SHA-256. Check the hash of the
+   file that you got.
+8. Publish by hand, on the maintainer's yes: `gh release create`, with the
+   disk image and the source archive of dnglab as files. Put the SHA-256 of
+   the disk image in the text of the release.
+9. Change the documents that say "no release is published yet":
+   `README.md`, `docs/architecture.md`, `SECURITY.md`, `CHANGELOG.md`,
+   `PROJECT_CHARTER.md`, and the articles `GettingStarted.md`,
+   `DesqueezeCore.md` and `Troubleshooting.md` of the documentation site.
+   Put what the first release proved into "Built and tested on" in
+   `README.md`.
+
+Never put a name, an Apple ID, a team or a certificate hash into a file of
+the repo.
+
+## Change a program inside the download
+
+Read design 13.2 and 15.3 first. The app of the download holds dnglab and
+exiftool at the versions that the match table was measured with. So the
+order is: measure first, then pin.
+
+1. Install the new version with Homebrew on the Mac that makes the release.
+2. **Measure.** Run `swift test` with the fixtures and both converters. The
+   drift check must run, not skip: `swift test --filter AdobeDriftTests`.
+   It compares every matched tag of a dnglab DNG with Adobe's. When it
+   fails, the match table needs a new measurement (design 13.2) before
+   anything else changes.
+3. **Look at the files of the new package.** The header of
+   `scripts/make_release.sh` says which files of Homebrew's exiftool go
+   into the app, and how to find them again. See that this is still true:
+   the script in the folder libexec differs from the one on the `PATH` only
+   where Homebrew wrote its own path, its first line names a Perl of macOS,
+   and exiftool's own modules are the folder Image and the two files of
+   `File::RandomAccess`. See that dnglab still links only libraries of
+   macOS: `otool -L "$(brew --prefix dnglab)/bin/dnglab"`.
+4. **Pin.** Change the versions in `scripts/make_release.sh`. Read them with
+   `dnglab --version` and `exiftool -ver`. Then run
+   `scripts/make_release.sh --local`: it stops at the check, and gives each
+   hash that it found. Put the three hashes into the script.
+5. Run `scripts/make_release.sh --local` again. It must pass its step 5:
+   each program gives its pinned version from inside the app.
+6. Make the trial in the window, as in "Make a release".
+7. Change the documents in the same change: the table in design 15.3, the
+   versions in `README.md`, `THIRD_PARTY_NOTICES.md`, `docs/architecture.md`
+   and the header of `.github/workflows/tests.yml`. Add a row to
+   `docs/decisions.md` and an entry to `CHANGELOG.md`.
+
+To change where a program is inside the app, change two files in one
+change: `App/PlateworksDesqueeze/BundledTools.swift` and
+`scripts/make_release.sh`.
+`testTheReleaseScriptPutsTheProgramsAtTheSameTwoPlaces` in
+`App/PlateworksDesqueezeTests/BundledToolsTests.swift` fails when they
+differ. To change the order in which the window looks, change the design
+first (15.4), then `Tests/DesqueezeCoreTests/ToolLocatorTests.swift`, then
+`Sources/DesqueezeCore/ToolLocator.swift`.
+
 ## Check the window by hand
 
 The view has no test. Build the app (`README.md`), then start it with launch
@@ -344,8 +456,9 @@ saved settings.
 | The last two together | The window with exiftool and with neither converter |
 
 The arguments are in `LaunchOptions`, at the end of
-`App/PlateworksDesqueeze/AppModel.swift`. Design 9 has the full acceptance
-pass. The window uses the real Trash, so the backups of a hand check go
+`App/PlateworksDesqueeze/AppModel.swift`. An argument that hides a program
+hides it wherever it is, also the copy inside the app of the download.
+Design 9 has the full acceptance pass. The window uses the real Trash, so the backups of a hand check go
 there. No argument ticks the box "Move the original ARW files to the Trash"
 (design 14.4): tick it by hand, and only on a copy of a folder. With the
 box on, a run moves the ARW files of that copy to the real Trash.

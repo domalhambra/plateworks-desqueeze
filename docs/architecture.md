@@ -49,17 +49,33 @@ shows what the core returns. The window calls `FolderScanner` and
 the same two types to the report types. So all three front ends do the same
 work on a folder.
 
-The three external programs are not part of this repo and are not inside
-the built app. The core finds them on the Mac at run time
-(`Sources/DesqueezeCore/ToolLocator.swift`):
+The three external programs are not part of this repo. An app that is built
+from source has none of them inside. The app of the download has exiftool
+and dnglab inside (design 15, and "Delivery" below). The core finds the
+programs at run time (`Sources/DesqueezeCore/ToolLocator.swift`):
 
 | Program | Where the core looks | When it is missing |
 |---|---|---|
-| exiftool | `/opt/homebrew/bin`, then `/usr/local/bin`, then each folder of `PATH` | No front end can work. Each one gives the install command. |
-| dnglab | The same folders | Adobe DNG Converter converts every ARW. |
-| Adobe DNG Converter | `/Applications`. The window also asks Launch Services for the app with the bundle identifier `com.adobe.DNGConverter`. | dnglab converts every ARW. A photo with no full match gets a note. |
+| exiftool | For the window: the copy in the bundle of the app, when it can be run and `/usr/bin/perl` can be run. Then, for every front end: `/opt/homebrew/bin`, then `/usr/local/bin`, then each folder of `PATH` | No front end can work. Each one gives the install command. |
+| dnglab | For the window: the copy in the bundle of the app, when it can be run. Then the same folders | Adobe DNG Converter converts every ARW. |
+| Adobe DNG Converter | `/Applications`. The window also asks Launch Services for the app with the bundle identifier `com.adobe.DNGConverter`. It is never inside the app. | dnglab converts every ARW. A photo with no full match gets a note. |
 
 With neither converter, the ARW files wait and the DNG files still run.
+
+**The bundle comes first, and nothing overrides it.** The versions inside
+the downloaded app are the tested ones, so a person cannot make that app use
+another copy. `ToolLocator` holds no path of the bundle. The window gives it
+two places, as it gives it the registered Adobe app:
+`App/PlateworksDesqueeze/BundledTools.swift` makes them from the URL of the
+bundle, and `AppModel.live` passes them. A place with no file that can be
+run falls through to the folders of the Mac. So an app that is built from
+source, which has no file at the two places, looks as it did before. The
+command line tool and the MCP server give no place. A launch argument that
+hides a program hides the copy in the bundle too.
+
+The exiftool in the bundle is a Perl script that starts with
+`#!/usr/bin/perl`. On a macOS with no Perl there, the window takes the
+exiftool of the Mac, as a build from source does.
 
 ## The two packages
 
@@ -97,7 +113,7 @@ Test files are in `Tests/DesqueezeCoreTests/`.
 | `FolderText.swift` | The sentences and counts about a folder: the counts line, the run button label, the folder messages, the advice about the converters. The words of the window about the originals: the label of the box, the line under it, and the run button label with the originals. | `FolderTextTests.swift`, `OriginalsTests.swift` |
 | `ProcessRunner.swift` | The protocol that starts a program with no shell, and its real implementation. A program that a signal ended is an error, not an exit code. | `ProcessRunnerTests.swift` |
 | `LoggingProcessRunner.swift` | The runner behind `--verbose`: each command line, its exit code, its output | `LoggingProcessRunnerTests.swift` |
-| `ToolLocator.swift` | Where the three programs are, and the sentences for a missing exiftool and for the dnglab install | `ToolLocatorTests.swift` |
+| `ToolLocator.swift` | Where the three programs are: the two places in the bundle that the window gives, then the folders of the Mac. The sentences for a missing exiftool and for the dnglab install. | `ToolLocatorTests.swift` |
 | `ScaleTag.swift` | `Scale`, and the three exiftool calls for `DefaultScale`: read a folder, write one file, read one file back. The one read of a DNG before its original moves to the Trash. | `ScaleTagTests.swift`, `OriginalsTests.swift`. With the real exiftool: `IntegrationTests.swift`, `DnglabIntegrationTests.swift` |
 | `Backups.swift` | The `_original` backup: exists, to the Trash, restore with one rename. `trashFile`, the one way to the Trash for a work file, a leftover, and an original. The test variable `DESQUEEZE_TEST_BACKUP_FOLDER`. | `BackupsTests.swift`, `BackupTestFolderTests.swift` |
 | `RawConverter.swift` | The converter protocol, the pair of converters, the names of the output and of the work file, and the Adobe converter. The rules that hold for every converter: a name that is too long, the checks before the start, the leftovers of an earlier run, the work file, the rename, and what counts as a partial output. | `RawConverterTests.swift`. With the real converter: `IntegrationTests.swift` |
@@ -158,15 +174,17 @@ tests check the bytes on the wire.
 
 | File | Owns | Tests |
 |---|---|---|
-| `AppModel.swift` | The window's state: the folder, the factor, the box for the originals, the one job in flight, Cancel, a run that another run kept out, the detail line of a lock call that failed, the quit during a run, the launch arguments | `AppModelTests.swift` and `OriginalsModelTests.swift` in `App/PlateworksDesqueezeTests/`. `Fakes.swift` beside them holds their fakes. |
+| `AppModel.swift` | The window's state: the folder, the factor, the box for the originals, the one job in flight, Cancel, a run that another run kept out, the detail line of a lock call that failed, the quit during a run, the launch arguments, and which program a launch argument hides | `AppModelTests.swift` and `OriginalsModelTests.swift` in `App/PlateworksDesqueezeTests/`. `Fakes.swift` beside them holds their fakes. For the programs that a launch argument hides: `BundledToolsTests.swift`. |
+| `BundledTools.swift` | The two places of exiftool and dnglab inside the bundle of the app (design 15.3). No file work. | `BundledToolsTests.swift` in `App/PlateworksDesqueezeTests/`. One of its tests reads `scripts/make_release.sh`: the script and this file must hold the same two places. |
 | `ContentView.swift` | The one view: the drop zone, the factor row, the box for the originals, the buttons, the progress bar, the result list | - |
 | `DesqueezeApp.swift` | The app and its delegate: one window, and the reply to a quit | - |
 | `Info.plist` | Written by XcodeGen from `project.yml`. A hand edit is lost. | - |
 
 The view and the delegate have no test. Check them by hand, with the launch
 arguments in `docs/changing-things.md`. The window's tests compile
-`AppModel.swift` into a test bundle with no app host, so a test run starts
-no app and opens no window.
+`AppModel.swift` and `BundledTools.swift` into a test bundle with no app
+host, so a test run starts no app and opens no window. `project.yml` lists
+each source file of that bundle by name.
 
 ## One run, step by step
 
@@ -348,24 +366,95 @@ states it. The window gives the state of its box. The tool gives its flag,
 
 ## Delivery
 
-Nothing is hosted, and there is no release yet. Each of the three is built
-from source on the Mac that uses it (design 12.3). The commands are in
-`README.md`.
+Nothing is hosted, and no release is published yet. Until one is, each of
+the three is built from source on the Mac that uses it (design 12.3). The
+commands are in `README.md`.
 
 | Built thing | Build | Where it goes |
 |---|---|---|
 | The app, `Desqueeze.app` | `xcodegen generate`, then `xcodebuild` with the Release configuration | The Applications folder |
 | `desqueeze` | `swift build -c release` | A folder on the `PATH`. The maintainer uses `~/.local/bin/`. |
 | `desqueeze-mcp` | `swift build -c release --package-path MCPServer` | The same folder. The MCP client is given the absolute path. |
+| The download, a disk image with the app | `scripts/make_release.sh`, on the Mac that has the Developer ID | The Releases page of the repo on GitHub, by hand |
 
 The build signs the app ad hoc, so it runs on the Mac that built it. It is
 not signed with a Developer ID and is not notarized. The app is not
 sandboxed, because a sandboxed app cannot start the three programs.
 `project.yml` has no entitlements file, on purpose.
 
+### The download
+
+`scripts/make_release.sh` makes the download (design 15). The download
+holds the window only. The tool and the server stay a build from source.
+The script does eight steps, and each step stops it when it fails:
+
+1. **Check.** The work tree is clean. The version of `project.yml` has a
+   dated section in `CHANGELOG.md`. exiftool and dnglab from Homebrew are at
+   the pinned versions and hashes. The keychain has one "Developer ID
+   Application" identity. The keychain profile for the notary service works.
+   Each check that fails says one sentence, and the script stops after the
+   last check.
+2. **Build.** `xcodegen generate`, then a Release build for arm64.
+3. **Put the programs inside**, with the license texts.
+4. **Sign from the inside out:** dnglab, then the app, each with the
+   hardened runtime and a secure time stamp. Never `--deep`.
+5. **Prove the bundle.** The signature is valid. The two programs, started
+   from inside the bundle, give their pinned versions. The exiftool loads
+   its modules from the `lib` folder inside the bundle.
+6. **Notarize the app** from a zip, and staple the ticket to the app.
+7. **Make the disk image** from the stapled app, sign it, notarize it, and
+   staple it.
+8. **Prove the result.** `spctl` accepts the app and the disk image. The
+   script prints the path of the disk image and its SHA-256.
+
+What is inside the app, besides the build:
+
+```
+Desqueeze.app/Contents/Helpers/dnglab                 dnglab 0.8.0, a Mach-O program
+Desqueeze.app/Contents/Resources/exiftool/exiftool    exiftool 13.55, a Perl script
+Desqueeze.app/Contents/Resources/exiftool/lib/        the Perl modules of exiftool
+Desqueeze.app/Contents/Resources/licenses/            the license texts
+```
+
+- **The copies come from Homebrew on the Mac that makes the release.** They
+  are the files that the match table was measured with (design 13.2). The
+  script holds two versions and three hashes: of the dnglab binary, of the
+  exiftool script, and of exiftool's `lib` folder. A new version of a
+  program is a new measurement first, then a new pin.
+- **dnglab is not changed.** The script signs it.
+- **One line of the exiftool script is changed: the first.** It becomes
+  `#!/usr/bin/perl`. The script is the file in the folder libexec of
+  Homebrew's package, which looks for `lib` beside itself. The copy on the
+  `PATH` cannot move: Homebrew wrote the path of its own folder into it.
+  The match table was measured with the copy on the `PATH`. The two copies
+  differ only in the lines that say where the modules are, and both load
+  the same modules. The header of the script says how to find the files
+  again.
+- **A Mach-O program goes in the folder Helpers of the bundle, and a script
+  goes in the folder Resources.** The code signature of a bundle needs it
+  so.
+- **The script holds no name of a person, no Apple ID and no team.** It
+  finds the identity in the keychain by its kind. The notary credentials
+  are in a keychain profile.
+- **The script writes into its own folder under the build folder only**,
+  and removes only a folder that has its marker file. One program that it
+  starts writes outside: xcodegen writes the Xcode project at the repo
+  root, as for every build.
+- **`--local` does steps 2, 3 and 5**, with an ad hoc signature. It needs
+  no Developer ID and no clean tree, and it makes no disk image. It still
+  checks the pinned versions and hashes first. Its app is for checks, and
+  for the Mac that built it.
+- **Nothing is uploaded.** The maintainer publishes a release by hand.
+  GitHub Actions makes no release: the identity stays on one Mac.
+
+Steps 4 with the Developer ID, 6, 7 and 8 were not run yet. The first
+release proves them (design 15.7).
+
 There are no environment variables for normal use. The tools read `PATH` to
 find exiftool and dnglab. `DESQUEEZE_TEST_BACKUP_FOLDER` is for tests only:
 it sends each discarded file to a folder in place of the Trash.
+`DESQUEEZE_NOTARY_PROFILE` is for the release script only: the name of the
+keychain profile, when it is not `desqueeze-notary`.
 
 ## The verification harness
 
@@ -434,6 +523,12 @@ passed on 2026-10-10. The runner has no sample photo and no Adobe DNG
 Converter, so the tests on the real programs skip there: the header of
 `tests.yml` says what a green run proves.
 
+**The release script** has no suite. `scripts/make_release.sh --local`
+is its check: it stops when a pin differs, when the signature is not valid,
+and when a program inside the bundle does not give its pinned version. One
+test of the window, in `BundledToolsTests.swift`, reads the script: its two
+places in the bundle must be the two places of `BundledTools.swift`.
+
 **No test reaches the real Trash.** A unit test gives `FileBackups` its own
 function. A test that starts a built tool sets
 `DESQUEEZE_TEST_BACKUP_FOLDER`. The window's tests use fakes, and they do
@@ -441,7 +536,9 @@ not read or write the saved settings. A test of the folder lock takes the
 system's lock on a temporary folder: the lock makes no file.
 
 **By hand:** the acceptance pass of design 9, on a copy of a shoot folder,
-and one photo opened in Lightroom at each factor. No test can do those.
+and one photo opened in Lightroom at each factor. No test can do those. For
+the download, a run in the window of the app that `--local` makes, on
+copies (design 15.7). `docs/changing-things.md` has the steps.
 
 ## Cross-repo dependencies
 
