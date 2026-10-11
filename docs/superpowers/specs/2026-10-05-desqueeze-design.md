@@ -1222,17 +1222,27 @@ of another signer.
 | exiftool | 13.55 | `Contents/Resources/exiftool/exiftool`, with its `lib` folder beside it |
 | License texts | | `Contents/Resources/licenses/` |
 
-- **The copies come from Homebrew on the Mac that makes the release.** They
-  are the files that the match table of 13.2 was measured with. The release
-  script holds the version of each program and the SHA-256 of the dnglab
-  binary and of the exiftool script, and it stops when one differs. A new
-  version of a tool is a new measurement first (13.2), then a new pin.
-- **dnglab is not changed.** The script signs it with the Developer ID, as
-  it signs the app.
-- **One line of the exiftool script changes: the first.** Homebrew's copy
-  starts with the path of one Perl version. The copy in the app starts with
-  `#!/usr/bin/perl`, the Perl of macOS. The `lib` folder is not changed.
-  exiftool finds `lib` beside the script by itself.
+- **The copies come from Homebrew on the Mac that makes the release.** The
+  release script holds the version of each program and three SHA-256
+  values: of the dnglab binary, of the exiftool script, and of exiftool's
+  `lib` folder. It stops when one differs. A new version of a tool is a new
+  measurement first (13.2), then a new pin.
+- **dnglab is the file that the match table of 13.2 was measured with.** It
+  is not changed. The script signs it with the Developer ID, as it signs
+  the app.
+- **Homebrew has two copies of the exiftool script, and the app takes the
+  one that can move.** The copy on the `PATH`, `bin/exiftool`, has the path
+  of Homebrew's own folder written into its include lines. The copy in
+  `libexec/bin` looks for `lib` beside itself. The two differ in those
+  lines only. The measurement of 13.2 ran the first, and the app holds the
+  second.
+- **One line of that script changes: the first.** Homebrew's copy starts
+  with the path of one Perl version. The copy in the app starts with
+  `#!/usr/bin/perl`, the Perl of macOS.
+- **The `lib` folder holds exiftool's own files only**: the `Image` folder
+  and `File/RandomAccess`, not changed. Homebrew keeps them in one folder
+  with other Perl packages, one of them compiled. Those stay out. A DNG
+  needs none of them.
 - A Mach-O program goes in `Contents/Helpers`, and a script goes in
   `Contents/Resources`. The code signature of a bundle needs it so.
 
@@ -1288,12 +1298,18 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
   keychain profile that `xcrun notarytool store-credentials` makes. The
   name of the profile comes from `DESQUEEZE_NOTARY_PROFILE`, and is
   `desqueeze-notary` when the variable is not set.
-- `--local` does steps 2, 3 and 5 with an ad hoc signature, and stops. It
-  needs no Developer ID, a clean tree is not required, and it makes no disk
-  image. The app is at `build/release/local/Desqueeze.app`. It is for
+- `--local` checks the pins, then does steps 2, 3 and 5 with an ad hoc
+  signature, and stops. It needs no Developer ID, a clean tree is not
+  required, and it makes no disk image. The app is at `build/release/local/Desqueeze.app`. It is for
   checks, and for the Mac that built it.
-- The script never writes outside `build/release/`. It removes only what an
-  earlier run of the script put there.
+- The script never writes outside `build/release/`, with one exception:
+  `xcodegen` writes the Xcode project at the root of the repo, as every
+  build does. The script removes only what an earlier run of the script put
+  in `build/release/`: each folder that it makes carries a marker file, and
+  a folder with no marker is never removed.
+- Step 1 makes every check, says one sentence for each one that failed,
+  and then stops. The check of the notary profile needs the network, so it
+  runs only when every other check passed.
 - A release is published by hand, on Dom's yes: `gh release create` with
   the disk image, and the source archive of 15.6.
 - GitHub Actions makes no release. The identity stays on one Mac.
@@ -1317,6 +1333,8 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
   the order is as before; the exiftool of the bundle is taken only with
   `/usr/bin/perl`; a place that cannot be run falls through.
 - A unit test of the value type that makes the two places from a bundle URL.
+- A test reads the release script, and fails when the two places in the
+  script differ from the two places of that value type.
 - `scripts/make_release.sh --local` on the release Mac, then a real run in
   the window of that app, on copies, with the process list as the proof that
   the two programs of the bundle did the work.
