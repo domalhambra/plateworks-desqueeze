@@ -14,8 +14,10 @@ command line tool named `desqueeze`, and an MCP server named `desqueeze-mcp`
 for Claude Code. The code is Swift: one package with all the rules,
 `DesqueezeCore`, and three thin front ends.
 
-Version 0.1.0. It is built from source: there is no download, and the app is
-not signed with a Developer ID and not notarized.
+Version 0.1.0. No release is published yet, so today each person builds it
+from source. The repo can make a download of the window: a signed, notarized
+disk image, with exiftool and dnglab inside the app. The section "Download"
+says what it holds.
 
 ## Is it for you
 
@@ -25,8 +27,8 @@ It is for you when all of these are true:
   their previews stay squeezed. Other raw editors were not tested.
 - Your photos are DNG files from any camera, or ARW files from a Sony camera.
 - Your lens squeezes the width, by a factor from 1 to 4.
-- You have a Mac, and you can build from source with Xcode. The build was
-  tested on macOS 27.2 with Xcode 27 only.
+- You have a Mac. Until a release is published, you also need Xcode, to
+  build from source. The build was tested on macOS 27.2 with Xcode 27 only.
 
 What it does not do:
 
@@ -36,6 +38,9 @@ What it does not do:
 - It does not set a vertical stretch.
 
 ## What it needs
+
+This section is for a build from source. The app of the download has
+exiftool and dnglab inside, and needs nothing more.
 
 | Program | Needed for | Install |
 |---|---|---|
@@ -57,12 +62,23 @@ Xcode 27 only. The section "Built and tested on" has each version.
 
 Where each front end looks for the programs:
 
-- **exiftool and dnglab.** `/opt/homebrew/bin`, then `/usr/local/bin`, then
+- **exiftool and dnglab, the window.** First inside its own app. The app of
+  the download has both programs there, and an app that you built from
+  source has none. Then `/opt/homebrew/bin`, then `/usr/local/bin`, then
   each folder of `PATH`. A window that Finder starts gets a short `PATH`,
-  so it finds the two programs in the two Homebrew folders only.
+  so on the Mac it finds the two programs in the two Homebrew folders only.
+  The exiftool inside the app is a Perl script: the window takes it only
+  when the Perl of macOS, `/usr/bin/perl`, can be run.
+- **exiftool and dnglab, the command line tool and the MCP server.** On the
+  Mac only: `/opt/homebrew/bin`, then `/usr/local/bin`, then each folder of
+  `PATH`.
 - **Adobe DNG Converter.** The window asks macOS where the app is, so it
   finds it wherever it is installed. The command line tool and the MCP
   server look in the Applications folder only.
+
+The app of the download always uses the two programs inside itself. You
+cannot make it use another copy. That is on purpose: the versions inside are
+the tested ones.
 
 ## One camera is measured
 
@@ -92,11 +108,46 @@ design has the measurements, in section 13.2. To add your camera, read
 The tag itself does not depend on the camera. A DNG that you have already
 gets the correct shape, whatever camera made it.
 
+## Download
+
+No release is published yet. Until the first one is, build from source: the
+section "Install and run" has the steps.
+
+`scripts/make_release.sh` makes the download. It is one disk image, for the
+Releases page of the repo on GitHub:
+<https://github.com/domalhambra/plateworks-desqueeze/releases>.
+
+| | What the script makes |
+|---|---|
+| File | `Desqueeze-<version>.dmg` |
+| Holds | Desqueeze.app, and a link to the Applications folder |
+| Inside the app | exiftool 13.55 and dnglab 0.8.0. You install nothing more. |
+| Signature | Developer ID, with the hardened runtime. Notarized by Apple. The ticket is stapled to the app and to the disk image, so the first start needs no network connection. |
+| Mac | Apple silicon, with macOS 14 or later. On an Intel Mac the app does not start. |
+
+To install from a disk image, open it and drag Desqueeze to the Applications
+folder.
+
+- The download holds the window only. The command line tool and the MCP
+  server stay a build from source, and they use the exiftool and the dnglab
+  of the Mac.
+- Adobe DNG Converter is never inside. Its license does not allow that, and
+  the app works with no copy of it.
+- The exiftool inside needs the Perl of macOS, `/usr/bin/perl`.
+- The app has no update check, and it makes no network connection. So it
+  cannot say that a new release exists: look at the Releases page.
+- `SECURITY.md` says how to check a download.
+- `THIRD_PARTY_NOTICES.md` has the licenses of the two programs inside. The
+  app holds the license texts too.
+
 ## Install and run
 
 Try it on a copy of a folder first. All commands run from the repo root.
 
 ### The window
+
+This is the build from source. The app that it makes has no program inside,
+so it uses the exiftool and the dnglab that Homebrew installed.
 
 ```bash
 brew install exiftool dnglab xcodegen
@@ -104,6 +155,9 @@ xcodegen generate
 xcodebuild -project PlateworksDesqueeze.xcodeproj -scheme PlateworksDesqueeze -configuration Release -derivedDataPath build build
 cp -R build/Build/Products/Release/Desqueeze.app /Applications/
 ```
+
+The build signs the app for the Mac that built it. It is not signed with a
+Developer ID and it is not notarized.
 
 1. Open Desqueeze.
 2. Drop a folder of photos on the window, or click "Choose folder".
@@ -288,10 +342,29 @@ Never test on a real shoot folder. Copy it first.
 
 ## Ship it
 
-There is no release yet. Each person builds the three parts from source, as
-above. A release for other people needs a bundled exiftool and dnglab, a
-Developer ID signature, and notarization. The design lists what waits, in
-section 3. To cut a version, read `docs/changing-things.md`.
+No release is published yet. Each person builds the three parts from source,
+as above.
+
+`scripts/make_release.sh` makes the release, on the one Mac that has the
+Developer ID. It builds the app for Apple silicon, puts exiftool and dnglab
+inside with their license texts, signs, notarizes, and makes the disk image.
+It uploads nothing: the maintainer publishes a release by hand. GitHub
+Actions makes no release.
+
+```bash
+scripts/make_release.sh --local   # the app only, signed ad hoc, for checks
+scripts/make_release.sh           # the signed, notarized disk image
+```
+
+`--local` needs no Developer ID. It puts the app in the folder release
+inside build, which git ignores. That app is for checks, and for the Mac
+that built it.
+
+The copies of the two programs come from Homebrew on the Mac that makes the
+release. The script holds the version of each one and the SHA-256 of its
+files, and it stops when one differs. The design has the contract, in
+section 15. `docs/changing-things.md` has the steps: to cut a version, to
+make a release, and to change a program inside the download.
 
 ## Built and tested on
 
@@ -304,9 +377,17 @@ section 3. To cut a version, read `docs/changing-things.md`.
 | exiftool | 13.55 |
 | dnglab | 0.8.0 |
 | Adobe DNG Converter | 18.7 |
+| The Perl of macOS, for the exiftool inside the app | 5.34.1 |
 
 The deployment target is macOS 14. No other Mac, system or tool version was
 tested.
+
+The download: `scripts/make_release.sh --local` was run on this Mac. It made
+the app for arm64 with the two programs inside, and each program gave its
+version from inside the app. The steps that need the Developer ID were not
+run yet: the signature with it, the notarization, and the disk image. The
+first release proves them. An Intel Mac was not tested, with the download or
+with a build from source.
 
 ## Where to go next
 
@@ -336,5 +417,6 @@ package. The site is at <https://domalhambra.github.io/plateworks-desqueeze/>.
 MIT. Copyright (c) 2026 Plateworks. The text is in `LICENSE`.
 
 exiftool, dnglab and Adobe DNG Converter are separate programs with their
-own licenses. The MCP server links libraries with their own licenses.
-`THIRD_PARTY_NOTICES.md` lists all of them.
+own licenses. The app of the download holds a copy of exiftool and of
+dnglab, with their license texts. The MCP server links libraries with their
+own licenses. `THIRD_PARTY_NOTICES.md` lists all of them.

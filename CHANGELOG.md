@@ -9,7 +9,8 @@ below is not that number.
 
 ## [0.1.0] - Unreleased
 
-The first version. It is built from source, and there is no download.
+The first version. No release is published yet. Until one is, it is built
+from source.
 
 ### Added
 
@@ -40,6 +41,17 @@ The first version. It is built from source, and there is no download.
 - A documentation site: guides for a photographer and for a contributor,
   and the API reference of `DesqueezeCore`. `scripts/build_docs.sh` builds
   it from the DocC catalog. It is published at <https://domalhambra.github.io/plateworks-desqueeze/>.
+- `scripts/make_release.sh`, which makes the download: one disk image with
+  the app of the window, for a Mac with Apple silicon and macOS 14 or
+  later. The script signs the app and the disk image with a Developer ID
+  and the hardened runtime, and has Apple notarize both. With `--local` it
+  makes the app only, signed ad hoc, for checks.
+- The app of the download has exiftool 13.55 and dnglab 0.8.0 inside, with
+  their license texts, so a person installs nothing more. The window looks
+  for the two programs inside its own app first, then on the Mac. An app
+  that is built from source has no program inside, and looks as before. The
+  command line tool and the MCP server are not in the download, and look on
+  the Mac only.
 
 ### Safety
 
@@ -121,4 +133,17 @@ The first version. It is built from source, and there is no download.
   conversion then fails in the real run, that ARW stays.
 - The MCP server has no argument that moves an original, but an agent that
   has a shell can start the command line tool with the flag.
-- The app is not signed with a Developer ID and not notarized.
+- An app that is built from source is not signed with a Developer ID and
+  not notarized. The release script does both for the download. No release
+  was made with it yet: the steps that need the Developer ID were not run.
+- The download is for Apple silicon. On an Intel Mac the app does not
+  start. A build from source on an Intel Mac was not tested either.
+- The exiftool inside the app needs the Perl of macOS. Apple has said that
+  a later macOS can come without it. The window then looks for exiftool on
+  the Mac, as a build from source does.
+- A person cannot replace a program inside the downloaded app. A newer
+  dnglab or exiftool reaches the app only with a new release.
+- The app has no update check. It cannot say that a new release exists.
+- The dnglab binary holds Rust libraries of other people. The app carries
+  the notices that dnglab's own Homebrew package carries, and no more.
+- Only the Mac that has the Developer ID can make a release.

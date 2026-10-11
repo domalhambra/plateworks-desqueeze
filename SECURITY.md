@@ -42,12 +42,22 @@ can damage, lose or expose a person's files is a security problem here.
   `PATH`. So it starts the program of that name that it finds first. It
   looks for Adobe DNG Converter in the Applications folder. The window
   first asks macOS where the app with Adobe's bundle identifier is.
+- **The programs inside the download.** The app of the download has its own
+  exiftool and dnglab, and the window starts those two before any copy on
+  the Mac. No setting, variable or launch argument makes it start another
+  copy. The exiftool inside is a Perl script, and the Perl of macOS,
+  `/usr/bin/perl`, runs it. On a macOS with no Perl there, the window looks
+  for exiftool on the Mac, as in the item above. An app that is built from
+  source has no program inside. The command line tool and the MCP server
+  never look inside an app.
 - **Saved settings.** The window saves one value of its own: the factor of
   the last run. It never saves the box that moves the originals.
 - **No network.** The window and the command line tool make no network
-  request. The MCP server speaks to its client on standard input and
-  standard output only. The build of the server fetches its libraries from
-  GitHub.
+  request. The app has no update check. The MCP server speaks to its client
+  on standard input and standard output only. The build of the server
+  fetches its libraries from GitHub. The release script, which only the
+  maintainer runs, sends the app and the disk image to Apple's notary
+  service.
 - **No data collection.** No analytics, no log that leaves the Mac.
 
 The app is not sandboxed, because a sandboxed app cannot start the three
@@ -59,6 +69,65 @@ The MCP server changes files when a client calls `desqueeze_run` or
 runs one call at a time. It never moves an original ARW: no tool has an
 argument for that, and a call that carries one is refused. Give the server
 only to a client that you trust with your photo folders.
+
+## Check a download
+
+No release is published yet. This section says what the release script,
+`scripts/make_release.sh`, makes, and how you can check a disk image when
+you have one. The commands below were not run on a published release yet.
+They were run on an app that is signed ad hoc. `spctl` rejects that app, as
+it must.
+
+The script signs the app and the disk image with a Developer ID, with the
+hardened runtime and a secure time stamp, and Apple notarizes both. The app
+has no entitlement, and it is not sandboxed. A release comes from one place
+only: the Releases page of the repo on GitHub.
+
+1. Ask macOS if it accepts the disk image. `spctl` says `accepted` for a
+   disk image that is signed and notarized:
+
+   ```bash
+   spctl --assess --type open --context context:primary-signature --verbose=2 Desqueeze-<version>.dmg
+   ```
+
+2. Compare the SHA-256 of the disk image with the one on the release page:
+
+   ```bash
+   shasum -a 256 Desqueeze-<version>.dmg
+   ```
+
+3. After you copied the app to the Applications folder, ask macOS if it
+   accepts the app, and see that nothing in it changed:
+
+   ```bash
+   spctl --assess --type execute --verbose=2 /Applications/Desqueeze.app
+   codesign --verify --deep --strict --verbose=2 /Applications/Desqueeze.app
+   ```
+
+4. Read who signed the app:
+
+   ```bash
+   codesign -dv --verbose=2 /Applications/Desqueeze.app
+   ```
+
+   The lines to read: `Authority=Developer ID Application`, with the name
+   of the signer. `flags=` with `runtime`, the hardened runtime. `Timestamp=`,
+   the secure time stamp. dnglab inside the app has the same signer:
+
+   ```bash
+   codesign -dv --verbose=2 /Applications/Desqueeze.app/Contents/Helpers/dnglab
+   ```
+
+5. Read what is inside. The license texts, and the note about the one line
+   of exiftool that is changed, are in the app:
+
+   ```bash
+   ls /Applications/Desqueeze.app/Contents/Resources/licenses
+   ```
+
+The app makes no network connection: no update check, no analytics, no
+request of any kind. If a copy of the app makes one, it is not this app.
+Report it.
 
 ## Report a problem
 
