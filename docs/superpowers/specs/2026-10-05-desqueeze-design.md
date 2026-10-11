@@ -4,10 +4,11 @@ Date: 2026-10-05. Red-teamed 2026-10-09; section 2.1 holds the findings and
 each one's fix is in the body. Revised 2026-10-09 after the code reviews of
 the job and the window, and extended with section 12 (command line and MCP)
 and section 13 (dnglab first). Extended 2026-10-10 with section 14 (the
-originals to the Trash, on request). Status: approved by Dom, and built.
+originals to the Trash, on request) and section 15 (the download). Status:
+approved by Dom, and built.
 
 **How to read this document.** It grew in one week, and the later sections
-changed earlier decisions. Sections 12, 13 and 14 are the newest. Where they
+changed earlier decisions. Sections 12 to 15 are the newest. Where they
 differ from any earlier section, they win. The earlier text was corrected
 where it would mislead, and it still tells the story in the order it
 happened: Adobe DNG Converter was the only converter until section 13.
@@ -1173,3 +1174,169 @@ One unit records and compares the ARW's three facts of line 4.
 - On a volume that has no Trash, the move is refused and every ARW stays.
 - On an external volume the ARW goes to that volume's Trash, and its space
   is free only after the Trash is emptied with the volume connected.
+
+## 15. The download
+
+Until this section, a person got the app only by a build from source, and
+installed exiftool and dnglab with Homebrew. Section 6 pointed a later
+release at a signed, notarized download. This section is that release.
+
+### 15.1 Decisions
+
+Dom decided these on 2026-10-10.
+
+- The project has a download: one disk image on the Releases page of the
+  repo on GitHub.
+- A person installs nothing more. exiftool and dnglab are inside the app.
+- The first download is for a Mac with Apple silicon only.
+
+These follow from them:
+
+- The download holds the window only. The command line tool and the MCP
+  server stay a build from source, and they still find the two programs on
+  the Mac (sections 6 and 13.5).
+- Adobe DNG Converter is never inside. Its license does not allow that, and
+  the app works with no copy of it.
+- The app has no update check. It makes no network connection, and this
+  section does not change that.
+
+### 15.2 What a person gets
+
+| Item | Value |
+|---|---|
+| File | `Desqueeze-<version>.dmg` |
+| Holds | `Desqueeze.app`, and a link to the Applications folder |
+| Signature | Developer ID, with the hardened runtime and a secure time stamp |
+| Notarization | By Apple. The ticket is stapled to the app and to the disk image, so the first start needs no network connection. |
+| Mac | Apple silicon. macOS 14 or later. |
+
+The app has no entitlement and is not sandboxed (section 6). The hardened
+runtime needs no exception: the app starts other programs, and loads no code
+of another signer.
+
+### 15.3 The programs inside
+
+| Program | Version | Place in the app |
+|---|---|---|
+| dnglab | 0.8.0 | `Contents/Helpers/dnglab` |
+| exiftool | 13.55 | `Contents/Resources/exiftool/exiftool`, with its `lib` folder beside it |
+| License texts | | `Contents/Resources/licenses/` |
+
+- **The copies come from Homebrew on the Mac that makes the release.** They
+  are the files that the match table of 13.2 was measured with. The release
+  script holds the version of each program and the SHA-256 of the dnglab
+  binary and of the exiftool script, and it stops when one differs. A new
+  version of a tool is a new measurement first (13.2), then a new pin.
+- **dnglab is not changed.** The script signs it with the Developer ID, as
+  it signs the app.
+- **One line of the exiftool script changes: the first.** Homebrew's copy
+  starts with the path of one Perl version. The copy in the app starts with
+  `#!/usr/bin/perl`, the Perl of macOS. The `lib` folder is not changed.
+  exiftool finds `lib` beside the script by itself.
+- A Mach-O program goes in `Contents/Helpers`, and a script goes in
+  `Contents/Resources`. The code signature of a bundle needs it so.
+
+### 15.4 Where the window looks
+
+The window looks in its own bundle first, then where it looked before.
+
+| Program | Order |
+|---|---|
+| exiftool | The copy in the bundle, when it can be run and `/usr/bin/perl` can be run. Then as section 6. |
+| dnglab | The copy in the bundle, when it can be run. Then as 13.5. |
+| Adobe DNG Converter | As section 6. |
+
+- The bundle comes first because its versions are the tested ones. A person
+  cannot make the downloaded app use another copy. That is on purpose.
+- A build from source has no program inside, so it looks as before. Nothing
+  changes for it.
+- `ToolLocator` gets the two places from the app layer, as it gets the
+  registered Adobe app. The core still holds no path of one Mac. A value
+  type in the app layer turns the URL of the bundle into the two places, so
+  a unit test can check them.
+- The command line tool and the MCP server pass no place, and look as
+  before.
+- The launch hooks of section 9 still hide a program, also one in the
+  bundle.
+- No message changes. In the downloaded app, the messages about a missing
+  exiftool or dnglab can show only when macOS has no Perl.
+
+### 15.5 The release script
+
+`scripts/make_release.sh` makes the disk image on the Mac that has the
+Developer ID. It uploads nothing. Each step stops the script when it fails.
+
+1. **Check.** The work tree is clean. The version of `project.yml` has a
+   dated section in `CHANGELOG.md`. The two programs are at the pinned
+   versions and hashes. The keychain has one "Developer ID Application"
+   identity. The keychain profile for the notary service exists.
+2. **Build.** `xcodegen generate`, then a Release build for arm64 into a new
+   folder under `build/release/`.
+3. **Put the programs inside**, with the license texts (15.6).
+4. **Sign from the inside out**: dnglab first, then the app. Each with the
+   hardened runtime and a time stamp. Never `--deep`.
+5. **Prove the bundle.** `codesign --verify --strict` passes. The two
+   programs, started from inside the bundle, give their pinned versions.
+6. **Notarize the app** from a zip, and staple the ticket to the app.
+7. **Make the disk image** from the stapled app, sign it, notarize it, and
+   staple it.
+8. **Prove the result.** `spctl` accepts the app and the disk image. The
+   script prints the path of the disk image and its SHA-256.
+
+- The script holds no name of a person, no Apple ID and no team. It finds
+  the identity in the keychain by its kind. The notary credentials are in a
+  keychain profile that `xcrun notarytool store-credentials` makes. The
+  name of the profile comes from `DESQUEEZE_NOTARY_PROFILE`, and is
+  `desqueeze-notary` when the variable is not set.
+- `--local` does steps 2, 3 and 5 with an ad hoc signature, and stops. It
+  needs no Developer ID, a clean tree is not required, and it makes no disk
+  image. The app is at `build/release/local/Desqueeze.app`. It is for
+  checks, and for the Mac that built it.
+- The script never writes outside `build/release/`. It removes only what an
+  earlier run of the script put there.
+- A release is published by hand, on Dom's yes: `gh release create` with
+  the disk image, and the source archive of 15.6.
+- GitHub Actions makes no release. The identity stays on one Mac.
+
+### 15.6 Licenses
+
+- **dnglab, LGPL-2.1-only.** The app holds the binary as a separate program,
+  not changed and not linked. The app holds dnglab's license text. Each
+  release page also has the source archive of that dnglab version as a
+  file, so the source is at the same place as the binary.
+- **exiftool, the terms of Perl.** The app holds exiftool's README, which
+  states the terms, and a note about the one changed line.
+- `THIRD_PARTY_NOTICES.md` gets a part for the programs inside the
+  download, and a copy of the file goes into `Contents/Resources/licenses/`.
+- The project stays under MIT. These files state facts and make no legal
+  claim.
+
+### 15.7 Testing
+
+- Unit tests of `ToolLocator`: the bundle comes first; with no place given,
+  the order is as before; the exiftool of the bundle is taken only with
+  `/usr/bin/perl`; a place that cannot be run falls through.
+- A unit test of the value type that makes the two places from a bundle URL.
+- `scripts/make_release.sh --local` on the release Mac, then a real run in
+  the window of that app, on copies, with the process list as the proof that
+  the two programs of the bundle did the work.
+- A trial in the window reaches the Trash (section 9). So a trial uses a
+  folder on a scratch disk image: a file that goes to the Trash there goes
+  to the Trash of that image, and leaves with it. Prove that on one file
+  first.
+- Steps 6 to 8 need the Developer ID. The first release proves them.
+
+### 15.8 Known limits
+
+- The download is for Apple silicon. On an Intel Mac the app does not
+  start. A build from source on an Intel Mac was not tested either.
+- The exiftool inside needs the Perl of macOS. Apple has said that a later
+  macOS can come without it. Then the window looks for exiftool as a build
+  from source does.
+- A person cannot replace a program inside the downloaded app. A newer
+  dnglab reaches the app only with a new release.
+- The app cannot say that a new release exists.
+- The dnglab binary holds Rust libraries of other people. The app carries
+  the notices that dnglab's own Homebrew package carries, and no more.
+- Only the Mac with the Developer ID can make a release.
+- The command line tool and the MCP server are not in the download.
