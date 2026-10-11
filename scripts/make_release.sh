@@ -70,12 +70,17 @@
 # - The script is libexec/bin/exiftool in the package folder. Homebrew has
 #   two copies of the script. bin/exiftool is the one on the PATH, and
 #   Homebrew wrote the path of its own lib folder into it, so that copy
-#   works at one place only. libexec/bin/exiftool is exiftool's own script,
-#   which looks for a folder named lib beside itself. To see the difference:
+#   works at one place only. libexec/bin/exiftool does not have that
+#   change: it looks for a folder named lib beside itself. To see the
+#   difference:
 #     diff "$(brew --prefix exiftool)/bin/exiftool" "$(brew --prefix exiftool)/libexec/bin/exiftool"
-#   Homebrew changed one line of it, the first, to the path of one Perl
-#   version. The copy in the app gets "#!/usr/bin/perl" there, the Perl of
-#   macOS. No other line changes.
+#   The first line of Homebrew's script is the path of one Perl version, for
+#   example /usr/bin/perl5.34. The copy in the app gets "#!/usr/bin/perl"
+#   there, the Perl of macOS. No other line changes. This script does not
+#   compare Homebrew's script with the one that exiftool publishes: it
+#   downloads nothing. The measurement of design 13.2 ran the
+#   copy on the PATH. The two copies differ only in the lines that say where
+#   the modules are, and both load the same modules of exiftool.
 # - The lib folder is exiftool's own Perl modules: the folder Image and the
 #   two files File/RandomAccess.pm and File/RandomAccess.pod, from
 #   libexec/lib/perl5. Homebrew puts them in one folder with the modules of

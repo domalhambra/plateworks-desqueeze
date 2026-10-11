@@ -46,7 +46,8 @@ targets:
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
-        # Sign to run locally. A release needs a Developer ID and notarization.
+        # Sign to run locally. scripts/make_release.sh signs the app of a
+        # release again, with the Developer ID and the hardened runtime.
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"
         ENABLE_APP_SANDBOX: NO
