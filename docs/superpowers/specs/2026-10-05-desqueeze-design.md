@@ -1227,9 +1227,10 @@ of another signer.
   values: of the dnglab binary, of the exiftool script, and of exiftool's
   `lib` folder. It stops when one differs. A new version of a tool is a new
   measurement first (13.2), then a new pin.
-- **dnglab is the file that the match table of 13.2 was measured with.** It
-  is not changed. The script signs it with the Developer ID, as it signs
-  the app.
+- **dnglab is the file that the match table of 13.2 was measured with.**
+  Its code is not changed. The script signs it with the Developer ID, as it
+  signs the app. That replaces the code signature, so the SHA-256 of the
+  copy in the app differs from the pin.
 - **Homebrew has two copies of the exiftool script, and the app takes the
   one that can move.** The copy on the `PATH`, `bin/exiftool`, has the path
   of Homebrew's own folder written into its include lines. The copy in
@@ -1287,11 +1288,14 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
    hardened runtime and a time stamp. Never `--deep`.
 5. **Prove the bundle.** `codesign --verify --strict` passes. The two
    programs, started from inside the bundle, give their pinned versions.
+   The executable of the app holds no path of the Mac that built it: the
+   script strips the debug records, and stops when one is left.
 6. **Notarize the app** from a zip, and staple the ticket to the app.
 7. **Make the disk image** from the stapled app, sign it, notarize it, and
    staple it.
-8. **Prove the result.** `spctl` accepts the app and the disk image. The
-   script prints the path of the disk image and its SHA-256.
+8. **Prove the result.** `spctl` accepts the app, the disk image, and the
+   app inside the disk image. The script prints the path of the disk image
+   and its SHA-256.
 
 - The script holds no name of a person, no Apple ID and no team. It finds
   the identity in the keychain by its kind. The notary credentials are in a
@@ -1310,6 +1314,11 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
 - Step 1 makes every check, says one sentence for each one that failed,
   and then stops. The check of the notary profile needs the network, so it
   runs only when every other check passed.
+- The notary service can accept a file some seconds before its ticket can
+  be fetched. So the script tries each staple again, a few times, before
+  it stops.
+- When a disk image for the version is there already, the script stops at
+  step 1. A signed disk image is never removed by the script.
 - A release is published by hand, on Dom's yes: `gh release create` with
   the disk image, and the source archive of 15.6.
 - GitHub Actions makes no release. The identity stays on one Mac.
@@ -1317,7 +1326,7 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
 ### 15.6 Licenses
 
 - **dnglab, LGPL-2.1-only.** The app holds the binary as a separate program,
-  not changed and not linked. The app holds dnglab's license text. Each
+  not linked, and with no change but its code signature. The app holds dnglab's license text. Each
   release page also has the source archive of that dnglab version as a
   file, so the source is at the same place as the binary.
 - **exiftool, the terms of Perl.** The app holds exiftool's README, which
@@ -1333,6 +1342,9 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
   the order is as before; the exiftool of the bundle is taken only with
   `/usr/bin/perl`; a place that cannot be run falls through.
 - A unit test of the value type that makes the two places from a bundle URL.
+- The window makes its locator through one function of the app layer, and
+  the tests call the same function. So a test fails when the window passes
+  no place, or when a launch hook no longer hides a program.
 - A test reads the release script, and fails when the two places in the
   script differ from the two places of that value type.
 - `scripts/make_release.sh --local` on the release Mac, then a real run in
