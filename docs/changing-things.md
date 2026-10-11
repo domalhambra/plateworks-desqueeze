@@ -392,7 +392,7 @@ For each release:
    the disk image in the text of the release.
 9. Change the documents that say "no release is published yet":
    `README.md`, `docs/architecture.md`, `SECURITY.md`, `CHANGELOG.md`,
-   `PROJECT_CHARTER.md`, and the articles `GettingStarted.md`,
+   `THIRD_PARTY_NOTICES.md`, `PROJECT_CHARTER.md`, and the articles `GettingStarted.md`,
    `DesqueezeCore.md` and `Troubleshooting.md` of the documentation site.
    Put what the first release proved into "Built and tested on" in
    `README.md`.

@@ -118,7 +118,7 @@ win where they differ from an earlier section. Dom is the maintainer.
 | Writing the tag into the ARW | Rejected | Adobe discards it (design 2). |
 | Adobe's embedded camera profile, copied into the dnglab DNG | Rejected | Camera Raw uses its own profile for the camera model (design 13.2). |
 | A bundled dnglab and a bundled exiftool | Superseded on 2026-10-10. It was "Deferred to a release". | Version 1 finds the programs that Homebrew installed. A shipped app must carry its own (design 3). The download carries both (design 15.3). |
-| Signing and notarization | Superseded on 2026-10-10. It was "Deferred to a release". | Needed only when the app is given to other people as a built app. The release script does both (design 15.5). No release was made with it yet. |
+| Signing and notarization | Superseded on 2026-10-10. It was "Deferred to a release". | Needed only when the app is given to other people as a built app. The release script does both (design 15.5). |
 | A download for an Intel Mac, or one app for both kinds of Mac | Deferred | The first download is for Apple silicon (design 15.1). No Intel Mac was tested. |
 | An update check in the app | Left, a known limit | The app makes no network connection (design 15.1), so it cannot say that a new release exists (design 15.8). A person looks at the Releases page. |
 | A setting or a variable that makes the downloaded app use another exiftool or dnglab | Rejected | The versions in the bundle are the tested ones (design 15.4). A person who wants another version builds from source. |
