@@ -9,10 +9,10 @@ to bottom, the window has a drop zone, a row of squeeze factors, a box for
 the originals when the folder has ARW files to convert, two buttons, and,
 after a run, the result.
 
-@Comment {
-    A screenshot belongs here: the window with a folder loaded, before a run.
-    No screenshot is in the catalog yet.
-}
+![The Desqueeze window with the folder "Shoot 1" loaded. The drop zone says 8 DNG and 4 ARW to convert. The factor 1.5 is selected. The box for the originals is off. The run button says "Desqueeze 12 photos".](window-folder)
+
+The screenshots on this page show one folder of 8 DNG files and 4 ARW
+files, before, during and after one run.
 
 ## Load a folder
 
@@ -75,6 +75,8 @@ The box is off. Tick it, and the next run moves each ARW that it converted
 to the Trash, after the DNG of that ARW passed a check.
 <doc:WhatHappensToYourFiles> has the rule and its limits.
 
+![The window with the box for the originals on. A line under the box says that 4 original ARW files go to the Trash after their DNG files pass the check. The run button says "Desqueeze 12 photos, move 4 ARW to Trash".](window-originals)
+
 - While the box is on, a line under it says what the run will do, for
   example "12 original ARW files go to the Trash after their DNG files pass
   the check." The run button then names the count of the originals too,
@@ -116,6 +118,8 @@ file at a time. During a run:
   run has ended.
 - A drop is refused, and the factor row is off.
 
+![The window during a run. The factors, the box and "Remove" are off. The run button says "Cancel". A progress bar is about one third full, and the line below it says "6 of 20 · last finished: DSC04094.dng".](window-run)
+
 If you quit the app during a run, the app cancels the run, lets the current
 file complete, and then quits.
 
@@ -145,6 +149,8 @@ After a run, the window shows one line of counts with a symbol before it:
 The symbol is a check mark when the run is complete, a warning triangle when
 a file failed or was blocked, and a stop symbol when the run was cancelled. The
 meaning is never in a colour alone.
+
+![The window after a run. Below the buttons, a check mark and the line "4 converted · 12 set · 0 skipped · 0 failed". Then "Originals moved to the Trash: 4 of 4." Then the line about photos that are already in Lightroom.](window-result)
 
 Below the counts, the window can show four more lines.
 
@@ -209,6 +215,8 @@ what to do.
 
 The lines about the converters show only when the folder has an ARW that
 waits for a conversion.
+
+![The window on a Mac with no exiftool. A box at the top has a warning symbol and says "Desqueeze needs exiftool, and it is not installed. Install it in Terminal, then open Desqueeze again: brew install exiftool". Both buttons are off.](window-no-exiftool)
 
 ## Limits of the window
 

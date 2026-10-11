@@ -9,6 +9,11 @@ only in a DNG.
 No pixel changes. The tag is one small value in the file, and Remove sets it
 back to no stretch.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Sources/DesqueezeCore/DesqueezeCore.docc/Resources/window-result~dark@2x.png">
+  <img src="Sources/DesqueezeCore/DesqueezeCore.docc/Resources/window-result@2x.png" width="552" alt="The Desqueeze window after a run on the folder Shoot 1. The factor 1.5 is selected. The result line says: 4 converted, 12 set, 0 skipped, 0 failed. The next line says: Originals moved to the Trash: 4 of 4.">
+</picture>
+
 There are three ways to use it, and all three do the same work: a window, a
 command line tool named `desqueeze`, and an MCP server named `desqueeze-mcp`
 for Claude Code. The code is Swift: one package with all the rules,

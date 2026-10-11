@@ -9,6 +9,8 @@ Lightroom and Camera Raw read the tag and show the photo at its correct
 shape. The tool converts each Sony ARW to a DNG first, because the tag works
 only in a DNG. No pixel changes.
 
+![The Desqueeze window after a run on the folder "Shoot 1". The result line says "4 converted · 12 set · 0 skipped · 0 failed".](window-result)
+
 The tool is for you when all of these are true:
 
 - You use Lightroom or Camera Raw. Finder and Quick Look ignore the tag, so
