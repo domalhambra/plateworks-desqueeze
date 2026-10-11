@@ -219,13 +219,13 @@ staple_wait=20
 
 # Runs a command until it passes: at most $staple_tries times, with
 # $staple_wait seconds between two tries. $1 names the file for a person,
-# and the command comes after it.
+# $2 says what to do when every try failed, and the command comes after.
 try_again() {
-  local what="$1" try=1
-  shift
+  local what="$1" then_do="$2" try=1
+  shift 2
   until "$@"; do
     if [ "$try" -ge "$staple_tries" ]; then
-      stop "The ticket could not be stapled to $what in $staple_tries tries. The notary service accepted the file, so try again later: start the script again."
+      stop "The ticket could not be stapled to $what in $staple_tries tries. The notary service accepted the file. $then_do"
     fi
     try=$((try + 1))
     echo "    The ticket for $what could not be stapled yet. Try $try of $staple_tries comes in $staple_wait seconds."
@@ -621,7 +621,8 @@ notarize() {
 echo "6/8 Notarize the app"
 ditto -c -k --keepParent "$app" "$out/Desqueeze-$version.zip"
 notarize "$out/Desqueeze-$version.zip"
-try_again "the app" xcrun stapler staple "$app"
+try_again "the app" "No disk image exists yet, so start the script again later." \
+  xcrun stapler staple "$app"
 xcrun stapler validate "$app"
 
 # ------------------------------------------------ 7. Make the disk image
@@ -634,7 +635,12 @@ ln -s /Applications "$stage/Applications"
 hdiutil create -volname "Desqueeze $version" -srcfolder "$stage" -format UDZO "$dmg"
 sign --timestamp --sign "$identity" "$dmg"
 notarize "$dmg"
-try_again "the disk image" xcrun stapler staple "$dmg"
+# The disk image is signed and accepted here. A new run of the script would
+# stop at step 1, because the disk image is there, so the advice is the
+# staple by hand.
+try_again "the disk image" \
+  "Do not start the script again. Later, run by hand: xcrun stapler staple \"$dmg\" Then run the three spctl checks of step 8 of this script." \
+  xcrun stapler staple "$dmg"
 xcrun stapler validate "$dmg"
 
 # ---------------------------------------------------- 8. Prove the result
@@ -661,7 +667,9 @@ assess_app_inside() {
   spctl --assess --type execute --verbose=2 "$2/Desqueeze.app"
   detach_attached
   trap - EXIT
-  rmdir "$2"
+  # An empty folder that stays does no harm, and must not end a good
+  # release before the script prints its last lines.
+  rmdir "$2" || true
 }
 
 echo "8/8 Prove the result"

@@ -1342,9 +1342,12 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
   the order is as before; the exiftool of the bundle is taken only with
   `/usr/bin/perl`; a place that cannot be run falls through.
 - A unit test of the value type that makes the two places from a bundle URL.
-- The window makes its locator through one function of the app layer, and
-  the tests call the same function. So a test fails when the window passes
-  no place, or when a launch hook no longer hides a program.
+- The window finds its three programs through one function of the app
+  layer, and the tests call the same function. So a test fails when that
+  function passes no place, or when a launch hook no longer hides a
+  program. The call of the function in `AppModel.live` has no test: no
+  argument has a default, so a call with an argument left out does not
+  compile, and the trial below checks the rest by hand.
 - A test reads the release script, and fails when the two places in the
   script differ from the two places of that value type.
 - `scripts/make_release.sh --local` on the release Mac, then a real run in
@@ -1354,7 +1357,10 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
   folder on a scratch disk image: a file that goes to the Trash there goes
   to the Trash of that image, and leaves with it. Prove that on one file
   first.
-- Steps 6 to 8 need the Developer ID. The first release proves them.
+- Steps 6 to 8 need the Developer ID. The first release proves them. The
+  command that makes the disk image was run by hand on a scratch folder,
+  with no signature: it works on macOS 27.2, and `hdiutil` says there that
+  a later macOS wants `diskutil image` in its place.
 
 ### 15.8 Known limits
 
