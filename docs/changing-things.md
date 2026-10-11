@@ -475,6 +475,46 @@ there. No argument ticks the box "Move the original ARW files to the Trash"
 (design 14.4): tick it by hand, and only on a copy of a folder. With the
 box on, a run moves the ARW files of that copy to the real Trash.
 
+## Take the screenshots again
+
+The site has five screenshots of the window, each in a light and a dark
+variant. They are in `Sources/DesqueezeCore/DesqueezeCore.docc/Resources/`.
+Take all of them again when the window changes, so that they stay one set.
+
+1. Make a scratch disk image and attach it. A file that goes to the Trash
+   from a folder on it goes to the Trash of that image, and leaves with it.
+   Prove that on one file first.
+
+   ```bash
+   hdiutil create -size 700m -fs APFS -volname Card card.dmg
+   hdiutil attach -nobrowse card.dmg
+   ```
+
+2. Make a folder named "Shoot 1" on it. Put 8 DNG files and 4 ARW files
+   in it, under plain names such as `DSC04093.dng`. Copies of one photo are
+   enough: the window shows names and counts, never a picture.
+3. Start the app with `-openFolder "/Volumes/Card/Shoot 1"` (see "Check the
+   window by hand"). For the fifth screenshot, add
+   `-simulateMissingTools YES`.
+4. Capture the window alone, with its shadow. `<id>` is the number of the
+   window.
+
+   ```bash
+   screencapture -x -l <id> window-folder@2x.png
+   ```
+
+5. Take the five states: the folder loaded (`window-folder`), the box for
+   the originals on (`window-originals`), a run in progress (`window-run`),
+   the result (`window-result`), and no exiftool (`window-no-exiftool`). A
+   run of 12 photos takes some seconds, so capture in a loop and keep one
+   frame.
+6. Do the same in the other appearance of macOS. A dark file has `~dark`
+   before `@2x`, for example `window-folder~dark@2x.png`.
+7. When a screenshot shows other words or counts than before, change its
+   text alternative in the article. `README.md` shows `window-result` too.
+8. Run `scripts/build_docs.sh`, and look at "Using the window" on the site.
+9. Detach the disk image, and delete it.
+
 ## Add or change a document
 
 1. Put a new document under `docs/`, and add its row to `docs/README.md`.

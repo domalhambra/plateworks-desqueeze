@@ -14,6 +14,9 @@ from source.
 
 ### Added
 
+- Screenshots of the window, in a light and a dark variant, in the
+  articles "Using the window" and "Getting started" of the documentation
+  site, and in `README.md`.
 - Sets the DNG `DefaultScale` tag on every DNG at the top level of one
   folder, so Lightroom and Camera Raw show each anamorphic photo at its
   correct shape. No pixel changes.
