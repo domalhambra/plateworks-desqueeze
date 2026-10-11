@@ -20,12 +20,19 @@
 #   4. Sign from the inside out: dnglab first, then the app. Each with the
 #      hardened runtime and a secure time stamp. Never --deep.
 #   5. Prove the bundle. The signature is valid. The two programs, started
-#      from inside the bundle, give their pinned versions.
+#      from inside the bundle, give their pinned versions. The executable of
+#      the app holds no path of this Mac: step 2 strips its debug records,
+#      and this step stops when one is left.
 #   6. Notarize the app from a zip, and staple the ticket to the app.
 #   7. Make the disk image from the stapled app, sign it, notarize it, and
 #      staple it.
-#   8. Prove the result. spctl accepts the app and the disk image. The last
-#      lines are the path of the disk image and its SHA-256.
+#   8. Prove the result. spctl accepts the app, the disk image, and the app
+#      inside the disk image. The last lines are the path of the disk image
+#      and its SHA-256.
+#
+# The notary service can accept a file some seconds before its ticket can be
+# fetched. So each staple is tried again, a few times, before the script
+# stops.
 #
 # --local does steps 2, 3 and 5, with the check of the two programs before
 # them and an ad hoc signature between them. It needs no Developer ID and no
@@ -41,6 +48,11 @@
 # The script writes into its output folder only, and build/ is gitignored.
 # It puts a marker file into the folder. A later run removes the folder only
 # when the marker is there, so it removes only its own earlier output.
+#
+# The script never removes a disk image. When the output folder of a release
+# holds one already, the script stops at step 1: move the disk image away,
+# or cut a new version. The script also stops when build, build/release or
+# the output folder is a link: it writes into real folders of the repo only.
 #
 # One program that the script starts writes outside that folder: xcodegen
 # writes PlateworksDesqueeze.xcodeproj at the repo root, as it does for
@@ -89,6 +101,8 @@
 #     find "$(brew --prefix exiftool)/libexec" -path '*Image/ExifTool/.packlist'
 #   No file of lib is changed.
 set -euo pipefail
+# With CDPATH set, `cd` can go to another folder, and it prints the name.
+unset CDPATH
 
 # The pins. Each program must be at this version, and each file must have
 # this SHA-256. Read a version with `dnglab --version` and `exiftool -ver`.
@@ -122,7 +136,7 @@ case "${1-}" in
 esac
 if [ "$#" -gt 1 ]; then usage >&2; exit 2; fi
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." >/dev/null && pwd -P)"
 profile="${DESQUEEZE_NOTARY_PROFILE:-desqueeze-notary}"
 marker=".made-by-make_release"
 
@@ -143,13 +157,100 @@ sha256_of() { shasum -a 256 "$1" | cut -d ' ' -f 1; }
 # The SHA-256 and the path of each file of exiftool's lib, in a fixed order,
 # as one hash. $1 is the folder that holds Image and File.
 lib_digest() {
-  (cd "$1" && find Image File/RandomAccess.pm File/RandomAccess.pod -type f -print0 \
+  (cd -- "$1" >/dev/null && find Image File/RandomAccess.pm File/RandomAccess.pod -type f -print0 \
     | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -d ' ' -f 1)
+}
+
+# Each thing under folder $1 that is no regular file and no folder: a link,
+# for example. `lib_digest` reads regular files only, and `ditto` copies a
+# link as a link. So the lib folder must hold no such thing. The names after
+# $1 are what to look at, from that folder.
+not_plain() {
+  local folder="$1"
+  shift
+  (cd -- "$folder" >/dev/null && find "$@" ! -type f ! -type d)
+}
+
+# True when version $1 is at most version $2. Each one has two numbers, as
+# 11.0 and 14.0.
+at_most() {
+  awk -v a="$1" -v b="$2" 'BEGIN {
+    split(a, x, "."); split(b, y, ".")
+    exit !(x[1] + 0 < y[1] + 0 || (x[1] + 0 == y[1] + 0 && x[2] + 0 <= y[2] + 0))
+  }'
+}
+
+# Finds the one "Developer ID Application" identity by its kind. $1 is the
+# listing of `security find-identity -v -p codesigning`. Sets `identity` to
+# its hash, or says what is wrong and leaves `identity` empty. The name and
+# the hash are not shown.
+choose_identity() {
+  local hashes listed different
+  hashes="$(printf '%s\n' "$1" | awk '/"Developer ID Application: / { print $2 }')"
+  listed="$(printf '%s' "$hashes" | grep -c . || true)"
+  different="$(printf '%s' "$hashes" | sort -u | grep -c . || true)"
+  identity=""
+  if [ "$listed" -eq 0 ]; then
+    fail "No Developer ID Application identity was found in the keychain."
+  elif [ "$different" -gt 1 ]; then
+    fail "The keychain has $different Developer ID Application identities. The script needs exactly one."
+  elif [ "$listed" -gt 1 ]; then
+    # codesign answers "ambiguous" for an identity that it finds two times.
+    fail "One Developer ID Application identity is listed $listed times: it is in more than one keychain. Keep it in one keychain only."
+  else
+    identity="$hashes"
+  fi
+}
+
+# Asks the notary service with the keychain profile. This needs a network
+# connection. When there is no answer, the cause is one of two, and the
+# words of notarytool say which.
+check_notary_profile() {
+  local words
+  if ! words="$(xcrun notarytool history --keychain-profile "$profile" 2>&1)"; then
+    fail "The notary service gave no answer for the keychain profile $profile. The profile is missing, or the service could not be reached. Make a profile with: xcrun notarytool store-credentials $profile. notarytool said:"
+    printf '%s\n' "$words" | sed 's/^/    /' >&2
+  fi
+}
+
+# How often a staple is tried, and the seconds between two tries.
+staple_tries=6
+staple_wait=20
+
+# Runs a command until it passes: at most $staple_tries times, with
+# $staple_wait seconds between two tries. $1 names the file for a person,
+# and the command comes after it.
+try_again() {
+  local what="$1" try=1
+  shift
+  until "$@"; do
+    if [ "$try" -ge "$staple_tries" ]; then
+      stop "The ticket could not be stapled to $what in $staple_tries tries. The notary service accepted the file, so try again later: start the script again."
+    fi
+    try=$((try + 1))
+    echo "    The ticket for $what could not be stapled yet. Try $try of $staple_tries comes in $staple_wait seconds."
+    sleep "$staple_wait"
+  done
 }
 
 # The version of project.yml, for example 0.1.0.
 version="$(sed -n 's/^ *MARKETING_VERSION: *"\([0-9][0-9.]*\)" *$/\1/p' "$root/project.yml")"
 if [ -z "$version" ]; then stop "project.yml has no MARKETING_VERSION."; fi
+# The oldest macOS that the app starts on, for example 14.0.
+minimum_macos="$(sed -n 's/^ *macOS: *"\([0-9][0-9.]*\)" *$/\1/p' "$root/project.yml")"
+if [ -z "$minimum_macos" ]; then stop "project.yml has no deployment target for macOS."; fi
+# A check of step 5 looks for the path of the home folder.
+if [ -z "${HOME:-}" ]; then stop "HOME is not set."; fi
+
+# The output folder, and the disk image of a release.
+if [ "$mode" = "local" ]; then
+  out="$root/build/release/local"
+else
+  out="$root/build/release/$version"
+fi
+app="$out/Desqueeze.app"
+executable="$app/Contents/MacOS/Desqueeze"
+dmg="$out/Desqueeze-$version.dmg"
 
 # ---------------------------------------------------------------- 1. Check
 
@@ -161,6 +262,20 @@ if [ "$mode" = "release" ]; then
   fi
   if ! grep -q "^## \[$version\] - [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\$" "$root/CHANGELOG.md"; then
     fail "CHANGELOG.md has no dated section for version $version. Give its heading the date: ## [$version] - YYYY-MM-DD"
+  fi
+fi
+
+# The script writes into real folders of the repo only.
+for folder in "$root/build" "$root/build/release" "$out"; do
+  if [ -L "$folder" ]; then
+    fail "${folder#"$root"/} is a link. The script writes only into real folders of the repo. Remove the link first."
+  fi
+done
+# A signed disk image is never removed by the script.
+if [ "$mode" = "release" ] && [ -d "$out" ] && [ ! -L "$out" ]; then
+  found="$(find "$out" -name '*.dmg' 2>/dev/null || true)"
+  if [ -n "$found" ]; then
+    fail "A disk image for version $version is there already, in build/release/$version. The script never removes a disk image. Move it away, or cut a new version."
   fi
 fi
 
@@ -215,6 +330,14 @@ if [ -n "$brew_prefix" ]; then
     if [ "$found" != "$dnglab_sha256" ]; then
       fail "The dnglab binary is not the pinned file. Pinned SHA-256: $dnglab_sha256. Found: $found."
     fi
+    # The oldest macOS that the binary starts on must not be newer than the
+    # oldest macOS of the app.
+    found="$(xcrun vtool -show-build "$dnglab_source" 2>/dev/null | awk '$1 == "minos" { print $2 }' || true)"
+    if [ -z "$found" ]; then
+      fail "The minimum macOS of the dnglab binary could not be read."
+    elif ! at_most "$found" "$minimum_macos"; then
+      fail "The dnglab binary needs macOS $found or later, and the app is for macOS $minimum_macos or later."
+    fi
     for file in LICENSE AUTHORS; do
       if [ ! -f "$dnglab_package/$file" ]; then fail "Homebrew's dnglab has no file $file."; fi
     done
@@ -238,31 +361,22 @@ if [ -n "$brew_prefix" ]; then
     if [ "$found" != "$exiftool_lib_sha256" ]; then
       fail "The lib folder of exiftool is not the pinned one. Pinned SHA-256: $exiftool_lib_sha256. Found: $found."
     fi
+    found="$(not_plain "$exiftool_lib_source" Image File/RandomAccess.pm File/RandomAccess.pod)"
+    if [ -n "$found" ]; then
+      fail "The lib folder of Homebrew's exiftool holds something that is no file and no folder. The first one: $(sed -n 1p <<< "$found")"
+    fi
     if [ ! -f "$exiftool_package/README" ]; then fail "Homebrew's exiftool has no file README."; fi
   fi
 fi
 
 identity=""
 if [ "$mode" = "release" ]; then
-  # The identity is found by its kind. Its name and its hash are not shown.
-  # One identity in two keychains is listed two times, and counts as one.
-  identity="$(security find-identity -v -p codesigning \
-    | awk '/"Developer ID Application: / { print $2 }' | sort -u)"
-  count="$(printf '%s' "$identity" | grep -c . || true)"
-  if [ "$count" -eq 0 ]; then
-    fail "No Developer ID Application identity was found in the keychain."
-  elif [ "$count" -gt 1 ]; then
-    fail "The keychain has $count Developer ID Application identities. The script needs exactly one."
-  fi
+  choose_identity "$(security find-identity -v -p codesigning)"
 
   # The last check, and only after every other check passed: it is the one
   # check that asks Apple's notary service, so it needs a network
   # connection.
-  if [ "$failures" -eq 0 ]; then
-    if ! xcrun notarytool history --keychain-profile "$profile" >/dev/null 2>&1; then
-      fail "The keychain profile $profile does not work with the notary service. Make it with: xcrun notarytool store-credentials $profile"
-    fi
-  fi
+  if [ "$failures" -eq 0 ]; then check_notary_profile; fi
 fi
 
 if [ "$failures" -gt 0 ]; then
@@ -270,15 +384,15 @@ if [ "$failures" -gt 0 ]; then
   exit 1
 fi
 
-# The output folder. Only a folder with the marker of this script is removed.
-if [ "$mode" = "local" ]; then
-  out="$root/build/release/local"
-else
-  out="$root/build/release/$version"
-fi
-if [ -e "$out" ] || [ -L "$out" ]; then
-  if [ -L "$out" ] || [ ! -f "$out/$marker" ]; then
+# The output folder. Only a folder with the marker of this script is
+# removed, and never one that holds a disk image. Step 1 saw that no part
+# of its path is a link.
+if [ -e "$out" ]; then
+  if [ ! -d "$out" ] || [ ! -f "$out/$marker" ]; then
     stop "build/release/$(basename "$out") is not a folder that this script made. Move it away first."
+  fi
+  if [ -n "$(find "$out" -name '*.dmg' 2>/dev/null || true)" ]; then
+    stop "build/release/$(basename "$out") holds a disk image. The script never removes one. Move it away first."
   fi
   # The copies from Homebrew are read-only files.
   chmod -R u+w "$out"
@@ -286,9 +400,6 @@ if [ -e "$out" ] || [ -L "$out" ]; then
 fi
 mkdir -p "$out"
 : > "$out/$marker"
-
-app="$out/Desqueeze.app"
-dmg="$out/Desqueeze-$version.dmg"
 
 # ---------------------------------------------------------------- 2. Build
 
@@ -307,6 +418,16 @@ if [ "$mode" = "release" ] && [ -n "$(git -C "$root" status --porcelain)" ]; the
 fi
 ditto "$out/derived/Build/Products/Release/Desqueeze.app" "$app"
 
+# The build leaves debug records in the executable, and each one holds the
+# full path of this checkout. A public file must not carry that. `strip -S`
+# removes the debug records and keeps the code. It makes the signature of
+# the build wrong, and step 4 signs the app again. Its words show only when
+# it fails: they hold the full path too.
+if ! found="$(strip -S "$executable" 2>&1)"; then
+  printf '%s\n' "$found" >&2
+  stop "strip could not remove the debug records of the executable."
+fi
+
 found="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app/Contents/Info.plist")"
 if [ "$found" != "$version" ]; then
   stop "The built app has version $found, and project.yml has $version."
@@ -321,7 +442,8 @@ exiftool_folder="$(dirname "$exiftool_inside")"
 licenses="$app/$licenses_place"
 mkdir -p "$(dirname "$dnglab_inside")" "$exiftool_folder/lib/File" "$licenses"
 
-# dnglab: the file as it is.
+# dnglab: the file of Homebrew. Step 4 replaces its code signature and
+# changes nothing else, so after step 4 the hash of the copy is not the pin.
 cp "$dnglab_source" "$dnglab_inside"
 chmod 755 "$dnglab_inside"
 if [ "$(sha256_of "$dnglab_inside")" != "$dnglab_sha256" ]; then
@@ -348,6 +470,10 @@ ditto "$exiftool_lib_source/Image" "$exiftool_folder/lib/Image"
 cp "$exiftool_lib_source/File/RandomAccess.pm" "$exiftool_lib_source/File/RandomAccess.pod" "$exiftool_folder/lib/File/"
 if [ "$(lib_digest "$exiftool_folder/lib")" != "$exiftool_lib_sha256" ]; then
   stop "The copy of exiftool's lib folder in the app is not the pinned one."
+fi
+found="$(not_plain "$exiftool_folder" .)"
+if [ -n "$found" ]; then
+  stop "The exiftool folder in the app holds something that is no file and no folder. The first one: $(sed -n 1p <<< "$found")"
 fi
 
 # The license texts (design 15.6).
@@ -387,13 +513,16 @@ sign() {
     stop "codesign could not sign $(basename "${!#}")."
   fi
 }
+# dnglab gets an identifier of this project. With none, codesign makes one
+# from the name of the file and a hash.
+dnglab_identifier="org.plateworks.desqueeze.dnglab"
 if [ "$mode" = "local" ]; then
   echo "4/8 Sign ad hoc, with the hardened runtime and no time stamp"
-  sign --options runtime --timestamp=none --sign - "$dnglab_inside"
+  sign --options runtime --timestamp=none --identifier "$dnglab_identifier" --sign - "$dnglab_inside"
   sign --options runtime --timestamp=none --sign - "$app"
 else
   echo "4/8 Sign with the Developer ID, the hardened runtime and a time stamp"
-  sign --options runtime --timestamp --sign "$identity" "$dnglab_inside"
+  sign --options runtime --timestamp --identifier "$dnglab_identifier" --sign "$identity" "$dnglab_inside"
   sign --options runtime --timestamp --sign "$identity" "$app"
 fi
 
@@ -419,10 +548,39 @@ for code in "$app" "$dnglab_inside"; do
     stop "The signature of $(basename "$code") has an entitlement. It must have none."
   fi
 done
-for code in "$app/Contents/MacOS/Desqueeze" "$dnglab_inside"; do
+found="$(codesign --display --verbose=2 "$dnglab_inside" 2>&1)"
+if ! grep -q "^Identifier=$dnglab_identifier\$" <<< "$found"; then
+  stop "The signature of dnglab does not have the identifier $dnglab_identifier."
+fi
+for code in "$executable" "$dnglab_inside"; do
   found="$(lipo -archs "$code")"
   if [ "$found" != "arm64" ]; then stop "$(basename "$code") is not for arm64 only. Found: $found."; fi
 done
+
+# No path of this Mac (design 15.5). The lines of file $2 that hold text $1:
+lines_with() { grep -a -c -F -e "$1" "$2" || true; }
+# The debug records of the build. Each `OSO` record names an object file
+# with its full path.
+found="$(nm -ap "$executable")"
+found="$(grep -c ' OSO ' <<< "$found" || true)"
+if [ "$found" -ne 0 ]; then
+  stop "The executable of the app holds $found debug records with the path of this checkout. strip did not remove them."
+fi
+if [ "$(lines_with "$root" "$executable")" -ne 0 ]; then
+  stop "The executable of the app holds the path of this checkout."
+fi
+if [ "$(lines_with "$HOME" "$executable")" -ne 0 ]; then
+  stop "The executable of the app holds the path of the home folder of this Mac."
+fi
+# dnglab comes from Homebrew, and the script does not strip it.
+if [ "$(lines_with "$HOME" "$dnglab_inside")" -ne 0 ]; then
+  stop "The dnglab binary holds the path of the home folder of this Mac. The script does not change dnglab. Do not release this app."
+fi
+# Every other file of the app.
+found="$(grep -r -a -l -F -e "$root" -e "$HOME" "$app" || true)"
+if [ -n "$found" ]; then
+  stop "A file of the app holds a path of this Mac. The first one: $(sed -n 1p <<< "$found")"
+fi
 
 found="$("$dnglab_inside" --version)"
 if [ "$found" != "dnglab $dnglab_version" ]; then
@@ -438,7 +596,7 @@ found="$("$exiftool_inside" -ver -v2 | sed -n '/^Include directories:/{n;s/^ *//
 if [ "$found" != "$exiftool_folder/lib" ]; then
   stop "The exiftool inside the app does not load its modules from the lib folder inside the app. It looks first in: $found"
 fi
-echo "    $(basename "$app"): the signature is valid, arm64"
+echo "    $(basename "$app"): the signature is valid, arm64, no path of this Mac"
 echo "    $dnglab_place: dnglab $dnglab_version"
 echo "    $exiftool_place: exiftool $exiftool_version, with its own lib"
 
@@ -463,7 +621,7 @@ notarize() {
 echo "6/8 Notarize the app"
 ditto -c -k --keepParent "$app" "$out/Desqueeze-$version.zip"
 notarize "$out/Desqueeze-$version.zip"
-xcrun stapler staple "$app"
+try_again "the app" xcrun stapler staple "$app"
 xcrun stapler validate "$app"
 
 # ------------------------------------------------ 7. Make the disk image
@@ -476,15 +634,39 @@ ln -s /Applications "$stage/Applications"
 hdiutil create -volname "Desqueeze $version" -srcfolder "$stage" -format UDZO "$dmg"
 sign --timestamp --sign "$identity" "$dmg"
 notarize "$dmg"
-xcrun stapler staple "$dmg"
+try_again "the disk image" xcrun stapler staple "$dmg"
 xcrun stapler validate "$dmg"
 
 # ---------------------------------------------------- 8. Prove the result
+
+# The app as a person gets it: inside the disk image. $1 is the disk image.
+# $2 is the folder to attach it at, which this function makes: a folder of
+# this script, never one under /Volumes. The image is attached read-only,
+# and Finder does not show it. It is detached when the script ends for any
+# reason, so a failure leaves nothing attached.
+attached=""
+detach_attached() {
+  if [ -n "$attached" ]; then
+    hdiutil detach "$attached" -quiet || hdiutil detach "$attached" -force -quiet || true
+    attached=""
+  fi
+}
+assess_app_inside() {
+  mkdir "$2"
+  trap detach_attached EXIT
+  hdiutil attach "$1" -readonly -nobrowse -noautoopen -mountpoint "$2" >/dev/null
+  attached="$2"
+  spctl --assess --type execute --verbose=2 "$2/Desqueeze.app"
+  detach_attached
+  trap - EXIT
+  rmdir "$2"
+}
 
 echo "8/8 Prove the result"
 codesign --verify --deep --strict "$app"
 spctl --assess --type execute --verbose=2 "$app"
 spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+assess_app_inside "$dmg" "$out/mounted"
 
 echo "Built from commit $(git -C "$root" rev-parse --short HEAD)."
 echo "$dmg"
