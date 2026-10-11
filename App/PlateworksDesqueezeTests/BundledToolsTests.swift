@@ -3,17 +3,30 @@ import XCTest
 
 /// The two programs inside the downloaded app: where they are in the bundle,
 /// and that the window takes them first (design 15.3 and 15.4). No test
-/// here starts a program: each one asks a locator with its own answer to
-/// "can this file be run".
+/// here starts a program: each one gives its own answer to "can this file
+/// be run".
+///
+/// The tests of the window's programs call `WindowTools.find`, the one
+/// function that `AppModel.live` calls. So a test fails when the window
+/// gives the core no place in its bundle, and when a launch hook no longer
+/// hides a program (design 15.7).
 final class BundledToolsTests: XCTestCase {
     private let perl = ToolLocator.systemPerl
+    private let app = "/Applications/Desqueeze.app"
+    private var exiftoolInside: String { "\(app)/Contents/Resources/exiftool/exiftool" }
+    private var dnglabInside: String { "\(app)/Contents/Helpers/dnglab" }
+    private let adobe = ToolLocator.standardConverterApp + ToolLocator.converterBinary
 
-    /// The locator as `AppModel.live` makes it for `bundle`, on a Mac where
-    /// only the files in `present` can be run.
-    private func locator(bundle: String, present: Set<String>) -> ToolLocator {
-        let inside = BundledTools(bundle: URL(fileURLWithPath: bundle))
-        return ToolLocator(pathVariable: nil, bundledExiftool: inside.exiftool, bundledDnglab: inside.dnglab,
-                           isExecutable: { present.contains($0) })
+    /// The three programs as the window finds them, on a Mac where only the
+    /// files in `present` can be run.
+    private func tools(
+        bundle: String? = nil, present: Set<String>, arguments: [String: Any] = [:], registered: String? = nil,
+        path: String? = nil
+    ) -> WindowTools {
+        WindowTools.find(
+            bundle: URL(fileURLWithPath: bundle ?? app), options: LaunchOptions(arguments: arguments),
+            registeredConverterApp: registered.map { URL(fileURLWithPath: $0) }, pathVariable: path,
+            isExecutable: { present.contains($0) })
     }
 
     // MARK: The two places
@@ -40,56 +53,81 @@ final class BundledToolsTests: XCTestCase {
         XCTAssertFalse(plain.dnglab.hasDirectoryPath)
     }
 
-    // MARK: The window's locator
+    // MARK: The programs of the window
 
     func testTheWindowTakesTheProgramsOfItsBundleFirst() {
-        let app = "/Applications/Desqueeze.app"
-        let found = locator(bundle: app, present: [
-            "\(app)/Contents/Resources/exiftool/exiftool", "\(app)/Contents/Helpers/dnglab", perl,
-            "/opt/homebrew/bin/exiftool", "/opt/homebrew/bin/dnglab",
-        ])
-        XCTAssertEqual(found.exiftool()?.path, "\(app)/Contents/Resources/exiftool/exiftool")
-        XCTAssertEqual(found.dnglab()?.path, "\(app)/Contents/Helpers/dnglab")
+        let found = tools(present: [exiftoolInside, dnglabInside, perl,
+                                    "/opt/homebrew/bin/exiftool", "/opt/homebrew/bin/dnglab"])
+        XCTAssertEqual(found.exiftool?.path, exiftoolInside)
+        XCTAssertEqual(found.dnglab?.path, dnglabInside)
+        XCTAssertNil(found.adobe, "Adobe DNG Converter is never inside the app")
+    }
+
+    // The exiftool inside is a Perl script. With no Perl of macOS, the
+    // window takes the exiftool of the Mac. dnglab needs no Perl.
+    func testWithNoPerlOfMacOSTheWindowTakesTheExiftoolOfTheMac() {
+        let found = tools(present: [exiftoolInside, dnglabInside, "/opt/homebrew/bin/exiftool"])
+        XCTAssertEqual(found.exiftool?.path, "/opt/homebrew/bin/exiftool")
+        XCTAssertEqual(found.dnglab?.path, dnglabInside)
+        XCTAssertNil(tools(present: [exiftoolInside, dnglabInside]).exiftool)
     }
 
     // A build from source has no program inside. It looks as before.
     func testABuildFromSourceFindsTheProgramsOfTheMac() {
-        let found = locator(bundle: "/Somewhere/build/Desqueeze.app", present: [
-            perl, "/opt/homebrew/bin/exiftool", "/usr/local/bin/dnglab",
-        ])
-        XCTAssertEqual(found.exiftool()?.path, "/opt/homebrew/bin/exiftool")
-        XCTAssertEqual(found.dnglab()?.path, "/usr/local/bin/dnglab")
+        let found = tools(bundle: "/Somewhere/build/Desqueeze.app",
+                          present: [perl, "/opt/homebrew/bin/exiftool", "/usr/local/bin/dnglab"])
+        XCTAssertEqual(found.exiftool?.path, "/opt/homebrew/bin/exiftool")
+        XCTAssertEqual(found.dnglab?.path, "/usr/local/bin/dnglab")
+        XCTAssertEqual(tools(bundle: "/Somewhere/build/Desqueeze.app", present: [perl]),
+                       WindowTools(exiftool: nil, dnglab: nil, adobe: nil))
+    }
+
+    // The folders of `PATH` come after the two Homebrew folders.
+    func testTheWindowLooksInTheFoldersOfThePathToo() {
+        let found = tools(present: ["/opt/tools/exiftool", "/opt/tools/dnglab", "/usr/local/bin/dnglab"],
+                          path: "/usr/bin:/opt/tools")
+        XCTAssertEqual(found.exiftool?.path, "/opt/tools/exiftool")
+        XCTAssertEqual(found.dnglab?.path, "/usr/local/bin/dnglab")
+        XCTAssertNil(tools(present: ["/opt/tools/exiftool"], path: nil).exiftool)
+    }
+
+    // The window asks macOS where Adobe DNG Converter is, and gives the
+    // answer here. That app comes before the one in the Applications folder.
+    func testTheWindowFindsAdobeDNGConverterWhereMacOSSaysItIs() {
+        let registered = "/Somewhere/Apps/Adobe DNG Converter.app"
+        let binary = registered + ToolLocator.converterBinary
+        XCTAssertEqual(tools(present: [binary, adobe], registered: registered).adobe?.path, binary)
+        XCTAssertEqual(tools(present: [adobe], registered: registered).adobe?.path, adobe)
+        XCTAssertEqual(tools(present: [adobe]).adobe?.path, adobe)
+        XCTAssertNil(tools(present: [binary]).adobe, "macOS named no app, and the Applications folder has none")
     }
 
     // MARK: The launch hooks (design, section 9)
 
     // A hook hides a program wherever it is, also inside the bundle.
     func testALaunchHookHidesAProgramOfTheBundleToo() {
-        let app = "/Applications/Desqueeze.app"
-        let adobe = ToolLocator.standardConverterApp + ToolLocator.converterBinary
-        let found = locator(bundle: app, present: [
-            "\(app)/Contents/Resources/exiftool/exiftool", "\(app)/Contents/Helpers/dnglab", perl, adobe,
-        ])
+        let present: Set<String> = [exiftoolInside, dnglabInside, perl, adobe]
+        func found(_ arguments: [String: Any]) -> WindowTools { tools(present: present, arguments: arguments) }
+        func url(_ path: String) -> URL { URL(fileURLWithPath: path) }
 
-        let none = LaunchOptions(arguments: [:])
-        XCTAssertEqual(none.exiftool(in: found)?.path, "\(app)/Contents/Resources/exiftool/exiftool")
-        XCTAssertEqual(none.dnglab(in: found)?.path, "\(app)/Contents/Helpers/dnglab")
-        XCTAssertEqual(none.adobe(in: found)?.path, adobe)
+        XCTAssertEqual(found([:]),
+                       WindowTools(exiftool: url(exiftoolInside), dnglab: url(dnglabInside), adobe: url(adobe)))
+        XCTAssertEqual(found(["simulateMissingTools": "YES"]), WindowTools(exiftool: nil, dnglab: nil, adobe: nil))
+        XCTAssertEqual(found(["simulateMissingDnglab": "YES"]),
+                       WindowTools(exiftool: url(exiftoolInside), dnglab: nil, adobe: url(adobe)))
+        XCTAssertEqual(found(["simulateMissingAdobe": "YES"]),
+                       WindowTools(exiftool: url(exiftoolInside), dnglab: url(dnglabInside), adobe: nil))
+        XCTAssertEqual(found(["simulateMissingDnglab": "YES", "simulateMissingAdobe": "YES"]),
+                       WindowTools(exiftool: url(exiftoolInside), dnglab: nil, adobe: nil))
+    }
 
-        let noTools = LaunchOptions(arguments: ["simulateMissingTools": "YES"])
-        XCTAssertNil(noTools.exiftool(in: found))
-        XCTAssertNil(noTools.dnglab(in: found))
-        XCTAssertNil(noTools.adobe(in: found))
-
-        let noDnglab = LaunchOptions(arguments: ["simulateMissingDnglab": "YES"])
-        XCTAssertNotNil(noDnglab.exiftool(in: found))
-        XCTAssertNil(noDnglab.dnglab(in: found))
-        XCTAssertNotNil(noDnglab.adobe(in: found))
-
-        let noAdobe = LaunchOptions(arguments: ["simulateMissingAdobe": "YES"])
-        XCTAssertNotNil(noAdobe.exiftool(in: found))
-        XCTAssertNotNil(noAdobe.dnglab(in: found))
-        XCTAssertNil(noAdobe.adobe(in: found))
+    // A hook hides a program of the Mac as it did before.
+    func testALaunchHookHidesAProgramOfTheMac() {
+        let present: Set<String> = ["/opt/homebrew/bin/exiftool", "/opt/homebrew/bin/dnglab", adobe]
+        XCTAssertEqual(tools(bundle: "/Somewhere/build/Desqueeze.app", present: present,
+                             arguments: ["simulateMissingTools": "YES"]),
+                       WindowTools(exiftool: nil, dnglab: nil, adobe: nil))
+        XCTAssertNotNil(tools(bundle: "/Somewhere/build/Desqueeze.app", present: present).exiftool)
     }
 
     // MARK: The release script

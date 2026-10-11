@@ -590,27 +590,27 @@ extension AppModel {
         // folder (design, section 9).
         let options = LaunchOptions(
             arguments: UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain))
-        let registered = NSWorkspace.shared.urlForApplication(withBundleIdentifier: ToolLocator.converterBundleID)
-        // The downloaded app has exiftool and dnglab inside, and those
-        // copies come first: their versions are the tested ones. A build
-        // from source has no file at the two places, so it finds the
-        // programs on the Mac (design 15.4).
-        let inside = BundledTools(bundle: Bundle.main.bundleURL)
-        let locator = ToolLocator(registeredConverterApp: registered, bundledExiftool: inside.exiftool,
-                                  bundledDnglab: inside.dnglab)
-        let exiftool = options.exiftool(in: locator)
+        // The three programs come from one function, which the tests call
+        // too: the copies inside the app first, then the Mac, less what a
+        // launch hook hides (design 15.4). This method only gives it the
+        // facts of this process.
+        let tools = WindowTools.find(
+            bundle: Bundle.main.bundleURL, options: options,
+            registeredConverterApp: NSWorkspace.shared.urlForApplication(
+                withBundleIdentifier: ToolLocator.converterBundleID),
+            pathVariable: ProcessInfo.processInfo.environment["PATH"],
+            isExecutable: { FileManager.default.isExecutableFile(atPath: $0) })
         // dnglab converts each photo that it can match, and Adobe DNG
         // Converter, when it is installed, converts the others. Both need
         // exiftool: with none, the window can do nothing.
         // The window moves a backup to the Trash, and the leftover work file
         // of a run that ended hard (design 13.3).
         let backups = FileBackups.systemTrash
-        let converters = exiftool.map {
-            RawConverters(exiftool: $0, dnglab: options.dnglab(in: locator), adobe: options.adobe(in: locator),
-                          backups: backups)
+        let converters = tools.exiftool.map {
+            RawConverters(exiftool: $0, dnglab: tools.dnglab, adobe: tools.adobe, backups: backups)
         }
         let model = AppModel(
-            tag: exiftool.map { ScaleTag(exiftool: $0) },
+            tag: tools.exiftool.map { ScaleTag(exiftool: $0) },
             converters: converters ?? .none,
             backups: backups,
             lock: .system,
@@ -661,12 +661,4 @@ struct LaunchOptions: Equatable {
         hidesDnglab = hidesExiftool || isOn("simulateMissingDnglab")
         openFolder = arguments["openFolder"] as? String
     }
-
-    // What the window may use of the three programs: what `locator` finds,
-    // less what a hook hides. A hook hides a program wherever it is, also a
-    // copy inside the app's bundle (design 15.4).
-
-    func exiftool(in locator: ToolLocator) -> URL? { hidesExiftool ? nil : locator.exiftool() }
-    func dnglab(in locator: ToolLocator) -> URL? { hidesDnglab ? nil : locator.dnglab() }
-    func adobe(in locator: ToolLocator) -> URL? { hidesAdobe ? nil : locator.dngConverter() }
 }
