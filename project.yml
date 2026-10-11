@@ -58,9 +58,9 @@ targets:
         - PlateworksDesqueezeTests
 
   # The unit tests of the window's state (AppModel). The bundle has no app
-  # host: it compiles AppModel.swift itself, so a test run starts no app and
-  # opens no window. Do not add TEST_HOST or BUNDLE_LOADER, and do not make
-  # this target depend on the app target.
+  # host: it compiles AppModel.swift and BundledTools.swift itself, so a test
+  # run starts no app and opens no window. Do not add TEST_HOST or
+  # BUNDLE_LOADER, and do not make this target depend on the app target.
   PlateworksDesqueezeTests:
     type: bundle.unit-test
     platform: macOS
@@ -70,6 +70,7 @@ targets:
     sources:
       - path: App/PlateworksDesqueezeTests
       - path: App/PlateworksDesqueeze/AppModel.swift
+      - path: App/PlateworksDesqueeze/BundledTools.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.plateworks.desqueeze.tests
