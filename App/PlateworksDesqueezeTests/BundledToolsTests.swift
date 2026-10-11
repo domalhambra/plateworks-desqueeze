@@ -91,4 +91,31 @@ final class BundledToolsTests: XCTestCase {
         XCTAssertNotNil(noAdobe.dnglab(in: found))
         XCTAssertNil(noAdobe.adobe(in: found))
     }
+
+    // MARK: The release script
+
+    // `scripts/make_release.sh` puts the two programs into the bundle, and
+    // it holds the two places a second time. They must be the places of
+    // this type. With another place in the script, the downloaded app
+    // does not find its own programs, and nothing says so: it takes the
+    // programs of the Mac, or it says that exiftool is not installed.
+    func testTheReleaseScriptPutsTheProgramsAtTheSameTwoPlaces() throws {
+        // App/PlateworksDesqueezeTests/BundledToolsTests.swift -> repo root.
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let script = try String(contentsOf: root.appendingPathComponent("scripts/make_release.sh"), encoding: .utf8)
+        let lines = script.split(separator: "\n").map(String.init)
+
+        let app = "/Applications/Desqueeze.app"
+        let inside = BundledTools(bundle: URL(fileURLWithPath: app))
+        let exiftool = String(inside.exiftool.path.dropFirst(app.count + 1))
+        let dnglab = String(inside.dnglab.path.dropFirst(app.count + 1))
+        XCTAssertEqual(lines.filter { $0.hasPrefix("exiftool_place=") }, ["exiftool_place=\"\(exiftool)\""])
+        XCTAssertEqual(lines.filter { $0.hasPrefix("dnglab_place=") }, ["dnglab_place=\"\(dnglab)\""])
+        // The script builds each path in the bundle from its variable.
+        XCTAssertTrue(script.contains("exiftool_inside=\"$app/$exiftool_place\""))
+        XCTAssertTrue(script.contains("dnglab_inside=\"$app/$dnglab_place\""))
+    }
 }
