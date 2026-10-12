@@ -18,7 +18,7 @@ file.
 | Document | Read when |
 |---|---|
 | `architecture.md` | You are new here, or you want to know which file owns a behavior and which test covers it. The shape, the two packages, the module map, one run step by step with its safety rules, delivery, and the test suites. |
-| `changing-things.md` | You are about to change something. One section for each task: the suites, the fixtures, a sentence, a preset factor, a note kind, a JSON field, an MCP tool, a camera, a converter rule, the MCP library pin, a version, a release, a program inside the download, a hand check of the window, a document, a decision. |
+| `changing-things.md` | You are about to change something. One section for each task: the suites, the fixtures, a sentence, a preset factor, a note kind, a JSON field, an MCP tool, a camera, a converter rule, the MCP library pin, a version, a release, a program inside the download, a hand check of the window, a document, the documentation site, what a part loads or saves, a decision. |
 | `decisions.md` | Something looks like a past decision, and you want the reason before you change it. Dated, with a table of rejected and deferred items at the end. |
 | `build-history.md` | You want to know how version 1 was built: the method, the order of the work, what changed on the way, and what the reviews found. It is history. |
 
@@ -26,7 +26,7 @@ file.
 
 | Document | Read when |
 |---|---|
-| `superpowers/specs/2026-10-05-desqueeze-design.md` | You change any behavior. It is the contract: the scan, the factor, the run, the window, the errors, the command line tool, the MCP server, the converters, the option that moves the originals to the Trash, and the download. Sections 12 to 15 are the newest, and they win where they differ from an earlier section. Section 2.1 records what was tested by hand. |
+| `superpowers/specs/2026-10-05-desqueeze-design.md` | You change any behavior. It is the contract: the scan, the factor, the run, the window, the errors, the command line tool, the MCP server, the converters, the option that moves the originals to the Trash, the download, and the privacy page. Sections 12 to 16 are the newest, and they win where they differ from an earlier section. Section 2.1 records what was tested by hand. |
 
 One file in that folder is not Markdown:
 
@@ -61,6 +61,12 @@ each article, and the API reference from the documentation comments of the
 core. `scripts/build_docs.sh` builds it, and `changing-things.md` has the
 steps. The docs check does not read the catalog.
 `Tests/DesqueezeCoreTests/DocsSiteTests.swift` does.
+
+One article is the privacy page of the property:
+
+| Article | Read when |
+|---|---|
+| `Sources/DesqueezeCore/DesqueezeCore.docc/Privacy.md` | You change what a part loads or saves: a setting, a network request, a program that the app starts, or the site. The article must be true in the same commit. `changing-things.md` has the proofs. |
 
 ## Standards that this repo follows
 

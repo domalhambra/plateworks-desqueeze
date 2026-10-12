@@ -529,7 +529,12 @@ not skip it. A new camera must be added to that helper.
 **The docs check** is `DocsCheckTests.swift`. It runs
 `scripts/docs_check.py`. So `swift test` fails when `README.md`, `CLAUDE.md`,
 `AGENTS.md` or a document at the top of `docs/` quotes a path that does not
-exist.
+exist. One test of the same file reads the privacy page,
+`Sources/DesqueezeCore/DesqueezeCore.docc/Privacy.md`. It fails when the
+page has no line "Last updated" with an ISO date, or no link for its
+contact. It also fails when the text of the first page of the site does not
+link to the page. It does not judge a statement of the page: the proofs in
+`docs/changing-things.md` do.
 
 **The site test** is `Tests/DesqueezeCoreTests/DocsSiteTests.swift`. It reads
 the source of the documentation site, the DocC catalog
@@ -539,7 +544,9 @@ to no page, and when a page quotes a test or a path of the repo that does
 not exist. It does not build the site.
 
 **The site build** is `scripts/build_docs.sh`. It builds the site with the
-`docc` of Xcode, and it must end with no warning. No suite runs it: run it
+`docc` of Xcode, and it must end with no warning. It also writes the page
+of the address `/privacy/`, which sends a person to the privacy page. It
+stops when the built site has no such article. No suite runs it: run it
 after a change to an article or to a documentation comment.
 
 **Two workflows** are in `.github/workflows/`. `tests.yml` runs the three

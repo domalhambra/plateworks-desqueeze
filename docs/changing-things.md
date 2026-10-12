@@ -571,6 +571,180 @@ table, change the article that describes it in the same change.
 the main branch. Its header says what it needs. The runner's Xcode can be
 older than yours: a warning of its `docc` fails the build there.
 
+The script also writes the page of the address `/privacy/`. That page sends
+a person to the article `Privacy.md` with a relative link. The script stops
+when the built site has no page for that article.
+
+## Change what a part loads or saves
+
+Read design 16 first. The privacy page of the site is the article
+`Sources/DesqueezeCore/DesqueezeCore.docc/Privacy.md`. It says what the
+app, the command line tool, the MCP server and the site load and save. A
+proof showed each statement. A privacy page that is not true is worse than
+none, so the page changes in the same commit as the fact.
+
+Use this section for each change of that kind:
+
+- A new saved setting, or a file that a part writes outside the photo
+  folder.
+- A network request, in any part.
+- A new program that the app starts.
+- A file that the site loads from another host, or a new thing that the
+  site saves in the browser.
+- A new Xcode for the build of the site. DocC's scripts change with Xcode.
+
+The steps:
+
+1. Run the four proofs below. Run each proof before its statement goes on
+   the page. When a proof does not give the result that is written here,
+   stop, and do not write the statement. Find what changed.
+2. When a statement changes, change design 16.2 and the row of its proof in
+   design 16.3 first.
+3. Change the statement in `Privacy.md`. Set its line "Last updated" to the
+   date of the change, as an ISO date: `Last updated 2026-10-12.` Do both
+   in the same commit as the change of the code.
+4. Change each document that states the same fact: "What the app touches"
+   in `SECURITY.md`, invariant 12 in `CLAUDE.md`, and the articles
+   `WhatHappensToYourFiles.md` and `SafetyRulesForCode.md` of the site.
+5. Run `swift test --filter DocsCheckTests`.
+   `testThePrivacyPageHasItsDateItsContactAndALinkFromTheFirstPage` fails
+   when the article has no line "Last updated" with an ISO date, or no link
+   for its contact. It also fails when the text of the first page does not
+   link to the article. It does not judge a statement. Only the proofs do.
+6. Build the site: `scripts/build_docs.sh`. Then read the page of the
+   address `/privacy/`, and see that its link points to a file:
+
+   ```bash
+   cat build/docs/privacy/index.html
+   ls build/docs/documentation/desqueezecore/privacy/index.html
+   ```
+
+7. Add an entry to `CHANGELOG.md`.
+
+**Proof 1: no code makes a network connection.** Search the sources of the
+core, the tool, the app and the server:
+
+```bash
+grep -rnE 'URLSession|URLRequest|NWConnection|NWListener|import Network|CFSocket|socket\(' Sources/ App/ MCPServer/Sources/
+grep -rnE '[A-Za-z]+Transport\(' MCPServer/Sources/
+```
+
+The first search finds nothing. The second finds the server's own
+`AnsweringTransport` and one transport of the library, `StdioTransport`:
+standard input and standard output only.
+
+**Proof 2: exiftool and dnglab open no network socket in a run.** The tests
+on the real programs must run, so `fixtures/` must be there. Sample the open
+network sockets of the three processes while the suite runs. exiftool is a
+Perl script, so its process has the name of Perl.
+
+```bash
+log="$(mktemp)"
+( while :; do lsof -i -n -P 2>/dev/null | grep -E -i 'exiftool|perl|dnglab' >> "$log"; sleep 0.1; done ) &
+sampler=$!
+swift test > "$log.tests" 2>&1
+kill "$sampler"
+wc -c < "$log"
+grep -cE "^Test Case .* skipped \(" "$log.tests"
+grep -E "Executed [0-9]+ tests" "$log.tests"
+```
+
+The size of the log is 0, and no test was skipped. A line in the log is a
+socket: read it, and find the program that opened it. The search was tried
+on a Perl script that opens a socket on this Mac, and it found that socket.
+
+**Proof 3: the app saves one setting of its own.** Search for the defaults
+of the system, then read what is saved for the app on a Mac that ran it:
+
+```bash
+grep -rnE 'UserDefaults|AppStorage|SceneStorage' App/ Sources/ MCPServer/Sources/
+defaults read org.plateworks.desqueeze
+```
+
+The search finds three lines, all in `App/PlateworksDesqueeze/AppModel.swift`.
+One line writes, and its key is `lastFactor`. One reads that key, and one
+reads the launch arguments. The second command shows three keys. One is
+`lastFactor`. macOS saves the other two, as it does for each app:
+`NSWindow Frame main` is the place and size of the window, and
+`NSNavPanelExpandedSizeForOpenMode` is the size of the folder dialog. A
+fourth key needs a new statement.
+
+**Proof 4: the built site.** Build it with `scripts/build_docs.sh`, then
+search the folder docs inside build. Name each storage key that the search
+finds, and write each one down. A first, shorter search looked only for the
+two key names that were expected, and it missed the state of the page list.
+
+The site loads no file from another host:
+
+```bash
+grep -rhoE '(src|href)="(https?:)?//[^"]*"' build/docs --include='*.html' | sort | uniq -c
+grep -rhoE 'url\([^)]*\)' build/docs --include='*.css' | grep '//'
+grep -rhoE '@import[^;]*;' build/docs --include='*.css'
+grep -rhoE '"https?://[^"]{3,80}"' build/docs/js | sort | uniq -c
+```
+
+The first search finds only links that a person clicks, such as the link to
+the Releases page. A `src`, or an `href` of a style or a script, with a
+host is a file from another host. The second and the third find nothing.
+The fourth finds XML namespaces of `www.w3.org` and three addresses of
+`github.com` in license notes. None of them is a request.
+
+The site has no cookie, and no other way to save or to send:
+
+```bash
+grep -rlE 'document\.cookie|indexedDB|sendBeacon|serviceWorker|XMLHttpRequest|WebSocket|EventSource' build/docs/js
+```
+
+It finds nothing.
+
+The storage keys. DocC's scripts are minified, so the short names below are
+those of one build. Read them again from the output of each search.
+
+```bash
+grep -rhoE '.{0,200}="developer\.setting\.".{0,250}.{0,200}' build/docs/js
+grep -rhoE '(localStorage|sessionStorage)\.[A-Za-z]+\("[^"]*"' build/docs/js | sort -u
+grep -rhoE '"[a-z]+\.setting\.[A-Za-z.-]*"' build/docs/js | sort -u
+```
+
+The first search shows the one module that wraps the two storages. It puts
+`developer.setting.` before a key, and it exports three objects. With
+Xcode 27.0 their names were these:
+
+- `IG` is the local storage, with the prefix.
+- `Ud` is the local storage, with no prefix.
+- `sZ` is the session storage, with the prefix.
+
+The second search shows each direct use. The third shows each key that is
+written in full. Then list each call of the three objects, and the value of
+each key name that a call uses. With Xcode 27.0 those names were `ru`, `ec`
+and `th`:
+
+```bash
+grep -rhoE '\.(IG|Ud|sZ)\.[A-Za-z]+\([^,)]{1,40}' build/docs/js | sort | uniq -c
+grep -rhoE '[ ,;](ru|ec|th)="[^"]*"' build/docs/js | sort -u
+```
+
+On 2026-10-12, with Xcode 27.0, the keys were these:
+
+| Storage | Key | Holds |
+|---|---|---|
+| Local | `developer.setting.preferredColorScheme` | The color scheme |
+| Local | `developer.setting.preferredLocale` | The language of the site's own words |
+| Local | `docs.setting.preferredLanguage` | The programming language of the API pages |
+| Local | `developer.setting.sidebar` | The width of the page list |
+| Local | `developer.setting.navigator-hidden-large` | If the page list is hidden |
+| Session | `scrollPosition` | The scroll position |
+| Session | `developer.setting.navigator.state` | The state of the page list: the page, the open items, the selected tags and the filter text |
+
+The scripts also read `docs.setting.preferredColorScheme`, an older key,
+and do not write it. A key that is not in this table needs a look at what it
+holds, and then a new statement or a new row.
+
+GitHub hosts the site and the download. No proof here can show what GitHub
+keeps. The page says only what GitHub's own documents say, and links to
+GitHub's privacy statement. Read that statement again when you change the
+sentence.
+
 ## Record a decision
 
 Add a row to `docs/decisions.md` under the date of the decision: what was
