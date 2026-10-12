@@ -6,16 +6,16 @@ Desqueeze collects nothing.
 
 - **No account, no analytics, no crash report, no advertisement.**
 - **No network connection.** The app makes none, so it has no update check.
-  exiftool and dnglab, the two programs that do the file work, make none in
-  a run.
+  exiftool and dnglab, the two programs inside the download, make none in a
+  run.
 - **Your files.** The app reads and changes files only in the folder that
   you choose. A file that the app discards goes to the Trash of the Mac.
   <doc:WhatHappensToYourFiles> has each rule.
 - **One setting of its own.** The app saves the last squeeze factor on the
   Mac, and no other value.
-- **Two settings of macOS.** macOS saves two more for the app, as it does
-  for each app. They are the place and size of the window, and the size of
-  the folder dialog.
+- **Three settings of macOS.** macOS saves three more for the app, as it
+  does for each app. They are the place and size of the window, the size of
+  the folder dialog, and the last folder that the folder dialog showed.
 - **Adobe DNG Converter.** It is an optional program of Adobe. The app
   starts it only when it is on your Mac, for a photo that dnglab cannot
   match or convert. <doc:CamerasAndLenses> says when. This page makes no
@@ -30,9 +30,10 @@ The same is true for `desqueeze` and `desqueeze-mcp`: no network
 connection, and nothing collected.
 
 The MCP server talks only to the program that started it, through standard
-input and standard output. Each answer of the server holds the path of the
-folder and the names of its files. What that program sends to its own
-service is the matter of that program.
+input, standard output and standard error. An answer of the server holds
+the path of the folder and the names of its files. The answer of a scan
+also holds the paths of the programs on the Mac. What that program sends to
+its own service is the matter of that program.
 
 ## The website and the download
 

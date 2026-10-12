@@ -78,6 +78,8 @@ your choice. The tool then sets the tag in that DNG.
 Adobe DNG Converter is a program from Adobe. It is not part of this
 project, the tool does not contain it, and the tool works without it. When
 it is installed, the tool uses it for the photos that dnglab cannot match.
+<doc:Privacy> speaks for the parts of this project only. It makes no
+statement about what Adobe's program does.
 
 Adobe DNG Converter starts as an app for each photo, so its icon shows in
 the Dock once for each file that it converts. dnglab opens nothing.

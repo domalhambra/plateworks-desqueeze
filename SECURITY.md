@@ -52,11 +52,14 @@ can damage, lose or expose a person's files is a security problem here.
   never look inside an app.
 - **Saved settings.** The window saves one value of its own: the factor of
   the last run. It never saves the box that moves the originals. macOS
-  saves two more for the app, as it does for each app. They are the place
-  and size of the window, and the size of the folder dialog.
+  saves three more for the app, as it does for each app. They are the place
+  and size of the window, the size of the folder dialog, and the last
+  folder that the folder dialog showed.
 - **No network.** The window and the command line tool make no network
   request. The app has no update check. The MCP server speaks to its client
-  on standard input and standard output only. The build of the server
+  on standard input, standard output and standard error only. An answer
+  holds the path of the folder and the names of its files. The answer of a
+  scan also holds the paths of the programs on the Mac. The build of the server
   fetches its libraries from GitHub. The release script, which only the
   maintainer runs, sends the app and the disk image to Apple's notary
   service.
