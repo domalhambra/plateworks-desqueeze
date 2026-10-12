@@ -1412,9 +1412,10 @@ claim.
    It makes no network connection, so it has no update check. It reads and
    changes files only in the folder that the person chooses, and a file that
    it discards goes to the Trash of the Mac. It saves one setting of its
-   own on the Mac: the last squeeze factor. macOS saves two more for the
-   app, as it does for each app: the place and size of the window, and the
-   size of the folder dialog. One item is about Adobe DNG Converter: it is
+   own on the Mac: the last squeeze factor. macOS saves three more for the
+   app, as it does for each app: the place and size of the window, the
+   size of the folder dialog, and the last folder that the folder dialog
+   showed. One item is about Adobe DNG Converter: it is
    an optional program of Adobe, the app starts it only as the backup
    converter, and the page makes no statement about what that program
    does. One sentence is about macOS and not about
@@ -1448,7 +1449,7 @@ for the next change.
 |---|---|
 | The app, the tool and the server have no code that makes a network connection. | A search of the sources of the core, the app, the tool and the server for the network types of Foundation and the Network framework finds none. The server's use of its library is the standard input and output transport only. |
 | exiftool and dnglab make no network connection in a run. | During the tests on the real programs, a sample of the open network sockets of the processes of exiftool, perl and dnglab shows none. |
-| The app saves one setting of its own, and macOS saves two more. | A search of the app's sources for the defaults of the system finds one key that is written, `lastFactor`. `defaults read org.plateworks.desqueeze` shows that key and the two keys of macOS, for the window and the folder dialog. |
+| The app saves one setting of its own, and macOS saves three more. | A search of the app's sources for the defaults of the system finds one key that is written, `lastFactor`. After the folder dialog was open one time, `defaults read org.plateworks.desqueeze` shows that key and three keys of macOS: `NSWindow Frame main`, `NSNavPanelExpandedSizeForOpenMode`, and `NSOSPLastRootDirectory`, a bookmark of the last folder that the dialog showed. The review found the third key: it is not there before the dialog opens. So this proof reads the defaults after a use of the dialog. |
 | The pages load no file from another host. | `scripts/check_site_privacy.sh` searches the built site for a `src`, an `href` to a style or a script, and a `url()` with another host, and finds none. The data files of the site hold links to the sources on GitHub. They are links, and the pages load nothing from them. |
 | The site saves three things in the browser. | A search of the scripts of the built site finds: in the local storage, display settings with the prefixes `developer.setting.` and `docs.setting.`. In the session storage, `scrollPosition`, and `developer.setting.navigator.state`, which holds the page, the open items, the selected tags and the filter text of the page list. No cookie. The same script makes this search: it prints each key that it finds, and it fails for a key that is not in its list, for a cookie, a beacon, a database or a service worker. |
 | GitHub keeps logs and counts downloads. | GitHub's document about GitHub Pages says that it logs the IP address of a visitor. GitHub's API gives a `download_count` for each file of a release. The page links to GitHub's privacy statement and claims no more than that. |
