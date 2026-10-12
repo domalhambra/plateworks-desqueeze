@@ -1411,8 +1411,10 @@ claim.
 2. **The app.** No account, no analytics, no crash report, no advertisement.
    It makes no network connection, so it has no update check. It reads and
    changes files only in the folder that the person chooses, and a file that
-   it discards goes to the Trash of the Mac. It saves one setting on the
-   Mac: the last squeeze factor. One sentence is about macOS and not about
+   it discards goes to the Trash of the Mac. It saves one setting of its
+   own on the Mac: the last squeeze factor. macOS saves two more for the
+   app, as it does for each app: the place and size of the window, and the
+   size of the folder dialog. One sentence is about macOS and not about
    the app: when a person opens a downloaded app the first time, macOS
    checks it, and macOS can contact Apple for that.
 3. **The command line tool and the MCP server.** The same: no network
@@ -1420,9 +1422,11 @@ claim.
    started it, through standard input and output. What that program sends
    to its own service is the matter of that program.
 4. **The website and the download.** No cookie, no analytics, no form. The
-   pages load no file from another host. The site saves two things in the
-   browser of the person, and they stay there: display settings, and the
-   scroll position of the session. GitHub hosts the site and the download.
+   pages load no file from another host. The site saves three things in
+   the browser of the person, and they stay there: display settings, the
+   scroll position of the session, and the state of the page list for the
+   session, with the text that the person types in its filter. GitHub hosts
+   the site and the download.
    GitHub keeps server logs, which have the IP address of a visitor, and it
    counts the downloads of each file. The page links to GitHub's privacy
    statement.
@@ -1439,15 +1443,17 @@ for the next change.
 |---|---|
 | The app, the tool and the server have no code that makes a network connection. | A search of the sources of the core, the app, the tool and the server for the network types of Foundation and the Network framework finds none. The server's use of its library is the standard input and output transport only. |
 | exiftool and dnglab make no network connection in a run. | During the tests on the real programs, a sample of the open network sockets of the processes of exiftool, perl and dnglab shows none. |
-| The app saves one setting. | A search of the app's sources for the defaults of the system finds one key that is written, `lastFactor`. |
+| The app saves one setting of its own, and macOS saves two more. | A search of the app's sources for the defaults of the system finds one key that is written, `lastFactor`. `defaults read org.plateworks.desqueeze` shows that key and the two keys of macOS, for the window and the folder dialog. |
 | The pages load no file from another host. | A search of the built site for a `src`, an `href` to a style or a script, and a `url()` with another host finds none. |
-| The site saves two things in the browser. | A search of the scripts of the built site finds the local storage with the prefix `developer.setting.`, and the session storage with the key `scrollPosition`, and no cookie. |
+| The site saves three things in the browser. | A search of the scripts of the built site finds: in the local storage, display settings with the prefixes `developer.setting.` and `docs.setting.`. In the session storage, `scrollPosition`, and `developer.setting.navigator.state`, which holds the page, the open items, the selected tags and the filter text of the page list. No cookie. |
 | GitHub keeps logs and counts downloads. | GitHub's own documents say it. The page links to GitHub's privacy statement and claims no more than that. |
 
-The search of the built site was run on 2026-10-12, on the site of commit
-`c2044f9`: it found no file from another host, the two kinds of storage, and
-no cookie. DocC's scripts change with Xcode, so the proof runs again when
-the Xcode of the build changes.
+The search of the built site was run on 2026-10-12, with Xcode 27.0: it
+found no file from another host, the keys above, and no cookie, beacon,
+request to another host, database or service worker. A first, shorter search
+missed the state of the page list, so the proof names each key that it
+finds. DocC's scripts change with Xcode, so the proof runs again when the
+Xcode of the build changes.
 
 ### 16.4 The files
 
