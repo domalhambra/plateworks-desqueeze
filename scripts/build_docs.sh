@@ -4,18 +4,24 @@
 #   scripts/build_docs.sh
 #
 # The site is made by DocC, with the `docc` that ships with Xcode. The package
-# gets no dependency for it. Two steps:
+# gets no dependency for it. Three steps:
 #
 #   1. The compiler writes the symbol graph of DesqueezeCore: its public API
 #      and its documentation comments.
 #   2. `docc convert` joins the symbol graph with the articles of the catalog,
 #      Sources/DesqueezeCore/DesqueezeCore.docc, and writes a static site.
+#   3. scripts/check_site_privacy.sh reads the built site. It stops the build
+#      when a page loads a file from another host, when a script has a
+#      cookie, or when a script saves a key in the browser that the article
+#      Privacy does not speak for. DocC's scripts change with Xcode, so this
+#      step runs in each build, also on the runner that publishes the site.
 #
 # A warning from docc is an error here: a link to an article or a symbol that
 # does not exist must not reach the published site.
 #
-# Then the script writes two small pages of its own. Each one sends a person
-# on with a relative link, so it holds under any base path:
+# Between steps 2 and 3 the script writes two small pages of its own. Each
+# one sends a person on with a relative link, so it holds under any base
+# path:
 #
 #   index.html          The address of the site, to the first page.
 #   privacy/index.html  The address /privacy/, to the article Privacy. Each
@@ -60,7 +66,7 @@ serve="$root/build/docs-serve"
 rm -rf "$output" "$work" "$serve"
 mkdir -p "$work/symbols"
 
-echo "1/2 The symbol graph of $module"
+echo "1/3 The symbol graph of $module"
 # A build folder of its own: the flags differ from those of a plain
 # `swift build`, so the two would rebuild each other's files in .build/.
 swift build --package-path "$root" --scratch-path "$work/swiftpm" --target "$module" \
@@ -90,7 +96,7 @@ if [ -n "${DOCS_SOURCE_BASE_URL-}" ]; then
     arguments+=(--checkout-path "$root" --source-service github --source-service-base-url "$DOCS_SOURCE_BASE_URL")
 fi
 
-echo "2/2 docc convert"
+echo "2/3 docc convert"
 "$docc" "${arguments[@]}"
 
 # The address of the site with nothing after it has no page of its own. Send
@@ -134,6 +140,9 @@ cat > "$output/privacy/index.html" <<EOF
 </body>
 </html>
 EOF
+
+echo "3/3 What the site loads and saves"
+"$root/scripts/check_site_privacy.sh" "$output"
 
 # A link at build/docs-serve/<base path> that points at the site, so a plain
 # web server can show it at the address that the pages expect.
