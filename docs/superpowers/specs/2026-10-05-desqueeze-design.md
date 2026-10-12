@@ -1463,7 +1463,10 @@ finds. DocC's scripts change with Xcode, and the published site is built by
 GitHub's runner, with its own Xcode. So `scripts/build_docs.sh` runs
 `scripts/check_site_privacy.sh` at its end, each time and on each machine.
 A build with a new key fails, and a person then changes the page and the
-list in the same commit.
+list in the same commit. On 2026-10-12 the script also ran on the site that
+GitHub's runner had built for the live pages: it passed, with the same keys
+as the build with Xcode 27.0. One key in the list, `docs.setting.preferredColorScheme`,
+is an older name that the scripts read and never write.
 
 ### 16.4 The files
 
