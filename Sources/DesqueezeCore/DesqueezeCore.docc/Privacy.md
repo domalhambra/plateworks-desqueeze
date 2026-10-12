@@ -17,8 +17,9 @@ Desqueeze collects nothing.
   for each app. They are the place and size of the window, and the size of
   the folder dialog.
 - **Adobe DNG Converter.** It is an optional program of Adobe. The app
-  starts it only when you have it and dnglab cannot do a conversion. This
-  page makes no statement about what that program does.
+  starts it only when it is on your Mac, for a photo that dnglab cannot
+  match or convert. <doc:CamerasAndLenses> says when. This page makes no
+  statement about what that program does.
 - **The first open.** This item is about macOS and not about the app. When
   you open a downloaded app the first time, macOS checks it, and macOS can
   contact Apple for that.
