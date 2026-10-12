@@ -33,6 +33,9 @@
 #      check was proven with Xcode 27.0. On 2026-10-12 it also passed on the
 #      site that this workflow had built for the live pages, with the same
 #      keys.
+#   9. python3. scripts/build_docs.sh runs scripts/fix_static_pictures.py
+#      with it, to correct the pictures for a reader with no JavaScript. The
+#      macOS images have python3. With no python3, the build stops there.
 name: docs
 
 on:

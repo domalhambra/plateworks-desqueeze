@@ -26,6 +26,15 @@ below is not that number. A heading "Unreleased" is not a version.
   `docs/changing-things.md`, with the proof of each statement of the
   privacy page.
 
+### Fixed
+
+- On the documentation site, the screenshots of "Using the window" and
+  "Getting started" did not load for a reader with JavaScript off. DocC
+  wrote the path of the build's checkout in place of the address of each
+  picture. `scripts/fix_static_pictures.py` corrects the pictures in each
+  site build, and the check of the site fails for a page that holds such a
+  path.
+
 ## [0.1.0] - 2026-10-12
 
 The first version. The window has a download on the Releases page of the
