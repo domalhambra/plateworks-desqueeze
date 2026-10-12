@@ -16,6 +16,9 @@ Desqueeze collects nothing.
 - **Two settings of macOS.** macOS saves two more for the app, as it does
   for each app. They are the place and size of the window, and the size of
   the folder dialog.
+- **Adobe DNG Converter.** It is an optional program of Adobe. The app
+  starts it only when you have it and dnglab cannot do a conversion. This
+  page makes no statement about what that program does.
 - **The first open.** This item is about macOS and not about the app. When
   you open a downloaded app the first time, macOS checks it, and macOS can
   contact Apple for that.
@@ -26,8 +29,9 @@ The same is true for `desqueeze` and `desqueeze-mcp`: no network
 connection, and nothing collected.
 
 The MCP server talks only to the program that started it, through standard
-input and standard output. What that program sends to its own service is
-the matter of that program.
+input and standard output. Each answer of the server holds the path of the
+folder and the names of its files. What that program sends to its own
+service is the matter of that program.
 
 ## The website and the download
 

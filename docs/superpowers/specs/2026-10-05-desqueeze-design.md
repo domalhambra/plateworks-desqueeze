@@ -1414,13 +1414,17 @@ claim.
    it discards goes to the Trash of the Mac. It saves one setting of its
    own on the Mac: the last squeeze factor. macOS saves two more for the
    app, as it does for each app: the place and size of the window, and the
-   size of the folder dialog. One sentence is about macOS and not about
+   size of the folder dialog. One item is about Adobe DNG Converter: it is
+   an optional program of Adobe, the app starts it only as the backup
+   converter, and the page makes no statement about what that program
+   does. One sentence is about macOS and not about
    the app: when a person opens a downloaded app the first time, macOS
    checks it, and macOS can contact Apple for that.
 3. **The command line tool and the MCP server.** The same: no network
    connection, nothing collected. The server talks only to the program that
-   started it, through standard input and output. What that program sends
-   to its own service is the matter of that program.
+   started it, through standard input and output. Each answer of the
+   server holds the path of the folder and the names of its files. What
+   that program sends to its own service is the matter of that program.
 4. **The website and the download.** No cookie, no analytics, no form. The
    pages load no file from another host. The site saves three things in
    the browser of the person, and they stay there: display settings, the
@@ -1446,7 +1450,8 @@ for the next change.
 | The app saves one setting of its own, and macOS saves two more. | A search of the app's sources for the defaults of the system finds one key that is written, `lastFactor`. `defaults read org.plateworks.desqueeze` shows that key and the two keys of macOS, for the window and the folder dialog. |
 | The pages load no file from another host. | A search of the built site for a `src`, an `href` to a style or a script, and a `url()` with another host finds none. |
 | The site saves three things in the browser. | A search of the scripts of the built site finds: in the local storage, display settings with the prefixes `developer.setting.` and `docs.setting.`. In the session storage, `scrollPosition`, and `developer.setting.navigator.state`, which holds the page, the open items, the selected tags and the filter text of the page list. No cookie. |
-| GitHub keeps logs and counts downloads. | GitHub's own documents say it. The page links to GitHub's privacy statement and claims no more than that. |
+| GitHub keeps logs and counts downloads. | GitHub's document about GitHub Pages says that it logs the IP address of a visitor. GitHub's API gives a `download_count` for each file of a release. The page links to GitHub's privacy statement and claims no more than that. |
+| The page makes no statement about Adobe DNG Converter. | Nothing to prove. The proofs watch exiftool and dnglab only, so the page must not speak for Adobe's program. |
 
 The search of the built site was run on 2026-10-12, with Xcode 27.0: it
 found no file from another host, the keys above, and no cookie, beacon,
