@@ -24,7 +24,7 @@ The register table of the Plateworks workspace holds the same row since 2026-10-
 
 **Version 1 (personal use):** Dom drops a shoot folder on the window, picks a factor, and every DNG opens in Lightroom at the correct shape. "Done" is the acceptance pass in section 9 of the design, on a scratch copy of a real shoot.
 
-**Later, only if it earns it:** a Plateworks Tools release for other photographers, as a built app. Not assumed. The design's section 3 lists what that release needs: a bundled exiftool and dnglab, signing and notarization, brand marks, a register, a privacy page. The source is open before that: MIT license, built from source.
+**Later, only if it earns it:** a Plateworks Tools release for other photographers, as a built app. Not assumed. The design's section 3 lists what that release needs: a bundled exiftool and dnglab, signing and notarization, brand marks, a register, a privacy page. The source is open before that: MIT license, built from source. Since 2026-10-12 the release exists: version 0.1.0 is a signed, notarized download with both programs inside, and the register and the privacy page are done (design, sections 15 and 16). Brand marks, an app icon and the use of the accent stay for later.
 
 ## Current status
 
