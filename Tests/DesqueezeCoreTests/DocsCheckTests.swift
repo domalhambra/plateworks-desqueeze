@@ -54,6 +54,40 @@ final class DocsCheckTests: XCTestCase {
         XCTAssertNil(Self.newestVersion(in: "# Changelog\n\n## [Unreleased]\n"))
     }
 
+    // The privacy page of the documentation site (design 16.5). A reader
+    // must see how old its statements are, and whom to ask. The first page
+    // must say where it is: the site has no footer for such a link.
+    func testThePrivacyPageHasItsDateItsContactAndALinkFromTheFirstPage() throws {
+        let catalog = Self.root.appendingPathComponent("Sources/DesqueezeCore/DesqueezeCore.docc")
+        let page = try String(contentsOf: catalog.appendingPathComponent("Privacy.md"), encoding: .utf8)
+        let firstPage = try String(contentsOf: catalog.appendingPathComponent("DesqueezeCore.md"), encoding: .utf8)
+
+        // The line, then the date in it. A date of the right form that is
+        // no day of the calendar, such as 2026-99-99, is no date.
+        let line = page.range(of: #"(?m)^Last updated [0-9]{4}-[0-9]{2}-[0-9]{2}\.$"#, options: .regularExpression)
+        XCTAssertNotNil(line, "Privacy.md needs a line of its own with an ISO date: \"Last updated 2026-10-12.\"")
+        if let line {
+            let date = String(page[line].dropFirst("Last updated ".count).dropLast())
+            XCTAssertTrue(Self.isADayOfTheCalendar(date), "the date of Privacy.md, \(date), is no day of the calendar")
+        }
+        XCTAssertTrue(page.contains("[dom@plateworks.org](mailto:dom@plateworks.org)"),
+                      "Privacy.md must give the contact in full, as a mailto link")
+        // The list under Topics is held by `DocsSiteTests`. This is the
+        // sentence in the text, above that list.
+        let text = firstPage.components(separatedBy: "\n## Topics\n")[0]
+        XCTAssertTrue(text.contains("<doc:Privacy>"),
+                      "the text of the first page, DesqueezeCore.md, must link to <doc:Privacy>")
+    }
+
+    /// True for a date of the form `2026-10-12` that the Gregorian calendar
+    /// has. `DateComponents` does the check, so a month 99 and the day 30 of
+    /// February are no date.
+    static func isADayOfTheCalendar(_ text: String) -> Bool {
+        let parts = text.split(separator: "-", omittingEmptySubsequences: false).map { Int($0) }
+        guard parts.count == 3, let year = parts[0], let month = parts[1], let day = parts[2] else { return false }
+        return DateComponents(calendar: Calendar(identifier: .gregorian), year: year, month: month, day: day).isValidDate
+    }
+
     /// The version of the first heading of the form `## [1.2.3]`, the form
     /// that "Keep a Changelog" gives each entry. Nil when there is none.
     static func newestVersion(in changelog: String) -> String? {

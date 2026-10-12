@@ -24,6 +24,15 @@
 #      that the deploy step passes with them.
 #   7. The actions. Each one is at the major version that was the newest on
 #      2026-10-09.
+#   8. The check of what the site loads and saves. The last step of the
+#      script is scripts/check_site_privacy.sh. DocC's scripts change with
+#      Xcode, so the Xcode of the image can give a key of the browser storage
+#      that the list of that script does not have. The build then fails, and
+#      the site is not published. That is the signal: the privacy page does
+#      not speak for that key. docs/changing-things.md has the steps. The
+#      check was proven with Xcode 27.0. On 2026-10-12 it also passed on the
+#      site that this workflow had built for the live pages, with the same
+#      keys.
 name: docs
 
 on:

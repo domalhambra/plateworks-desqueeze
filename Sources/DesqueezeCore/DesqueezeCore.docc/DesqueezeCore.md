@@ -32,6 +32,9 @@ The tool is open source under the MIT license. The window has a download, and
 server are a build from source. The download and the build were tested on
 macOS 27.2 only, and the build with Xcode 27 only.
 
+The tool collects nothing, and <doc:Privacy> says what each part of it loads
+and saves.
+
 ### Where to start
 
 - To use the tool, start with <doc:GettingStarted>. Before the first run on
@@ -51,6 +54,7 @@ macOS 27.2 only, and the build with Xcode 27 only.
 - <doc:WhatHappensToYourFiles>
 - <doc:CamerasAndLenses>
 - <doc:Troubleshooting>
+- <doc:Privacy>
 
 ### For a contributor
 

@@ -51,14 +51,27 @@ can damage, lose or expose a person's files is a security problem here.
   source has no program inside. The command line tool and the MCP server
   never look inside an app.
 - **Saved settings.** The window saves one value of its own: the factor of
-  the last run. It never saves the box that moves the originals.
+  the last run. It never saves the box that moves the originals. macOS
+  saves three more for the app, as it does for each app. They are the place
+  and size of the window, the size of the folder dialog, and the last
+  folder that the folder dialog showed.
 - **No network.** The window and the command line tool make no network
   request. The app has no update check. The MCP server speaks to its client
-  on standard input and standard output only. The build of the server
+  on standard input, standard output and standard error only. An answer
+  holds the path of the folder and the names of its files. The answer of a
+  scan also holds the paths of the programs on the Mac and two tag values
+  of each DNG. The answer of a run can hold the camera model or the ISO of
+  a photo, and the error text of a program. The build of the server
   fetches its libraries from GitHub. The release script, which only the
   maintainer runs, sends the app and the disk image to Apple's notary
   service.
 - **No data collection.** No analytics, no log that leaves the Mac.
+
+The privacy page of the documentation site says the same for each part, and
+for the site and the download:
+`Sources/DesqueezeCore/DesqueezeCore.docc/Privacy.md`. The section "Change
+what a part loads or saves" in `docs/changing-things.md` has the proof of
+each statement.
 
 The app is not sandboxed, because a sandboxed app cannot start the three
 programs. It runs with the rights of the person who starts it, and it never

@@ -571,6 +571,258 @@ table, change the article that describes it in the same change.
 the main branch. Its header says what it needs. The runner's Xcode can be
 older than yours: a warning of its `docc` fails the build there.
 
+The script also writes the page of the address `/privacy/`. That page sends
+a person to the article `Privacy.md` with a relative link. The script stops
+when the built site has no page for that article.
+
+The last step of the script is `scripts/check_site_privacy.sh`. It stops
+the build when the site loads or saves something that the privacy page does
+not speak for. The next section says what to do then.
+
+Never publish a site that you built on your Mac. Each page has its text as
+HTML, for a browser with no script. In that HTML, DocC writes the path of
+the checkout into the `src` of each picture, in small letters. With
+Xcode 27.0 that was two pages, "Using the window" and "Getting started", 12
+picture sources in all. The site that goes public is the one that the
+workflow builds, and its checkout has no name of a person. The check prints
+the count of such pages, and does not fail for it.
+
+## Change what a part loads or saves
+
+Read design 16 first. The privacy page of the site is the article
+`Sources/DesqueezeCore/DesqueezeCore.docc/Privacy.md`. It says what the
+app, the command line tool, the MCP server and the site load and save. A
+proof showed each statement. A privacy page that is not true is worse than
+none, so the page changes in the same commit as the fact.
+
+Use this section for each change of that kind:
+
+- A new saved setting, or a file that a part writes outside the photo
+  folder.
+- A network request, in any part.
+- A new program that the app starts.
+- A file that the site loads from another host, or a new thing that the
+  site saves in the browser.
+- A new Xcode for the build of the site. DocC's scripts change with Xcode.
+
+The steps:
+
+1. Run the four proofs below. Proof 4 is a script, and proof 3 has a part
+   that only a person can do. Run each proof before its statement goes on
+   the page. When a proof does not give the result that is written here,
+   stop, and do not write the statement. Find what changed.
+2. When a statement changes, change design 16.2 and the row of its proof in
+   design 16.3 first.
+3. Change the statement in `Privacy.md`. Set its line "Last updated" to the
+   date of the change, as an ISO date: `Last updated 2026-10-12.` Do both
+   in the same commit as the change of the code.
+4. Change each document that states the same fact: "What the app touches"
+   in `SECURITY.md`, invariant 12 in `CLAUDE.md`, and the articles
+   `WhatHappensToYourFiles.md` and `SafetyRulesForCode.md` of the site.
+5. Run `swift test --filter DocsCheckTests`.
+   `testThePrivacyPageHasItsDateItsContactAndALinkFromTheFirstPage` fails
+   when the article has no line "Last updated" with an ISO date, or no link
+   for its contact. It also fails when the text of the first page does not
+   link to the article. It does not judge a statement. Only the proofs do.
+6. Build the site: `scripts/build_docs.sh`. Then read the page of the
+   address `/privacy/`, and see that its link points to a file:
+
+   ```bash
+   cat build/docs/privacy/index.html
+   ls build/docs/documentation/desqueezecore/privacy/index.html
+   ```
+
+7. Add an entry to `CHANGELOG.md`.
+
+**Proof 1: no code makes a network connection.** Search the sources of the
+core, the tool, the app and the server:
+
+```bash
+grep -rnE 'URLSession|URLRequest|NWConnection|NWListener|import Network|CFSocket|socket\(' Sources/ App/ MCPServer/Sources/
+grep -rnE '[A-Za-z]+Transport\(' MCPServer/Sources/
+```
+
+The first search finds nothing. The second finds the server's own
+`AnsweringTransport` and one transport of the library, `StdioTransport`. It
+uses standard input and standard output. The server writes its log on
+standard error, for the program that started it.
+
+**Proof 2: exiftool and dnglab open no network socket in a run.** The tests
+on the real programs must run, so `fixtures/` must be there. Sample the open
+network sockets of the three processes while the suite runs. exiftool is a
+Perl script, so its process has the name of Perl.
+
+```bash
+log="$(mktemp)"
+( while :; do lsof -i -n -P 2>/dev/null | grep -E -i 'exiftool|perl|dnglab' >> "$log"; sleep 0.1; done ) &
+sampler=$!
+swift test > "$log.tests" 2>&1
+kill "$sampler"
+wc -c < "$log"
+grep -cE "^Test Case .* skipped \(" "$log.tests"
+grep -E "Executed [0-9]+ tests" "$log.tests"
+```
+
+The size of the log is 0, and no test was skipped. A line in the log is a
+socket: read it, and find the program that opened it. The search was tried
+on a Perl script that opens a socket on this Mac, and it found that socket.
+
+**Proof 3: the app saves one setting of its own.** Search for the defaults
+of the system:
+
+```bash
+grep -rnE 'UserDefaults|AppStorage|SceneStorage' App/ Sources/ MCPServer/Sources/
+```
+
+The search finds three lines, all in `App/PlateworksDesqueeze/AppModel.swift`.
+One line writes, and its key is `lastFactor`. One reads that key, and one
+reads the launch arguments.
+
+Then read what is saved for the app. macOS saves settings of its own for
+each app, and it saves some of them only after the folder dialog was open.
+No command opens that dialog, so a person does this part:
+
+1. Start the app, and move its window.
+2. Click "Choose folder". The folder dialog opens. Choose a copy of a photo
+   folder, never a real shoot folder.
+3. Quit the app, then read the defaults:
+
+   ```bash
+   defaults read org.plateworks.desqueeze
+   ```
+
+It shows four keys:
+
+| Key | Who saves it | Holds |
+|---|---|---|
+| `lastFactor` | The app, after a run that passed | The last squeeze factor |
+| `NSWindow Frame main` | macOS | The place and size of the window |
+| `NSNavPanelExpandedSizeForOpenMode` | macOS | The size of the folder dialog |
+| `NSOSPLastRootDirectory` | macOS | A bookmark of the last folder that the folder dialog showed |
+
+A first proof read the defaults before a use of the dialog, and it missed
+the last key. So do step 2 each time. A fifth key needs a new statement.
+
+**Proof 4: the built site.** This proof is a script,
+`scripts/check_site_privacy.sh`. `scripts/build_docs.sh` runs it as its last
+step, so each build has it: on your Mac, and on the runner that publishes
+the site. To run it alone on a site that is built:
+
+```bash
+scripts/check_site_privacy.sh
+```
+
+The script reads the files of the site, and it asks no network. It fails
+for each of these:
+
+- A file from another host. In the HTML, the CSS and the SVG files, that
+  is an address with a host in a tag or a rule that loads a file. In the
+  data files, it is a picture or a video of an article with a host. In
+  the theme settings file of the site, it is each address with a host.
+- An inline script in a page, other than the one that DocC writes. The
+  rules below read the script files only.
+- `document.cookie`, `indexedDB`, `sendBeacon` or `serviceWorker` in a
+  script, also through a name in brackets.
+- A key of the browser storage that is not in the list `known_keys` of the
+  script. An empty key and a key with a space are keys too.
+- A use of the browser storage that the script cannot read.
+
+It prints each key that it finds. Read those lines each time, and name each
+key: the storage, the key, and what it holds. A first, shorter search
+looked only for the two key names that were expected, and it missed the
+state of the page list. It also prints the hosts that the data files and
+the scripts name. Those are links for a person, license notes and XML
+namespaces, and no page loads them.
+
+The script was tried on 2026-10-12 against changed copies of a built site,
+one change in each copy. Examples: one more storage key, a key with a
+space, a script from another host, an inline script, a cookie. It failed
+for each, and it passed for the site as built. It also failed for a build
+of the catalog with a picture from another host in an article. On the same
+day it passed on the site that the workflow had built for the live pages,
+with the same keys.
+
+Known limits: the script reads text, so it cannot see each form. It does
+not see a cookie that a script reaches through another name, a request that
+a script makes to another host, or an export of the storage module that a
+script takes apart. The header of the script has the full list, and each
+form in it passed in a trial.
+
+The published site is built on GitHub's runner, with the Xcode of that
+runner. DocC's scripts change with Xcode. So that build can have a key, or
+a form of the scripts, that the build on your Mac does not have. The check
+then fails on the runner, and the site is not published. That is the
+signal, and not a fault of the workflow. Do this:
+
+1. Read the output of the failed step. It names the key or the use.
+2. Read the scripts of that build by hand, with the searches below. Use a
+   Mac with the same Xcode as the runner, or the files of the failed build.
+3. Change the statement in `Privacy.md`, the row of design 16.3, the table
+   below and the list `known_keys` in the script. Do all four in the same
+   commit.
+
+A pass is not a full proof. The header of the script says how it finds a
+key in minified scripts, and what it can miss. So make the searches below
+by hand when the Xcode of the build changes, and compare the keys with the
+output of the script. The site is in the folder docs inside build.
+
+Other ways to send, which the script does not judge:
+
+```bash
+grep -rlE 'XMLHttpRequest|WebSocket|EventSource' build/docs/js
+```
+
+It finds nothing.
+
+The storage keys. DocC's scripts are minified, so the short names below are
+those of one build. Read them again from the output of each search.
+
+```bash
+grep -rhoE '.{0,200}="developer\.setting\.".{0,250}.{0,200}' build/docs/js
+grep -rhoE '(localStorage|sessionStorage)\.[A-Za-z]+\("[^"]*"' build/docs/js | sort -u
+grep -rhoE '"[a-z]+\.setting\.[A-Za-z.-]*"' build/docs/js | sort -u
+```
+
+The first search shows the one module that wraps the two storages. It puts
+`developer.setting.` before a key, and it exports three objects. With
+Xcode 27.0 their names were these:
+
+- `IG` is the local storage, with the prefix.
+- `Ud` is the local storage, with no prefix.
+- `sZ` is the session storage, with the prefix.
+
+The second search shows each direct use. The third shows each key that is
+written in full. Then list each call of the three objects, and the value of
+each key name that a call uses. With Xcode 27.0 those names were `ru`, `ec`
+and `th`:
+
+```bash
+grep -rhoE '\.(IG|Ud|sZ)\.[A-Za-z]+\([^,)]{1,40}' build/docs/js | sort | uniq -c
+grep -rhoE '[ ,;](ru|ec|th)="[^"]*"' build/docs/js | sort -u
+```
+
+On 2026-10-12, with Xcode 27.0, the keys were these:
+
+| Storage | Key | Holds |
+|---|---|---|
+| Local | `developer.setting.preferredColorScheme` | The color scheme |
+| Local | `developer.setting.preferredLocale` | The language of the site's own words |
+| Local | `docs.setting.preferredLanguage` | The programming language of the API pages |
+| Local | `developer.setting.sidebar` | The width of the page list |
+| Local | `developer.setting.navigator-hidden-large` | If the page list is hidden |
+| Session | `scrollPosition` | The scroll position |
+| Session | `developer.setting.navigator.state` | The state of the page list: the page, the open items, the selected tags and the filter text |
+
+The scripts also read `docs.setting.preferredColorScheme`, an older key,
+and do not write it. The list of the script has it as a key that is read. A
+key that is not in this table needs a look at what it holds, and then a new
+statement or a new row.
+
+GitHub hosts the site and the download. No proof here can show what GitHub
+keeps. The page says only what GitHub's own documents say, and links to
+GitHub's privacy statement. Read that statement again when you change the
+sentence.
+
 ## Record a decision
 
 Add a row to `docs/decisions.md` under the date of the decision: what was

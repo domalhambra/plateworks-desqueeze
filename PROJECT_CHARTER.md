@@ -16,13 +16,15 @@ Dom, the maintainer, shoots stills on a Sony A7S III with anamorphic lenses of m
 
 ## Register
 
-None yet. A register belongs to a published property. If Desqueeze ships as a Plateworks tool, it takes the register of an operational tool: an instrument, with no editorial voice and no persuasion.
+Operational tool. This app sets a tag on photos to desqueeze them in Adobe apps.
+
+The register table of the Plateworks workspace holds the same row since 2026-10-12.
 
 ## Vision / done state
 
 **Version 1 (personal use):** Dom drops a shoot folder on the window, picks a factor, and every DNG opens in Lightroom at the correct shape. "Done" is the acceptance pass in section 9 of the design, on a scratch copy of a real shoot.
 
-**Later, only if it earns it:** a Plateworks Tools release for other photographers, as a built app. Not assumed. The design's section 3 lists what that release needs: a bundled exiftool and dnglab, signing and notarization, brand marks, a register, a privacy page. The source is open before that: MIT license, built from source.
+**Later, only if it earns it:** a Plateworks Tools release for other photographers, as a built app. Not assumed. The design's section 3 lists what that release needs: a bundled exiftool and dnglab, signing and notarization, brand marks, a register, a privacy page. The source is open before that: MIT license, built from source. Since 2026-10-12 the release exists: version 0.1.0 is a signed, notarized download with both programs inside, and the register and the privacy page are done (design, sections 15 and 16). Brand marks, an app icon and the use of the accent stay for later.
 
 ## Current status
 

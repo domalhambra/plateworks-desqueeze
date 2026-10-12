@@ -406,6 +406,7 @@ to 26, and an Intel Mac, with the download or with a build from source.
 | Why something is the way it is | `docs/decisions.md` |
 | Why the project exists and where it stands | `PROJECT_CHARTER.md` |
 | To report a problem that can harm files | `SECURITY.md` |
+| What the tool, the site and the download load and save | The privacy page, `Sources/DesqueezeCore/DesqueezeCore.docc/Privacy.md`. On the site it is at <https://domalhambra.github.io/plateworks-desqueeze/privacy/>. |
 | Every document | `docs/README.md` |
 
 ## The documentation site
