@@ -1424,9 +1424,12 @@ claim.
 3. **The command line tool and the MCP server.** The same: no network
    connection, nothing collected. The server talks only to the program that
    started it, through standard input, standard output and standard
-   error. An answer of the server holds the path of the folder, the names
-   of its files, and the paths of the programs on the Mac. What that
-   program sends to its own service is the matter of that program.
+   error. An answer of the server holds the path of the folder and the
+   names of its files. The answer of a scan also holds the paths of the
+   programs on the Mac and two tag values of each DNG. The answer of a run
+   can hold the camera model or the ISO of a photo, and the error text of a
+   program. What that program sends to its own service is the matter of
+   that program.
 4. **The website and the download.** No cookie, no analytics, no form. The
    pages load no file from another host. The site saves three things in
    the browser of the person, and they stay there: display settings, the
@@ -1516,6 +1519,8 @@ that release takes the values from the color standard, never by hand.
   section in `docs/changing-things.md` is the guard.
 - The search of the site reads minified scripts. It finds a storage key
   that is written as text. A key that a script builds in a way that the
-  search does not know can pass.
+  search does not know can pass. The header of the script lists the forms
+  that it cannot see, for example storage that is reached through a name in
+  brackets, and a request that a script makes to another host.
 - The page speaks for the scripts of the site. It cannot prove what GitHub
   sets when it serves a page.
