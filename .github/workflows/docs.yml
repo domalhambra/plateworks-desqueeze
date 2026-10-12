@@ -30,7 +30,9 @@
 #      that the list of that script does not have. The build then fails, and
 #      the site is not published. That is the signal: the privacy page does
 #      not speak for that key. docs/changing-things.md has the steps. The
-#      check was proven with Xcode 27.0 only.
+#      check was proven with Xcode 27.0. On 2026-10-12 it also passed on the
+#      site that this workflow had built for the live pages, with the same
+#      keys.
 name: docs
 
 on:

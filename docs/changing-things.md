@@ -579,6 +579,14 @@ The last step of the script is `scripts/check_site_privacy.sh`. It stops
 the build when the site loads or saves something that the privacy page does
 not speak for. The next section says what to do then.
 
+Never publish a site that you built on your Mac. Each page has its text as
+HTML, for a browser with no script. In that HTML, DocC writes the path of
+the checkout into the `src` of each picture, in small letters. With
+Xcode 27.0 that was two pages, "Using the window" and "Getting started", 12
+picture sources in all. The site that goes public is the one that the
+workflow builds, and its checkout has no name of a person. The check prints
+the count of such pages, and does not fail for it.
+
 ## Change what a part loads or saves
 
 Read design 16 first. The privacy page of the site is the article
@@ -707,13 +715,16 @@ scripts/check_site_privacy.sh
 The script reads the files of the site, and it asks no network. It fails
 for each of these:
 
-- A file from another host. In the HTML and the CSS, that is a `src`, a
-  `link` tag, a `url(` or an `@import` with a host. In the data files, it
-  is a picture or a video of an article with a host.
+- A file from another host. In the HTML, the CSS and the SVG files, that
+  is an address with a host in a tag or a rule that loads a file. In the
+  data files, it is a picture or a video of an article with a host. In
+  the theme settings file of the site, it is each address with a host.
+- An inline script in a page, other than the one that DocC writes. The
+  rules below read the script files only.
 - `document.cookie`, `indexedDB`, `sendBeacon` or `serviceWorker` in a
-  script.
+  script, also through a name in brackets.
 - A key of the browser storage that is not in the list `known_keys` of the
-  script.
+  script. An empty key and a key with a space are keys too.
 - A use of the browser storage that the script cannot read.
 
 It prints each key that it finds. Read those lines each time, and name each
@@ -723,9 +734,19 @@ state of the page list. It also prints the hosts that the data files and
 the scripts name. Those are links for a person, license notes and XML
 namespaces, and no page loads them.
 
-The script was tried on 2026-10-12 against copies of a built site: one with
-one more storage key, one with a script from another host, and one with a
-cookie. It failed for each, and it passed for the site as built.
+The script was tried on 2026-10-12 against changed copies of a built site,
+one change in each copy. Examples: one more storage key, a key with a
+space, a script from another host, an inline script, a cookie. It failed
+for each, and it passed for the site as built. It also failed for a build
+of the catalog with a picture from another host in an article. On the same
+day it passed on the site that the workflow had built for the live pages,
+with the same keys.
+
+Known limits: the script reads text, so it cannot see each form. It does
+not see a cookie that a script reaches through another name, a request that
+a script makes to another host, or an export of the storage module that a
+script takes apart. The header of the script has the full list, and each
+form in it passed in a trial.
 
 The published site is built on GitHub's runner, with the Xcode of that
 runner. DocC's scripts change with Xcode. So that build can have a key, or
