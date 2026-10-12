@@ -1422,9 +1422,10 @@ claim.
    checks it, and macOS can contact Apple for that.
 3. **The command line tool and the MCP server.** The same: no network
    connection, nothing collected. The server talks only to the program that
-   started it, through standard input and output. Each answer of the
-   server holds the path of the folder and the names of its files. What
-   that program sends to its own service is the matter of that program.
+   started it, through standard input, standard output and standard
+   error. An answer of the server holds the path of the folder, the names
+   of its files, and the paths of the programs on the Mac. What that
+   program sends to its own service is the matter of that program.
 4. **The website and the download.** No cookie, no analytics, no form. The
    pages load no file from another host. The site saves three things in
    the browser of the person, and they stay there: display settings, the
@@ -1448,8 +1449,8 @@ for the next change.
 | The app, the tool and the server have no code that makes a network connection. | A search of the sources of the core, the app, the tool and the server for the network types of Foundation and the Network framework finds none. The server's use of its library is the standard input and output transport only. |
 | exiftool and dnglab make no network connection in a run. | During the tests on the real programs, a sample of the open network sockets of the processes of exiftool, perl and dnglab shows none. |
 | The app saves one setting of its own, and macOS saves two more. | A search of the app's sources for the defaults of the system finds one key that is written, `lastFactor`. `defaults read org.plateworks.desqueeze` shows that key and the two keys of macOS, for the window and the folder dialog. |
-| The pages load no file from another host. | A search of the built site for a `src`, an `href` to a style or a script, and a `url()` with another host finds none. |
-| The site saves three things in the browser. | A search of the scripts of the built site finds: in the local storage, display settings with the prefixes `developer.setting.` and `docs.setting.`. In the session storage, `scrollPosition`, and `developer.setting.navigator.state`, which holds the page, the open items, the selected tags and the filter text of the page list. No cookie. |
+| The pages load no file from another host. | `scripts/check_site_privacy.sh` searches the built site for a `src`, an `href` to a style or a script, and a `url()` with another host, and finds none. The data files of the site hold links to the sources on GitHub. They are links, and the pages load nothing from them. |
+| The site saves three things in the browser. | A search of the scripts of the built site finds: in the local storage, display settings with the prefixes `developer.setting.` and `docs.setting.`. In the session storage, `scrollPosition`, and `developer.setting.navigator.state`, which holds the page, the open items, the selected tags and the filter text of the page list. No cookie. The same script makes this search: it prints each key that it finds, and it fails for a key that is not in its list, for a cookie, a beacon, a database or a service worker. |
 | GitHub keeps logs and counts downloads. | GitHub's document about GitHub Pages says that it logs the IP address of a visitor. GitHub's API gives a `download_count` for each file of a release. The page links to GitHub's privacy statement and claims no more than that. |
 | The page makes no statement about Adobe DNG Converter. | Nothing to prove. The proofs watch exiftool and dnglab only, so the page must not speak for Adobe's program. |
 
@@ -1457,8 +1458,11 @@ The search of the built site was run on 2026-10-12, with Xcode 27.0: it
 found no file from another host, the keys above, and no cookie, beacon,
 request to another host, database or service worker. A first, shorter search
 missed the state of the page list, so the proof names each key that it
-finds. DocC's scripts change with Xcode, so the proof runs again when the
-Xcode of the build changes.
+finds. DocC's scripts change with Xcode, and the published site is built by
+GitHub's runner, with its own Xcode. So `scripts/build_docs.sh` runs
+`scripts/check_site_privacy.sh` at its end, each time and on each machine.
+A build with a new key fails, and a person then changes the page and the
+list in the same commit.
 
 ### 16.4 The files
 
@@ -1466,7 +1470,8 @@ Xcode of the build changes.
 |---|---|
 | `Sources/DesqueezeCore/DesqueezeCore.docc/Privacy.md` | New. The article. |
 | `Sources/DesqueezeCore/DesqueezeCore.docc/DesqueezeCore.md` | A link to the article in the topics for a photographer, and one sentence in the text. |
-| `scripts/build_docs.sh` | After `docc convert`, it writes `privacy/index.html`, in the form of the page that it writes for the first address. The link is relative, so it holds under any base path. The script stops when the article is not in the built site. |
+| `scripts/build_docs.sh` | After `docc convert`, it writes `privacy/index.html`, in the form of the page that it writes for the first address. The link is relative, so it holds under any base path. The script stops when the article is not in the built site. At its end it runs `scripts/check_site_privacy.sh`. |
+| `scripts/check_site_privacy.sh` | New. The search of the built site of 16.3: files from another host, cookies, and the keys of the browser storage against a list. |
 | `README.md` | One line with the link, in the section "Where to go next". |
 | `PROJECT_CHARTER.md` | The section "Register" gets the register that Dom decided. |
 | `docs/changing-things.md` | A section "Change what a part loads or saves": change `Privacy.md` and its date in the same commit, and run the proofs of 16.3. |
@@ -1482,7 +1487,10 @@ Xcode of the build changes.
   when the built site has no page for the article.
 - By hand, after the publish: the live site shows the article, the first
   page links to it, and the address `/privacy/` reaches it.
-- No test asks a network. The proofs of 16.3 are run by hand.
+- `scripts/check_site_privacy.sh` runs in each site build, also on GitHub's
+  runner. It was tried against a built site with one more storage key, with
+  a script from another host and with a cookie: it fails for each.
+- No test asks a network. The other proofs of 16.3 are run by hand.
 
 ### 16.6 The register and the accent
 
@@ -1499,6 +1507,11 @@ that release takes the values from the color standard, never by hand.
   the article itself.
 - The statements about GitHub are GitHub's to keep. The page links to them
   and cannot prove them.
-- The proofs of 16.3 are run by hand. A later change can make a statement
-  false with no failing test. The section in `docs/changing-things.md` is
-  the guard.
+- The proofs of 16.3 about the app, the tool and the server are run by
+  hand. A later change can make a statement false with no failing test. The
+  section in `docs/changing-things.md` is the guard.
+- The search of the site reads minified scripts. It finds a storage key
+  that is written as text. A key that a script builds in a way that the
+  search does not know can pass.
+- The page speaks for the scripts of the site. It cannot prove what GitHub
+  sets when it serves a page.
