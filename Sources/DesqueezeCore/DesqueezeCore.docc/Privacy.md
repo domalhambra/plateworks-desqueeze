@@ -32,8 +32,10 @@ connection, and nothing collected.
 The MCP server talks only to the program that started it, through standard
 input, standard output and standard error. An answer of the server holds
 the path of the folder and the names of its files. The answer of a scan
-also holds the paths of the programs on the Mac. What that program sends to
-its own service is the matter of that program.
+also holds the paths of the programs on the Mac and two tag values of each
+DNG. The answer of a run can hold the camera model or the ISO of a photo,
+and the error text of a program. What that program sends to its own service
+is the matter of that program.
 
 ## The website and the download
 

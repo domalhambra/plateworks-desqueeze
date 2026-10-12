@@ -59,7 +59,9 @@ can damage, lose or expose a person's files is a security problem here.
   request. The app has no update check. The MCP server speaks to its client
   on standard input, standard output and standard error only. An answer
   holds the path of the folder and the names of its files. The answer of a
-  scan also holds the paths of the programs on the Mac. The build of the server
+  scan also holds the paths of the programs on the Mac and two tag values
+  of each DNG. The answer of a run can hold the camera model or the ISO of
+  a photo, and the error text of a program. The build of the server
   fetches its libraries from GitHub. The release script, which only the
   maintainer runs, sends the app and the disk image to Apple's notary
   service.
