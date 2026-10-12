@@ -433,9 +433,11 @@ echo "  Hosts that the scripts name, as text: ${script_hosts:-none}."
 # site names a folder of the machine that built it.
 # scripts/fix_static_pictures.py corrects those tags before this check. The
 # search does not look at the case of the letters. It finds the path of this
-# checkout, and the end of the path of a catalog, which a site from another
-# machine has too.
-checkout_pages="$(search -rliF --include='*.html' -e "${root#/}" -e '.docc/resources/' "$site" | wc -l | tr -d ' ')"
+# checkout in any place of a page. It also finds the end of the path of a
+# catalog, which a site from another machine has too: that one only as the
+# address of a picture, because an article can quote the name of the folder
+# in its text.
+checkout_pages="$( { search -rliF --include='*.html' "${root#/}" "$site"; search -rliE --include='*.html' '(src|srcset)="[^"]*\.docc/resources/' "$site"; } | sort -u | wc -l | tr -d ' ')"
 if [ "$checkout_pages" -gt 0 ]; then
     fail "$checkout_pages page(s) hold the path of the checkout of a build. scripts/build_docs.sh runs scripts/fix_static_pictures.py to correct them: this site did not get that step, or docc writes the path in a new place."
 fi

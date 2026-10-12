@@ -23,7 +23,12 @@ wrong `src`, finds the one file with that name under `images/` of the site,
 and writes its address as `srcset`, relative to the page. The name is written
 as the site has it: a web server tells `A.png` from `a.png`. A name with
 `@2x` or `@3x` gets that density. The `img` gets the address of the light
-variant as its `src`, or of the first `source` when none is light.
+variant as its `src`, or of the first `source` when none is light. For a
+name with `@2x` it gets a `srcset` with that density too, so a reader that
+ignores the `source` elements shows the picture at its correct size.
+
+A picture with one variant has no `source`: `docc` gives its `img` the wrong
+address directly. The script corrects that `src` in the same way.
 
 The script changes nothing in a `picture` that is correct already, so it is
 safe to run two times, and a later `docc` with no fault passes.
@@ -43,7 +48,7 @@ from __future__ import annotations
 import os
 import re
 import sys
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 PICTURE = re.compile(r"<picture>(.*?)</picture>", re.DOTALL)
 SOURCE = re.compile(r"<source\b[^>]*?/?>")
@@ -82,6 +87,36 @@ def address(page: str, site: str, wrong: str, pictures: dict[str, list[str]]) ->
     return "../" * depth + quote(matches[0], safe="/@~-._")
 
 
+def in_site(page: str, site: str, given: str) -> bool:
+    """True when an address of a page is a file of the site, name for name.
+
+    The file system of a Mac does not tell `A.png` from `a.png`, so each part
+    of the path is compared with the names that its folder lists.
+    """
+    if re.match(r"[a-zA-Z][a-zA-Z0-9+.-]*:|//", given):
+        return True  # An address on another host is not this script's matter.
+    path = os.path.normpath(os.path.join(os.path.dirname(page), unquote(given.split("?")[0].split("#")[0])))
+    relative = os.path.relpath(path, site)
+    if relative.startswith(".."):
+        return False
+    folder = site
+    for part in relative.split(os.sep):
+        if not os.path.isdir(folder) or part not in os.listdir(folder):
+            return False
+        folder = os.path.join(folder, part)
+    return os.path.isfile(folder)
+
+
+def with_density(target: str) -> str:
+    """The `srcset` of an img for a file with `@2x` or `@3x` in its name.
+
+    With it, a reader that ignores the source elements shows the picture at
+    its correct size too.
+    """
+    density = DENSITY.search(target)
+    return f' srcset="{target} {density.group(1)}x"' if density else ""
+
+
 def corrected(block: str, page: str, site: str, pictures: dict[str, list[str]]) -> str:
     """One `picture` element, with each address made correct."""
     where = os.path.relpath(page, site)
@@ -107,12 +142,20 @@ def corrected(block: str, page: str, site: str, pictures: dict[str, list[str]]) 
             light = light or target
 
     image = images[0]
-    if not SRC.search(image):
+    given = SRC.search(image)
+    if given and (SRCSET.search(image) or in_site(page, site, given.group(1))):
+        return block
+    if given:
+        # A picture with one variant has no source element. docc gives its
+        # img the wrong address directly.
+        target = address(page, site, given.group(1), pictures)
+        new = image.replace(given.group(0), f' src="{target}"{with_density(target)}', 1)
+    else:
         target = light or first
         if target is None:
             raise Stop(f"{where} has an img element with no src, and no source element gives one.")
-        block = block.replace(image, image.replace("<img", f'<img src="{target}"', 1), 1)
-    return block
+        new = image.replace("<img", f'<img src="{target}"{with_density(target)}', 1)
+    return block.replace(image, new, 1)
 
 
 def main(arguments: list[str]) -> int:

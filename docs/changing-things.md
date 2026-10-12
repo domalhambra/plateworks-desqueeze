@@ -580,23 +580,25 @@ the build when the site loads or saves something that the privacy page does
 not speak for. The next section says what to do then.
 
 Each page has its text a second time as HTML, for a browser with no
-JavaScript and for a search engine. DocC writes each picture wrongly there:
-the `source` elements have a `src`, which a browser ignores in a `picture`,
-that `src` is the path of the checkout in small letters, and the `img` has
-no `src`. So such a reader got no picture, and the page named a folder of
-the machine that built it. With Xcode 26.6 and 27.0 that was two pages,
+JavaScript and for a search engine. DocC writes each picture wrongly there,
+in three ways. Each `source` has a `src`, and a browser ignores `src` in a
+`picture`. That `src` is the path of the checkout in small letters. The
+`img` has no `src`. So such a reader got no picture, and the page named a
+folder of the machine that built it. With Xcode 26.6 and 27.0 that was two pages,
 "Using the window" and "Getting started", 12 picture sources in all.
 
 `scripts/fix_static_pictures.py` corrects that. The build script runs it
 after `docc convert`. For each `source` it finds the one file with that
 name in the folder images of the built site, and writes its address as
-`srcset`. It gives the `img` the address of the light variant. It stops the
-build when a picture has no file, or more than one. `StaticPicturesTests` holds it, with
+`srcset`. It gives the `img` the address of the light variant. A picture
+with one variant has no `source`, and the script corrects the `src` of its
+`img`. It stops the build when a picture has no file, or more than one. `StaticPicturesTests` holds it, with
 a small site in a temporary folder. After that step, the check of the site
 fails for a page that still holds a checkout path.
 
-To see a page as a reader with no JavaScript sees it, turn JavaScript off
-in a browser and open the page. In Safari that is in Settings › Security.
+To see a page as a reader with no JavaScript sees it, disable JavaScript
+in a browser and open the page. In Safari the setting is in Settings ›
+Security.
 A web view of an app that only blocks scripts is not the same: it hides the
 `noscript` part of the page.
 

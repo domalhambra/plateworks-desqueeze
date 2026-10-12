@@ -33,7 +33,7 @@ final class StaticPicturesTests: XCTestCase {
         let dark = "../../../images/org.example.Module/window-result~dark@2x.png"
         XCTAssertTrue(page.contains(#"<source media="(prefers-color-scheme: light)" srcset="\#(light) 2x"/>"#), page)
         XCTAssertTrue(page.contains(#"<source media="(prefers-color-scheme: dark)" srcset="\#(dark) 2x"/>"#), page)
-        XCTAssertTrue(page.contains(#"<img src="\#(light)" alt="The window after a run." decoding="async" loading="lazy"/>"#), page)
+        XCTAssertTrue(page.contains(#"<img src="\#(light)" srcset="\#(light) 2x" alt="The window after a run." decoding="async" loading="lazy"/>"#), page)
         XCTAssertFalse(page.contains("somebody"), "the path of the checkout is still in the page")
         XCTAssertTrue(page.contains("<p>Text.</p>"), "the text beside the picture changed")
     }
@@ -46,6 +46,56 @@ final class StaticPicturesTests: XCTestCase {
         XCTAssertEqual(try Self.fix(site).status, 0)
         let page = try Self.page(of: site)
         XCTAssertTrue(page.contains(#"srcset="../../../images/org.example.Module/Window-Result@2x.png 2x""#), page)
+    }
+
+    // docc writes the dark variant first for some pictures. The `img` is
+    // what a reader with no `picture` support gets, so it takes the light one.
+    func testTheImageTakesTheLightVariantWhenTheDarkOneIsFirst() throws {
+        let darkFirst = """
+            <html><body><noscript><picture>\
+            <source media="(prefers-color-scheme: dark)" src="../../../users/somebody/module.docc/resources/a~dark.png"/>\
+            <source media="(prefers-color-scheme: light)" src="../../../users/somebody/module.docc/resources/a.png"/>\
+            <img alt="A."/></picture></noscript></body></html>
+            """
+        let site = try Self.site(page: darkFirst, pictures: ["a.png", "a~dark.png"])
+        XCTAssertEqual(try Self.fix(site).status, 0)
+        let page = try Self.page(of: site)
+        XCTAssertTrue(page.contains(#"<img src="../../../images/org.example.Module/a.png" alt="A."/>"#), page)
+    }
+
+    // A picture with one variant has no `source`. docc gives its `img` the
+    // wrong address directly.
+    func testAPictureWithOneVariantGetsItsAddressOnTheImage() throws {
+        let single = """
+            <html><body><noscript><picture>\
+            <img alt="One." src="../../../users/somebody/module.docc/resources/single shot@2x.png"/></picture></noscript></body></html>
+            """
+        let site = try Self.site(page: single, pictures: ["Single Shot@2x.png"])
+        let result = try Self.fix(site)
+        XCTAssertEqual(result.status, 0, result.words)
+        let page = try Self.page(of: site)
+        // The space is written as %20: a space ends an address in `srcset`.
+        let address = "../../../images/org.example.Module/Single%20Shot@2x.png"
+        XCTAssertTrue(page.contains(#"<img alt="One." src="\#(address)" srcset="\#(address) 2x"/>"#), page)
+        XCTAssertFalse(page.contains("somebody"), page)
+        let second = try Self.fix(site)
+        XCTAssertEqual(second.status, 0, second.words)
+        XCTAssertEqual(try Self.page(of: site), page, "a second run changed the page")
+    }
+
+    // The script reads and corrects each page before it writes the first
+    // one. A fault on a later page must leave an earlier page as docc made it.
+    func testAFaultOnALaterPageLeavesAnEarlierPageUnchanged() throws {
+        let site = try Self.site(page: Self.brokenPage,
+                                 pictures: ["window-result@2x.png", "window-result~dark@2x.png"])
+        let later = site.appendingPathComponent("documentation/module/zzz")
+        try FileManager.default.createDirectory(at: later, withIntermediateDirectories: true)
+        let faulty = Self.brokenPage.replacingOccurrences(of: "window-result", with: "no-such-file")
+        try faulty.write(to: later.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+        let result = try Self.fix(site)
+        XCTAssertEqual(result.status, 1, result.words)
+        XCTAssertTrue(result.words.contains("documentation/module/zzz/index.html"), result.words)
+        XCTAssertEqual(try Self.page(of: site), Self.brokenPage)
     }
 
     func testASecondRunChangesNothing() throws {

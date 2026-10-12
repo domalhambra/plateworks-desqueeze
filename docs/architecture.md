@@ -550,7 +550,7 @@ stops when the built site has no such article. No suite runs it: run it
 after a change to an article or to a documentation comment.
 
 **The picture correction** is `scripts/fix_static_pictures.py`. DocC writes
-each page a second time for a reader with no JavaScript, and it gives each
+each page a second time, for a reader with no JavaScript. It gives each
 picture there the path of the checkout in place of the address of the file.
 The build script runs the correction after `docc convert` (design 16.8).
 `StaticPicturesTests` holds it.

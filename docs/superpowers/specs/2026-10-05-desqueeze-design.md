@@ -1548,7 +1548,12 @@ convert`:
   address as `srcset`, relative to the page. The name is written as the
   site has it, because a web server tells `A.png` from `a.png`. A name with
   `@2x` gets the density `2x`, so the picture has its correct size.
-- The `img` gets the address of the light variant as its `src`.
+- The `img` gets the address of the light variant as its `src`. For a name
+  with `@2x` it gets a `srcset` with the density too. So a reader that
+  ignores the `source` elements shows the picture at its correct size.
+- A picture with one variant has no `source`: `docc` gives its `img` the
+  wrong address directly. The script corrects that `src` in the same way.
+  The independent review found this form with a real build.
 - It reads and corrects each page before it writes the first one. When a
   picture has no file under `images/`, or more than one, it stops the build
   and changes no page.
@@ -1556,15 +1561,18 @@ convert`:
   changes nothing, and a later `docc` with no fault passes.
 
 `scripts/check_site_privacy.sh` then fails for a page that holds the path
-of this checkout, or the end of the path of a catalog. Before, it printed
-the count and did not judge it.
+of this checkout. It also fails for the address of a picture that has the
+end of the path of a catalog in it, which a site from another machine has.
+Before, it printed the count and did not judge it.
 
 Testing. `StaticPicturesTests` gives the script a small site in a temporary
-folder: the wrong form, a name in capital letters, a second run, a correct
-page, a missing file, and two files with one name. By hand, the page "Using
-the window" was loaded as plain content, as a browser with JavaScript off
-shows it: before the correction no picture loaded, and after it each
-picture in view loaded at 552 points wide.
+folder. Its cases are: the wrong form, a name in capital letters, the dark
+variant first, a picture with one variant and a space in its name, a fault
+on a later page, a second run, a correct page, a missing file, and two
+files with one name. By hand, the page "Using the window" was loaded as
+plain content, as a browser with JavaScript off shows it. Before the
+correction no picture loaded. After it, each picture in view loaded at 552
+points wide.
 
 Known limits. The script knows the form that `docc` writes today: one `img`
 in each `picture`. Another form stops the build with a sentence. A web view
