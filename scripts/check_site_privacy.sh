@@ -15,26 +15,43 @@
 #
 # What fails the check:
 #
-#   1. A file from another host. In the HTML: a `src`, a `srcset` or a
-#      `poster` with a host, a `link` tag with a host, and a `url(` or an
-#      `@import` with a host. In the CSS: a `url(` or an `@import` with a
-#      host. In the data files: a picture or a video of an article with a
-#      host. The site has no host of its own in its files, so each host is
-#      another host. A `link` tag with `rel="canonical"` or `rel="alternate"`
-#      loads nothing, and passes.
-#   2. In the scripts: `document.cookie`, `indexedDB`, `sendBeacon` or
+#   1. A file from another host. The site has no host of its own in its
+#      files, so each host is another host. The letters of a tag and of an
+#      attribute can be in any case.
+#      - In the HTML: a `src` or a `poster` with a host, a `srcset` with a
+#        host in any place of it, an `object` tag with a host in its `data`,
+#        a `base` tag with a host, and a `link` tag with a host. A `link`
+#        tag whose `rel` is exactly `canonical` or `alternate` loads
+#        nothing, and passes.
+#      - In the HTML, the CSS and the SVG files: a `url(` or an `@import`
+#        with a host.
+#      - In an SVG file: an `href` or a `src` with a host, and a script.
+#      - In the data files: a picture or a video of an article with a host.
+#      - In theme-settings.json: an address with a host.
+#   2. An inline script in a page, other than the one that DocC writes with
+#      the base path of the site. Rules 3 to 5 read the script files only,
+#      so they cannot speak for an inline script.
+#   3. In the scripts: `document.cookie`, `indexedDB`, `sendBeacon` or
 #      `serviceWorker`. A word in quotes, such as "indexedDB" in a list of
-#      keywords of the syntax colors, is not a use.
-#   3. A key of the browser storage that is not in the list below.
-#   4. A use of `localStorage` or `sessionStorage` that the check cannot
+#      keywords of the syntax colors, is not a use. One of those words, or
+#      `cookie`, `localStorage` or `sessionStorage`, as a name in brackets,
+#      such as window["localStorage"], is a use and fails.
+#   4. A key of the browser storage that is not in the list below. An empty
+#      key and a key with a space are keys too.
+#   5. A use of `localStorage` or `sessionStorage` that the check cannot
 #      read, and a storage module that it cannot read. Then a person reads
 #      the scripts: docs/changing-things.md has the steps. One of the two
 #      words in quotes, or in an error message of plain words, is not a use.
 #
-# What the check reports and does not judge: the hosts that the data files
-# and the scripts name. Those are links for a person, license notes and XML
-# namespaces. No page loads them. With DOCS_SOURCE_BASE_URL set, each API
-# page has a link to its source on GitHub, and the report counts them.
+# What the check reports and does not judge:
+#
+#   - The hosts that the data files and the scripts name. Those are links
+#     for a person, license notes and XML namespaces. With
+#     DOCS_SOURCE_BASE_URL set, each API page has a link to its source on
+#     GitHub, and the report counts them.
+#   - The pages that hold the path of the checkout of the build. DocC writes
+#     that path, in small letters, into the picture tags that a browser with
+#     no script reads.
 #
 # How it finds a storage key. The scripts are minified, so it reads text:
 #
@@ -46,18 +63,30 @@
 #      call of an export. For a key that is a short name, it reads the value
 #      of that name in the same file: ec="sidebar".
 #
-# What it can miss, so a pass is not a full proof:
+# What it can miss, so a pass is not a full proof. Each of these passed in a
+# trial on a changed copy of a site:
 #
-#   - A key that a script builds in another way, for example from two parts,
-#     or with `localStorage["key"]`. A use of that form fails as rule 4 only
-#     when the word `localStorage` or `sessionStorage` is in it.
+#   - A cookie that a script reaches through another name: d=document, then
+#     d.cookie.
+#   - A request that a script makes to another host: `fetch`, a picture that
+#     a script makes with `new Image().src`, a `WebSocket`. The check prints
+#     the hosts that the scripts name as text, and does not judge them.
+#   - An export of the storage module that a script takes apart into a name
+#     of its own, and then calls by that name.
+#   - A key that a script builds from parts.
 #   - A call of the export with no prefix whose key is a variable. The check
 #     prints such a call and does not fail: the keys of those calls are
 #     written in full today, and rule b finds them.
-#   - A short name that has two values in one file. The check takes each
-#     value as a key, so it can fail for a key that is none.
-#   - A script that reaches the storage with no use of those two words.
+#   - A script that reaches the storage with no use of the words
+#     `localStorage` and `sessionStorage`.
+#   - An event handler in a tag, such as `onload`, and an address that
+#     starts with `javascript:`.
+#   - A file of a kind that the check does not read. It reads HTML, CSS, SVG
+#     and script files, the data files, and theme-settings.json.
 #   - What the host sets when it serves a page. The check reads files.
+#
+# It can also fail with no cause: a short name that has two values in one
+# file gives two keys, and one of them is none.
 #
 # When a new Xcode gives another key or another form, the check fails. That
 # is the signal: read the scripts, then change the article Privacy and the
@@ -100,7 +129,19 @@ files_of() {
     find "$site" -type f -name "$1" | sort
 }
 
+# The storage that the list has for a key, or nothing.
+listed_storage() {
+    local storage key
+    while read -r storage key; do
+        if [ "$key" = "$1" ]; then
+            echo "$storage"
+            return
+        fi
+    done <<< "$known_keys"
+}
+
 host='(https?:)?//'
+quote="[\"']?"
 name='[A-Za-z_$][A-Za-z0-9_$]*'
 text_form='^"[^"]*"$'
 name_form='^[A-Za-z_$][A-Za-z0-9_$]*$'
@@ -110,13 +151,21 @@ echo "The check of what the site loads and saves: ${site#"$root"/}"
 # 1. Files from another host.
 html_count="$(files_of '*.html' | wc -l | tr -d ' ')"
 css_count="$(files_of '*.css' | wc -l | tr -d ' ')"
+svg_count="$(files_of '*.svg' | wc -l | tr -d ' ')"
 js_count="$(files_of '*.js' | wc -l | tr -d ' ')"
 
 loads="$(
-    search -rHoE --include='*.html' "[[:space:]](src|srcset|poster)=[\"']?[[:space:]]*$host[^\"' >]*" "$site"
-    search -rHoE --include='*.html' "<link[^>]*href=[\"']?[[:space:]]*$host[^>]*>" "$site" \
-        | search -vE "rel=[\"']?(canonical|alternate)[\"' >]"
-    search -rHoE --include='*.html' --include='*.css' "url\\([[:space:]]*[\"']?$host[^)]*\\)|@import[^;]*$host[^;]*" "$site"
+    search -rHoiE --include='*.html' "[[:space:]](src|poster)=$quote[[:space:]]*$host[^\"' >]*" "$site"
+    # A `srcset` holds more than one address. A host in any place of it.
+    search -rHoiE --include='*.html' "[[:space:]]srcset=(\"[^\"]*$host[^\"]*\"|'[^']*$host[^']*'|$host[^ >]*)" "$site"
+    search -rHoiE --include='*.html' "<object[[:space:]]([^>]*[[:space:]])?data=$quote[[:space:]]*$host[^\"' >]*" "$site"
+    search -rHoiE --include='*.html' "<base[[:space:]]([^>]*[[:space:]])?href=$quote[[:space:]]*$host[^\"' >]*" "$site"
+    # `rel="alternate stylesheet"` loads a style, so only the exact word passes.
+    search -rHoiE --include='*.html' "<link[^>]*href=$quote[[:space:]]*$host[^>]*>" "$site" \
+        | search -viE "rel=(\"(canonical|alternate)\"|'(canonical|alternate)'|(canonical|alternate)[[:space:]/>])"
+    search -rHoiE --include='*.html' --include='*.css' --include='*.svg' "url\\([[:space:]]*$quote$host[^)]*\\)|@import[^;]*$host[^;]*" "$site"
+    # In an SVG file. `xmlns` is a name and no address, and it does not match.
+    search -rHoiE --include='*.svg' "[[:space:]:](href|src)=$quote[[:space:]]*$host[^\"' >]*|<script" "$site"
 )"
 if [ -n "$loads" ]; then
     while IFS= read -r line; do
@@ -124,19 +173,49 @@ if [ -n "$loads" ]; then
     done <<< "$loads"
 fi
 
-# In the data files a slash can have a backslash before it.
+# In the data files a slash can have a backslash before it. A picture or a
+# video is an object with `traits` and `url`, in either order. The object
+# has no brace inside, so the search takes one object at a time.
 media=""
 if [ -d "$site/data" ]; then
-    media="$(search -rhoE '"variants":\[[^]]*\]' "$site/data" | search -oE '"url":"(https?:)?\\?/\\?/[^"]*"' | sort -u)"
+    media="$(search -rhoE '\{[^{}]*"url":"(https?:)?\\?/\\?/[^"]*"[^{}]*\}' "$site/data" \
+        | search -E '"traits":\[' \
+        | search -oE '"url":"(https?:)?\\?/\\?/[^"]*"' | sort -u)"
 fi
 if [ -n "$media" ]; then
     while IFS= read -r line; do
         fail "a picture or a video from another host in the data files: $line"
     done <<< "$media"
 fi
-echo "  Files from another host: $([ -z "$loads$media" ] && echo none || echo found) ($html_count HTML files, $css_count CSS files)."
 
-# 2. Other ways to save or to send.
+theme=""
+if [ -f "$site/theme-settings.json" ]; then
+    theme="$(search -oE '"(https?:)?\\?/\\?/[^"]*"' "$site/theme-settings.json" | sort -u)"
+fi
+if [ -n "$theme" ]; then
+    while IFS= read -r line; do
+        fail "theme-settings.json names a host, and the pages can load from it: $line"
+    done <<< "$theme"
+fi
+echo "  Files from another host: $([ -z "$loads$media$theme" ] && echo none || echo found) ($html_count HTML files, $css_count CSS files, $svg_count SVG files)."
+
+# 2. Inline scripts. Each `script` tag with no `src` is one. DocC writes one
+# in each page: var baseUrl = "/the-base-path/". A file that has more inline
+# scripts than scripts of that form has one that the check cannot read.
+inline_all="$(search -rHoiE --include='*.html' '<script[^>]*>' "$site" \
+    | search -viE '<script[^>]*[[:space:]]src=' \
+    | sed -E 's/:<[sS][cC][rR][iI][pP][tT][^:]*$//' | sort)"
+inline_docc="$(search -rHoE --include='*.html' '<script>var baseUrl = "/([^/"<>][^"<>]*)?"</script>' "$site" \
+    | sed -E 's/:<script>var baseUrl = [^:]*$//' | sort)"
+inline_other="$(comm -23 <(echo "$inline_all") <(echo "$inline_docc") | search -v '^$' | sort -u)"
+if [ -n "$inline_other" ]; then
+    while IFS= read -r file; do
+        fail "an inline script that DocC did not write, and the check does not read inline scripts: ${file#"$site"/}"
+    done <<< "$inline_other"
+fi
+echo "  Inline scripts other than DocC's own: $([ -z "$inline_other" ] && echo none || echo found)."
+
+# 3. Other ways to save or to send.
 senders=""
 for word in 'document\.cookie' 'indexedDB' 'sendBeacon' 'serviceWorker'; do
     if [ "$word" = 'document\.cookie' ]; then
@@ -152,12 +231,22 @@ for word in 'document\.cookie' 'indexedDB' 'sendBeacon' 'serviceWorker'; do
         done <<< "$hits"
     fi
 done
+# The same things through a name in brackets: window["localStorage"].
+brackets="$(search -rHoE --include='*.js' "\\[[\"'](cookie|indexedDB|sendBeacon|serviceWorker|localStorage|sessionStorage)[\"']\\]" "$site" | sort -u)"
+if [ -n "$brackets" ]; then
+    while IFS= read -r line; do
+        fail "a script reaches a cookie or a storage through a name in brackets: ${line#"$site"/}"
+        senders="found"
+    done <<< "$brackets"
+fi
 echo "  Cookie, database, beacon, service worker: ${senders:-none} ($js_count scripts)."
 
-# 3 and 4. The browser storage.
+# 4 and 5. The browser storage. The keys that were found: the storage, a
+# tab, the key, one on each line. A key can be empty or have a space, so no
+# space splits the two.
 found_keys=""
 add_key() {
-    found_keys="$found_keys$1 $2"$'\n'
+    found_keys="$found_keys$1"$'\t'"$2"$'\n'
 }
 
 # a. A call with the key as text.
@@ -177,7 +266,7 @@ full="$(search -rhoE --include='*.js' '"[A-Za-z]+\.setting\.[A-Za-z0-9._-]+"' "$
 if [ -n "$full" ]; then
     while IFS= read -r text; do
         key="${text//\"/}"
-        storage="$(echo "$known_keys" | awk -v key="$key" '$2 == key { print $1; exit }')"
+        storage="$(listed_storage "$key")"
         storage="${storage%-read}"
         add_key "${storage:-unknown}" "$key"
     done <<< "$full"
@@ -186,7 +275,6 @@ fi
 # c. The storage module.
 prefixes="$(search -rhoE --include='*.js' '"[A-Za-z]+\.setting\."' "$site" | sort -u)"
 module_text=""
-unread_calls=0
 if [ -n "$prefixes" ]; then
     if [ "$(echo "$prefixes" | wc -l | tr -d ' ')" != 1 ]; then
         fail "the scripts have more than one storage prefix, and the check knows the form with one: $(echo $prefixes)"
@@ -227,7 +315,7 @@ if [ -n "$prefixes" ]; then
         }
 
         # EXPORT:function(){return VARIABLE}, or EXPORT:()=>VARIABLE.
-        exports="$(echo "$exports_text" | grep -oE "$name:(function\\(\\)\\{return $name\\}|\\(\\)=>$name)" | sed -E 's/:(function\(\)\{return |\(\)=>)/ /; s/\}$//')"
+        exports="$(echo "$exports_text" | search -oE "$name:(function\\(\\)\\{return $name\\}|\\(\\)=>$name)" | sed -E 's/:(function\(\)\{return |\(\)=>)/ /; s/\}$//')"
         if [ -z "$exports" ]; then
             fail "the check cannot read the exports of the storage module. Read the scripts by hand."
         fi
@@ -250,19 +338,22 @@ if [ -n "$prefixes" ]; then
                 while IFS= read -r call; do
                     argument="${call#*\(}"
                     values=""
+                    readable=""
                     if [[ "$argument" =~ $text_form ]]; then
+                        # A key as text. It can be empty.
                         values="${argument//\"/}"
+                        readable="yes"
                     elif [[ "$argument" =~ $name_form ]]; then
                         values="$(search -oE "(^|[^A-Za-z0-9_\$.])${argument//\$/\\\$}=\"[^\"]*\"" "$file" | sed -E 's/^[^"]*"//; s/"$//' | sort -u)"
+                        [ -z "$values" ] || readable="yes"
                     fi
-                    if [ -n "$values" ]; then
+                    if [ -n "$readable" ]; then
                         while IFS= read -r value; do
                             add_key "$storage" "$before$value"
                         done <<< "$values"
                     elif [ -n "$before" ]; then
                         fail "the check cannot read the key of a call that saves with the prefix $prefix: $call in ${file#"$site"/}"
                     else
-                        unread_calls=$((unread_calls + 1))
                         echo "  A call with a key that the check cannot read, not judged: $call in ${file#"$site"/}"
                     fi
                 done <<< "$calls"
@@ -271,7 +362,7 @@ if [ -n "$prefixes" ]; then
     fi
 fi
 
-# 4. Each use of the two words must be one of these forms: a word in quotes,
+# 5. Each use of the two words must be one of these forms: a word in quotes,
 # a word in a text of plain words (an error message), a call with the key as
 # text, or a part of the storage module.
 all_js="$(find "$site" -type f -name '*.js' -exec cat {} +)"
@@ -297,27 +388,30 @@ if [ "$given_total" != "$((given_module + default_parameter))" ]; then
     fail "the scripts give a browser storage to a function outside the storage module, and the check cannot read what that function saves."
 fi
 
-# The answer: each key, and whether the list has it.
-found_keys="$(echo "$found_keys" | awk 'NF == 2' | sort -u)"
+# The answer: each key, and whether the list has it. A key that is empty or
+# has a space is shown in quotes.
+found_keys="$(printf '%s' "$found_keys" | search -v '^$' | sort -u)"
 echo "  Keys of the browser storage:"
 if [ -z "$found_keys" ]; then
     echo "    none"
 else
-    while read -r storage key; do
-        listed="$(echo "$known_keys" | awk -v key="$key" '$2 == key { print $1; exit }')"
-        if [ -z "$listed" ]; then
-            echo "    $storage  $key  NOT IN THE LIST"
-            fail "a key of the browser storage is not in the list of this script: $key ($storage storage). The article Privacy does not speak for it."
+    while IFS=$'\t' read -r storage key; do
+        shown="$key"
+        case "$key" in "" | *[[:space:]]*) shown="\"$key\"" ;; esac
+        listed="$(listed_storage "$key")"
+        if [ -z "$key" ] || [ -z "$listed" ]; then
+            echo "    $storage  $shown  NOT IN THE LIST"
+            fail "a key of the browser storage is not in the list of this script: $shown ($storage storage). The article Privacy does not speak for it."
         elif [ "${listed%-read}" != "$storage" ]; then
-            echo "    $storage  $key  IN THE LIST AS ${listed%-read}"
-            fail "the key $key is in the $storage storage, and the list of this script has it in the ${listed%-read} storage."
+            echo "    $storage  $shown  IN THE LIST AS ${listed%-read}"
+            fail "the key $shown is in the $storage storage, and the list of this script has it in the ${listed%-read} storage."
         else
-            echo "    $storage  $key$([ "$listed" = local-read ] && echo "  (read, never written)")"
+            echo "    $storage  $shown$([ "$listed" = local-read ] && echo "  (read, never written)")"
         fi
     done <<< "$found_keys"
 fi
 while read -r storage key; do
-    if ! echo "$found_keys" | awk -v key="$key" '$2 == key { found = 1 } END { exit !found }'; then
+    if ! printf '%s\n' "$found_keys" | awk -F'\t' -v key="$key" '$2 == key { found = 1 } END { exit !found }'; then
         echo "  In the list and not in this site: $key. The article Privacy can say less."
     fi
 done <<< "$known_keys"
@@ -331,6 +425,11 @@ if [ -d "$site/data" ]; then
 fi
 script_hosts="$(echo "$all_js" | search -oE '"https?://[^"/]+' | sed -E 's/^"https?:\/\///' | sort | uniq -c | awk '{ printf "%s%s (%s)", sep, $2, $1; sep = ", " }')"
 echo "  Hosts that the scripts name, as text: ${script_hosts:-none}."
+
+# The report, not judged: the path of the checkout. DocC writes it in small
+# letters, so the search does not look at the case of the letters.
+checkout_pages="$(search -rliF --include='*.html' "${root#/}" "$site" | wc -l | tr -d ' ')"
+echo "  Pages that hold the path of the checkout of this build, not judged: $checkout_pages."
 
 if [ "$failures" -gt 0 ]; then
     echo "check_site_privacy.sh: $failures finding(s). The article Privacy is not true for this site. docs/changing-things.md has the steps." >&2
