@@ -1606,7 +1606,9 @@ whose accent is red.
 - The app uses one value in both appearances: the light fill, `#157BA6`.
   White on it is 4.76:1. The app does not use the dark fill, because macOS
   draws white text on the accent in its own controls, and white on
-  `#4595BC` is 3.34:1.
+  `#4595BC` is 3.34:1. The dark ground of the window measures `#1D1E20`
+  on a screenshot, and the light fill is 3.51:1 on it, over the 3:1 for a
+  control.
 - macOS uses the `AccentColor` of an app only when the accent of the Mac is
   Multicolor. Any other choice wins over it. Proof: a build with the color
   asset and no other change showed the selected preset in red. So the app
@@ -1711,13 +1713,19 @@ The three stops of the icon script were tried too.
 
 By hand:
 
-- On a Mac with a red accent: the presets, the Run button, the checkbox,
-  the progress bar and the drop target are Chalcanthite, in both
-  appearances. "Choose folder", "Remove" and "Cancel" are grey.
+- On a Mac with a red accent: the presets, the Run button, the checkbox
+  and the progress bar are Chalcanthite, in both appearances. "Choose
+  folder", "Remove" and "Cancel" are grey. This was seen on 2026-10-12, in
+  the app that `scripts/make_release.sh --local` made. The drop target was
+  not seen: no folder was dragged. It uses the same named color.
 - The site in a browser, in both appearances: the variables of 17.1 have
   their values, and a link in an article has the ink.
-- The ten screenshots again ("Take the screenshots again").
+- The ten screenshots again ("Take the screenshots again"). Done on
+  2026-10-12.
 - The icon in the Dock, in Finder, and in the window of the disk image.
+  On 2026-10-12 the icon was read as macOS draws it for the local app, at
+  32, 128 and 512 points. The Dock, a Finder window and the disk image
+  wait for the release build.
 
 ### 17.5 Known limits
 

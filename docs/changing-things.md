@@ -485,9 +485,14 @@ Take all of them again when the window changes, so that they stay one set.
    Prove that on one file first.
 
    ```bash
-   hdiutil create -size 700m -fs APFS -volname Card card.dmg
+   hdiutil create -size 2g -fs APFS -volname Card card.dmg
    hdiutil attach -nobrowse card.dmg
    ```
+
+   Each run puts the backups of its DNG files into the Trash of the
+   image, about 200 MB for the 12 photos with the box for the originals
+   on. An image of 700 MB was full in the fourth run, and that run failed
+   with "No space left on device". No original was lost.
 
 2. Make a folder named "Shoot 1" on it. Put 8 DNG files and 4 ARW files
    in it, under plain names such as `DSC04093.dng`. Copies of one photo are
