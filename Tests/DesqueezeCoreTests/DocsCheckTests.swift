@@ -54,6 +54,25 @@ final class DocsCheckTests: XCTestCase {
         XCTAssertNil(Self.newestVersion(in: "# Changelog\n\n## [Unreleased]\n"))
     }
 
+    // The privacy page of the documentation site (design 16.5). A reader
+    // must see how old its statements are, and whom to ask. The first page
+    // must say where it is: the site has no footer for such a link.
+    func testThePrivacyPageHasItsDateItsContactAndALinkFromTheFirstPage() throws {
+        let catalog = Self.root.appendingPathComponent("Sources/DesqueezeCore/DesqueezeCore.docc")
+        let page = try String(contentsOf: catalog.appendingPathComponent("Privacy.md"), encoding: .utf8)
+        let firstPage = try String(contentsOf: catalog.appendingPathComponent("DesqueezeCore.md"), encoding: .utf8)
+
+        XCTAssertNotNil(page.range(of: #"(?m)^Last updated [0-9]{4}-[0-9]{2}-[0-9]{2}\.$"#, options: .regularExpression),
+                        "Privacy.md needs a line of its own with an ISO date: \"Last updated 2026-10-12.\"")
+        XCTAssertTrue(page.contains("[dom@plateworks.org](mailto:dom@plateworks.org)"),
+                      "Privacy.md must give the contact in full, as a mailto link")
+        // The list under Topics is held by `DocsSiteTests`. This is the
+        // sentence in the text, above that list.
+        let text = firstPage.components(separatedBy: "\n## Topics\n")[0]
+        XCTAssertTrue(text.contains("<doc:Privacy>"),
+                      "the text of the first page, DesqueezeCore.md, must link to <doc:Privacy>")
+    }
+
     /// The version of the first heading of the form `## [1.2.3]`, the form
     /// that "Keep a Changelog" gives each entry. Nil when there is none.
     static func newestVersion(in changelog: String) -> String? {

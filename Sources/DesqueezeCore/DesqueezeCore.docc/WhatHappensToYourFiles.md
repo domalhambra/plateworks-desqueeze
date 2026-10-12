@@ -22,6 +22,7 @@ because one piece of code does the file work for all three.
 - **The tool works on the top level of one folder.** It does not read a
   subfolder, and it ignores hidden files.
 - **The tool is offline.** It makes no network request and collects no data.
+  <doc:Privacy> says what each part loads and saves.
 
 The rest of this page says how each rule is kept.
 

@@ -170,7 +170,7 @@ window into a test bundle with no app host. A test run opens no window.
 
 ## Checks of the documents
 
-Three checks run inside `swift test`:
+Four checks run inside `swift test`:
 
 - The docs check, `scripts/docs_check.py`, fails when a document quotes a
   path that does not exist, or when a Markdown file under `docs/` has no row
@@ -181,6 +181,12 @@ Three checks run inside `swift test`:
   when the first page names an article that does not exist, when a link
   between two pages points to no page, and when a page quotes a test or a
   path of the repo that does not exist.
+- The test of the privacy page is
+  `testThePrivacyPageHasItsDateItsContactAndALinkFromTheFirstPage`. It
+  fails when <doc:Privacy> has no line "Last updated" with a date, or no
+  link for its contact. It also fails when the text of the first page does
+  not link to that page. It does not judge a statement of the page: the
+  proofs in `docs/changing-things.md` do.
 
 ## The drift check
 
