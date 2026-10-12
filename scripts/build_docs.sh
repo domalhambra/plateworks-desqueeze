@@ -14,6 +14,14 @@
 # A warning from docc is an error here: a link to an article or a symbol that
 # does not exist must not reach the published site.
 #
+# Then the script writes two small pages of its own. Each one sends a person
+# on with a relative link, so it holds under any base path:
+#
+#   index.html          The address of the site, to the first page.
+#   privacy/index.html  The address /privacy/, to the article Privacy. Each
+#                       Plateworks property has its privacy page there. The
+#                       script stops when the built site has no such article.
+#
 # Variables, all optional:
 #
 #   DOCS_HOSTING_BASE_PATH  The path under which the site is served. The
@@ -99,6 +107,30 @@ cat > "$output/index.html" <<EOF
 </head>
 <body>
 <p><a href="$start">Plateworks Desqueeze documentation</a></p>
+</body>
+</html>
+EOF
+
+# The address /privacy/ sends a person to the article Privacy. The link goes
+# up one folder first, so it is relative too. With no page for the article,
+# the address would send a person to nothing: stop.
+article="${start}privacy/"
+if [ ! -f "$output/${article}index.html" ]; then
+    echo "build_docs.sh: the built site has no page for the article Privacy, so privacy/index.html would point to nothing." >&2
+    exit 1
+fi
+mkdir -p "$output/privacy"
+cat > "$output/privacy/index.html" <<EOF
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plateworks Desqueeze privacy</title>
+<meta http-equiv="refresh" content="0; url=../$article">
+<link rel="canonical" href="../$article">
+</head>
+<body>
+<p><a href="../$article">Plateworks Desqueeze privacy</a></p>
 </body>
 </html>
 EOF
