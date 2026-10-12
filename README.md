@@ -19,10 +19,9 @@ command line tool named `desqueeze`, and an MCP server named `desqueeze-mcp`
 for Claude Code. The code is Swift: one package with all the rules,
 `DesqueezeCore`, and three thin front ends.
 
-Version 0.1.0. No release is published yet, so today each person builds it
-from source. The repo can make a download of the window: a signed, notarized
-disk image, with exiftool and dnglab inside the app. The section "Download"
-says what it holds.
+Version 0.1.0. The window has a download: a signed, notarized disk image,
+with exiftool and dnglab inside the app. The section "Download" says what it
+holds. The command line tool and the MCP server are a build from source.
 
 ## Is it for you
 
@@ -32,8 +31,9 @@ It is for you when all of these are true:
   their previews stay squeezed. Other raw editors were not tested.
 - Your photos are DNG files from any camera, or ARW files from a Sony camera.
 - Your lens squeezes the width, by a factor from 1 to 4.
-- You have a Mac. Until a release is published, you also need Xcode, to
-  build from source. The build was tested on macOS 27.2 with Xcode 27 only.
+- You have a Mac. The download needs Apple silicon and macOS 14 or later.
+  A build from source needs Xcode. Both were tested on macOS 27.2 only, and
+  the build with Xcode 27 only.
 
 What it does not do:
 
@@ -115,12 +115,11 @@ gets the correct shape, whatever camera made it.
 
 ## Download
 
-No release is published yet. Until the first one is, build from source: the
-section "Install and run" has the steps.
+Get the disk image of the newest release from the Releases page of the repo
+on GitHub: <https://github.com/domalhambra/plateworks-desqueeze/releases>.
+The first release is version 0.1.0, of 2026-10-12.
 
-`scripts/make_release.sh` makes the download. It is one disk image, for the
-Releases page of the repo on GitHub:
-<https://github.com/domalhambra/plateworks-desqueeze/releases>.
+`scripts/make_release.sh` makes the download. It is one disk image.
 
 | | What the script makes |
 |---|---|
@@ -347,8 +346,8 @@ Never test on a real shoot folder. Copy it first.
 
 ## Ship it
 
-No release is published yet. Each person builds the three parts from source,
-as above.
+The window has a download on the Releases page of the repo on GitHub. The
+command line tool and the MCP server are a build from source, as above.
 
 `scripts/make_release.sh` makes the release, on the one Mac that has the
 Developer ID. It builds the app for Apple silicon, puts exiftool and dnglab
@@ -387,12 +386,13 @@ make a release, and to change a program inside the download.
 The deployment target is macOS 14. No other Mac, system or tool version was
 tested.
 
-The download: `scripts/make_release.sh --local` was run on this Mac. It made
-the app for arm64 with the two programs inside, and each program gave its
-version from inside the app. The steps that need the Developer ID were not
-run yet: the signature with it, the notarization, and the disk image. The
-first release proves them. An Intel Mac was not tested, with the download or
-with a build from source.
+The download: `scripts/make_release.sh` made version 0.1.0 on this Mac. All
+eight steps passed: the signature with the Developer ID, the notarization of
+the app and of the disk image, and the stapled tickets. `spctl` accepted the
+app, the disk image, and the app inside the disk image. The app from the
+disk image then converted copies of ARW files with the two programs inside
+it. Not tested: the first open of a copy that a browser downloaded, macOS 14
+to 26, and an Intel Mac, with the download or with a build from source.
 
 ## Where to go next
 

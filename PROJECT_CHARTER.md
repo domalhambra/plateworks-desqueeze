@@ -70,7 +70,7 @@ None yet. A register belongs to a published property. If Desqueeze ships as a Pl
 - [x] Repo documented to the Medium tier, with the MIT license and the open-source files, and listed in the Plateworks workspace index — 2026-10-10
 - [x] One run in a folder at a time, and the option that moves the originals to the Trash — 2026-10-10
 - [x] Public GitHub repo created, with one first commit of the cleaned files — 2026-10-10
-- [ ] A signed, notarized download on the Releases page
+- [x] A signed, notarized download on the Releases page — 2026-10-12
 
 ## Guardrails / principles
 

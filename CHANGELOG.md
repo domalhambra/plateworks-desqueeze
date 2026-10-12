@@ -9,8 +9,9 @@ below is not that number.
 
 ## [0.1.0] - 2026-10-12
 
-The first version. No release is published yet. Until one is, it is built
-from source.
+The first version. The window has a download on the Releases page of the
+repo on GitHub. The command line tool and the MCP server are a build from
+source.
 
 ### Added
 
@@ -137,8 +138,9 @@ from source.
 - The MCP server has no argument that moves an original, but an agent that
   has a shell can start the command line tool with the flag.
 - An app that is built from source is not signed with a Developer ID and
-  not notarized. The release script does both for the download. No release
-  was made with it yet: the steps that need the Developer ID were not run.
+  not notarized. The release script does both for the download. The first
+  open of a copy that a browser downloaded was not tested, and no macOS
+  before 27.2 was.
 - The download is for Apple silicon. On an Intel Mac the app does not
   start. A build from source on an Intel Mac was not tested either.
 - The exiftool inside the app needs the Perl of macOS. Apple has said that

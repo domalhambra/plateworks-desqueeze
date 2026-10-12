@@ -1357,10 +1357,13 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
   folder on a scratch disk image: a file that goes to the Trash there goes
   to the Trash of that image, and leaves with it. Prove that on one file
   first.
-- Steps 6 to 8 need the Developer ID. The first release proves them. The
-  command that makes the disk image was run by hand on a scratch folder,
-  with no signature: it works on macOS 27.2, and `hdiutil` says there that
-  a later macOS wants `diskutil image` in its place.
+- Steps 6 to 8 need the Developer ID. The release of version 0.1.0 proved
+  them, on macOS 27.2: all eight steps passed, and the app from the disk
+  image ran its two programs in a window trial. `hdiutil` says there that a
+  later macOS wants `diskutil image` in its place.
+- Step 4 with the Developer ID asks for the key in the keychain the first
+  time, with a dialog. When the answer comes late, the time stamp is too
+  old and `codesign` fails. A second run is the fix.
 
 ### 15.8 Known limits
 

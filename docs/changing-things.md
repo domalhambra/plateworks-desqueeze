@@ -394,12 +394,11 @@ For each release:
 8. Publish by hand, on the maintainer's yes: `gh release create`, with the
    disk image and the source archive of dnglab as files. Put the SHA-256 of
    the disk image in the text of the release.
-9. Change the documents that say "no release is published yet":
-   `README.md`, `docs/architecture.md`, `SECURITY.md`, `CHANGELOG.md`,
-   `THIRD_PARTY_NOTICES.md`, `PROJECT_CHARTER.md`, and the articles `GettingStarted.md`,
-   `DesqueezeCore.md` and `Troubleshooting.md` of the documentation site.
-   Put what the first release proved into "Built and tested on" in
-   `README.md`.
+9. Change the documents that say what a release proved or which programs
+   are inside: "Built and tested on" in `README.md`, "Check a download" in
+   `SECURITY.md`, `THIRD_PARTY_NOTICES.md`, "The download" in
+   `docs/architecture.md`, and the article `GettingStarted.md` of the
+   documentation site. Version 0.1.0 of 2026-10-12 was the first release.
 
 Never put a name, an Apple ID, a team or a certificate hash into a file of
 the repo.

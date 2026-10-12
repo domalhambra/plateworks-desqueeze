@@ -17,8 +17,8 @@ The tool is for you when all of these are true:
   their previews stay squeezed. Other raw editors were not tested.
 - Your photos are DNG files from any camera, or ARW files from a Sony camera.
 - Your lens squeezes the width, by a factor from 1 to 4.
-- You have a Mac. Until a release is published, you also need Xcode, to
-  build from source.
+- You have a Mac. The download needs Apple silicon and macOS 14 or later.
+  A build from source needs Xcode.
 
 The tool does not stretch pixels and does not export an image. It does not
 read subfolders. It does not convert raw files other than Sony ARW. It does
@@ -26,14 +26,14 @@ not set a vertical stretch.
 
 ## Download the window
 
-No release is published yet. Until the first one is, build from source: the
-next two sections have the steps.
+Get the disk image of the newest release from the
+[Releases page](https://github.com/domalhambra/plateworks-desqueeze/releases)
+of the repo on GitHub. The first release is version 0.1.0.
 
-The repo has a script that makes the download. It is one disk image,
-`Desqueeze-<version>.dmg`, for the Releases page of the repo on GitHub. It
-holds the app of the window, for a Mac with Apple silicon and macOS 14 or
-later. The script signs the app with a Developer ID, and Apple notarizes
-it. exiftool and dnglab are inside the app, so you install nothing more.
+The download is one disk image, `Desqueeze-<version>.dmg`. It holds the app
+of the window, for a Mac with Apple silicon and macOS 14 or later. The app
+is signed with a Developer ID, and Apple notarized it. exiftool and dnglab
+are inside the app, so you install nothing more.
 
 To install from a disk image, open it and drag Desqueeze to the Applications
 folder. Then go to "Make the first run on a copy", and use the window.

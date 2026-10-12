@@ -369,9 +369,10 @@ states it. The window gives the state of its box. The tool gives its flag,
 
 ## Delivery
 
-Nothing is hosted, and no release is published yet. Until one is, each of
-the three is built from source on the Mac that uses it (design 12.3). The
-commands are in `README.md`.
+Nothing is hosted but the download of the window, on the Releases page of
+the repo on GitHub. The tool and the server are built from source on the Mac
+that uses them, and the app can be too (design 12.3). The commands are in
+`README.md`.
 
 | Built thing | Build | Where it goes |
 |---|---|---|
@@ -471,8 +472,9 @@ Desqueeze.app/Contents/Resources/licenses/            the license texts
 - **Nothing is uploaded.** The maintainer publishes a release by hand.
   GitHub Actions makes no release: the identity stays on one Mac.
 
-Steps 4 with the Developer ID, 6, 7 and 8 were not run yet. The first
-release proves them (design 15.7).
+All eight steps ran for version 0.1.0, on macOS 27.2 (design 15.7). The
+first try stopped at step 4: `codesign` waited for the dialog of the
+keychain, and its time stamp was then too old. A second run is the fix.
 
 There are no environment variables for normal use. The tools read `PATH` to
 find exiftool and dnglab. `DESQUEEZE_TEST_BACKUP_FOLDER` is for tests only:

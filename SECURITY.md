@@ -72,11 +72,11 @@ only to a client that you trust with your photo folders.
 
 ## Check a download
 
-No release is published yet. This section says what the release script,
-`scripts/make_release.sh`, makes, and how you can check a disk image when
-you have one. The commands below were not run on a published release yet.
-They were run on an app that is signed ad hoc. `spctl` rejects that app, as
-it must.
+Version 0.1.0 is the first release. This section says what the release
+script, `scripts/make_release.sh`, makes, and how you can check a disk
+image. The commands below were run on the disk image of version 0.1.0 and on
+the app from it. The app was in a work folder then, not in the Applications
+folder.
 
 The script signs the app and the disk image with a Developer ID, with the
 hardened runtime and a secure time stamp, and Apple notarizes both. The app

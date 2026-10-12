@@ -27,9 +27,10 @@ external programs do the file work: exiftool reads and writes the tags,
 dnglab converts ARW files, and Adobe DNG Converter is an optional backup for
 the photos that dnglab cannot match.
 
-The tool is open source under the MIT license. No release is published yet, so
-today it is built from source. <doc:GettingStarted> says what the download
-holds. The build was tested on macOS 27.2 with Xcode 27 only.
+The tool is open source under the MIT license. The window has a download, and
+<doc:GettingStarted> says what it holds. The command line tool and the MCP
+server are a build from source. The download and the build were tested on
+macOS 27.2 only, and the build with Xcode 27 only.
 
 ### Where to start
 

@@ -64,8 +64,8 @@ The Perl that runs exiftool is a part of macOS. It is not inside the app.
 
 A copy of this file is in the app too, beside the license texts.
 
-No release was made yet. When the first one is, its page has the disk image
-and the source archive of dnglab.
+The page of each release has the disk image and the source archive of its
+dnglab version. The first release is version 0.1.0, with dnglab 0.8.0.
 
 ## Libraries that only the MCP server links
 

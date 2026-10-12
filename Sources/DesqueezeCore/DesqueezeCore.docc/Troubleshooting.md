@@ -257,8 +257,7 @@ the app of the download has exiftool and dnglab there.
 
 ## The downloaded app
 
-No release is published yet. These are the limits of the app that the
-release script makes.
+These are the limits of the app of the download.
 
 | What you see | Why, and what to do |
 |---|---|

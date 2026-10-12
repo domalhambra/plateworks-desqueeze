@@ -118,6 +118,12 @@ win where they differ from an earlier section. Dom is the maintainer.
 | The release script signs dnglab with the identifier `org.plateworks.desqueeze.dnglab`. | With no identifier, codesign makes one from the name of the file and a hash. A fixed identifier says whose copy the file is. | `scripts/make_release.sh` |
 | One Developer ID identity that is in two keychains stops the release script at step 1. | codesign can answer "ambiguous" for an identity that it finds two times. The script said before that such an identity counts as one. | `scripts/make_release.sh` |
 
+## 2026-10-12
+
+| Decision | Why | Source |
+|---|---|---|
+| Version 0.1.0 is the first release. Its page has the disk image and the source archive of dnglab 0.8.0. | All eight steps of the release script passed, and the app from the disk image ran its two programs in a window trial. The first open of a copy that a browser downloaded, and macOS 14 to 26, were not tested. | `CHANGELOG.md`, design 15.7 |
+
 ## Rejected and deferred
 
 | Item | Status | Why |
