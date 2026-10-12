@@ -5,7 +5,22 @@ Each version of Plateworks Desqueeze, newest first. The form follows
 
 The version number is `DesqueezeVersion.current` in
 `Sources/DesqueezeCore/Version.swift`. A test fails when the newest entry
-below is not that number.
+below is not that number. A heading "Unreleased" is not a version.
+
+## [Unreleased]
+
+### Added
+
+- A privacy page on the documentation site, the article "Privacy". It says
+  what the app, the command line tool, the MCP server, the site and the
+  download load and save. The first page of the site and `README.md` link
+  to it, and the site has it at the address `/privacy/` too.
+  `scripts/build_docs.sh` writes the page of that address.
+- A test that fails when the privacy page has no date, no contact, or no
+  link from the first page of the site.
+- The section "Change what a part loads or saves" in
+  `docs/changing-things.md`, with the proof of each statement of the
+  privacy page.
 
 ## [0.1.0] - 2026-10-12
 

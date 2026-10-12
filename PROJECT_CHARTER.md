@@ -16,7 +16,9 @@ Dom, the maintainer, shoots stills on a Sony A7S III with anamorphic lenses of m
 
 ## Register
 
-None yet. A register belongs to a published property. If Desqueeze ships as a Plateworks tool, it takes the register of an operational tool: an instrument, with no editorial voice and no persuasion.
+Operational tool. This app sets a tag on photos to desqueeze them in Adobe apps.
+
+The register table of the Plateworks workspace holds the same row since 2026-10-12.
 
 ## Vision / done state
 

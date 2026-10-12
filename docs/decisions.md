@@ -6,7 +6,7 @@ is reversed, mark the old row superseded and add the new one under its own
 date.
 
 "Design" is `docs/superpowers/specs/2026-10-05-desqueeze-design.md`. "Design
-13.3" is its section 13.3. Sections 12 to 15 are the newest, and they
+13.3" is its section 13.3. Sections 12 to 16 are the newest, and they
 win where they differ from an earlier section. Dom is the maintainer.
 
 ## 2026-10-05
@@ -123,6 +123,13 @@ win where they differ from an earlier section. Dom is the maintainer.
 | Decision | Why | Source |
 |---|---|---|
 | Version 0.1.0 is the first release. Its page has the disk image and the source archive of dnglab 0.8.0. | All eight steps of the release script passed, and the app from the disk image ran its two programs in a window trial. The first open of a copy that a browser downloaded, and macOS 14 to 26, were not tested. | `CHANGELOG.md`, design 15.7 |
+| The privacy page is an article of the documentation site, `Privacy.md`. | The site is the one public page of the property. DocC has no footer and no free page, and an article is in the search and the navigation. | Design 16.1, `Sources/DesqueezeCore/DesqueezeCore.docc/Privacy.md` |
+| The first page of the site and `README.md` link to the privacy page. | A footer link is not possible. These are the two first pages that a person reads. | Design 16.1 |
+| The site build writes a page at the address `/privacy/` that sends a person to the article. | Each Plateworks property has its privacy page at that address. | Design 16.1, `scripts/build_docs.sh` |
+| The contact on the privacy page is the address in full, as a link. | A masked address stops few scrapers. It is worse for a screen reader and for a person who copies it. | Design 16.1 |
+| The privacy page has a line "Last updated" with an ISO date. | A person can see how old the statements are. | Design 16.1, `Tests/DesqueezeCoreTests/DocsCheckTests.swift` |
+| When what a part loads or saves changes, the privacy page changes in the same commit. No statement goes on the page before its proof was run. | A privacy page that is not true is worse than none. The first proof of the site missed a storage key, so the proof now names each key. | Design 16.3, `docs/changing-things.md` |
+| Desqueeze has the register of an operational tool. Its accent in the Plateworks color standard is Chalcanthite, and it is not in use. | Dom decided both. The app follows the accent color of each person's Mac, and the site has DocC's own colors. This repo holds no color value. | `PROJECT_CHARTER.md`, design 16.6 |
 
 ## Rejected and deferred
 
@@ -139,7 +146,7 @@ win where they differ from an earlier section. Dom is the maintainer.
 | The command line tool and the MCP server in the download | Left, a known limit | The download holds the window only (design 15.1 and 15.8). The two stay a build from source. |
 | A release made by GitHub Actions | Rejected | The Developer ID stays on one Mac (design 15.5). |
 | Match rows for other cameras | Deferred | Each camera needs its own measurement (design 13.9). `CONTRIBUTING.md` has the steps. |
-| Brand marks, an accent color, app icon art, a privacy page | Deferred to a release | These belong to a published app. Version 1 uses system colors and the system font. |
+| Brand marks, an accent color, app icon art, a privacy page | Changed on 2026-10-12. It was "Deferred to a release" for all four. | The privacy page is done (design 16). The accent is assigned in the Plateworks color standard, Chalcanthite, and is not in use (design 16.6). Brand marks and app icon art stay deferred: the app uses system colors and the system font. |
 | Subfolder scan | Deferred | Subfolders hold exports and the data of other programs. |
 | Folder drop on the Dock icon | Deferred | The window drop does the job. |
 | Parallel writes | Rejected for now | Design 2.1 measured about 30 s for a 228-file folder, one file at a time. |
