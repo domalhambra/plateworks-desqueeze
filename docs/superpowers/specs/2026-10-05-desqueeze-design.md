@@ -4,11 +4,12 @@ Date: 2026-10-05. Red-teamed 2026-10-09; section 2.1 holds the findings and
 each one's fix is in the body. Revised 2026-10-09 after the code reviews of
 the job and the window, and extended with section 12 (command line and MCP)
 and section 13 (dnglab first). Extended 2026-10-10 with section 14 (the
-originals to the Trash, on request) and section 15 (the download). Status:
-approved by Dom, and built.
+originals to the Trash, on request) and section 15 (the download). Extended
+2026-10-12 with section 16 (the privacy page). Status: approved by Dom.
+Sections 1 to 15 are built. Section 16 is not built yet.
 
 **How to read this document.** It grew in one week, and the later sections
-changed earlier decisions. Sections 12 to 15 are the newest. Where they
+changed earlier decisions. Sections 12 to 16 are the newest. Where they
 differ from any earlier section, they win. The earlier text was corrected
 where it would mislead, and it still tells the story in the order it
 happened: Adobe DNG Converter was the only converter until section 13.
@@ -1379,3 +1380,114 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
   the notices that dnglab's own Homebrew package carries, and no more.
 - Only the Mac with the Developer ID can make a release.
 - The command line tool and the MCP server are not in the download.
+
+## 16. The privacy page
+
+Added 2026-10-12, after the first release. Desqueeze is a Plateworks
+property, and each property has a privacy page that is exact about what it
+loads and saves. Dom also decided the register and the accent of Desqueeze
+that day. Those two live in the canon of the Plateworks workspace, not in
+this repo: `PROJECT_CHARTER.md` has the register, and section 16.6 says what
+the accent means here.
+
+### 16.1 Decisions
+
+| Decision | Why |
+|---|---|
+| The page is an article of the DocC catalog, `Privacy.md`. | The site is the one public page of the property, and DocC has no footer and no free page. An article is in the search and the navigation of the site. |
+| The first page of the site and `README.md` link to it. | A footer link is not possible. These are the two first pages that a person reads. |
+| The site build writes a page at `/privacy/` that sends a person to the article. | Each Plateworks property has its privacy page at that address. |
+| The contact is `dom@plateworks.org`, written in full, as a link. | A form such as `dom[at]plateworks.org` stops few scrapers. It is worse for a screen reader and for a person who copies it. |
+| The page has a line "Last updated" with an ISO date. | A person can see how old the statements are. |
+| When what a part loads or saves changes, the page changes in the same commit. | A privacy page that is not true is worse than none. |
+
+### 16.2 What the page says
+
+The article has five parts, in this order. Each statement is in the present
+tense and is about one thing. The page states facts and makes no legal
+claim.
+
+1. **The first line.** Desqueeze collects nothing.
+2. **The app.** No account, no analytics, no crash report, no advertisement.
+   It makes no network connection, so it has no update check. It reads and
+   changes files only in the folder that the person chooses, and a file that
+   it discards goes to the Trash of the Mac. It saves one setting on the
+   Mac: the last squeeze factor. One sentence is about macOS and not about
+   the app: when a person opens a downloaded app the first time, macOS
+   checks it, and macOS can contact Apple for that.
+3. **The command line tool and the MCP server.** The same: no network
+   connection, nothing collected. The server talks only to the program that
+   started it, through standard input and output. What that program sends
+   to its own service is the matter of that program.
+4. **The website and the download.** No cookie, no analytics, no form. The
+   pages load no file from another host. The site saves two things in the
+   browser of the person, and they stay there: display settings, and the
+   scroll position of the session. GitHub hosts the site and the download.
+   GitHub keeps server logs, which have the IP address of a visitor, and it
+   counts the downloads of each file. The page links to GitHub's privacy
+   statement.
+5. **Contact and date.** `dom@plateworks.org`, and "Last updated" with the
+   date.
+
+### 16.3 The proof of each statement
+
+No statement goes on the page before its proof was run. The proofs are part
+of the work, and `docs/changing-things.md` gets a section that names them,
+for the next change.
+
+| Statement | Proof |
+|---|---|
+| The app, the tool and the server have no code that makes a network connection. | A search of the sources of the core, the app, the tool and the server for the network types of Foundation and the Network framework finds none. The server's use of its library is the standard input and output transport only. |
+| exiftool and dnglab make no network connection in a run. | During the tests on the real programs, a sample of the open network sockets of the processes of exiftool, perl and dnglab shows none. |
+| The app saves one setting. | A search of the app's sources for the defaults of the system finds one key that is written, `lastFactor`. |
+| The pages load no file from another host. | A search of the built site for a `src`, an `href` to a style or a script, and a `url()` with another host finds none. |
+| The site saves two things in the browser. | A search of the scripts of the built site finds the local storage with the prefix `developer.setting.`, and the session storage with the key `scrollPosition`, and no cookie. |
+| GitHub keeps logs and counts downloads. | GitHub's own documents say it. The page links to GitHub's privacy statement and claims no more than that. |
+
+The search of the built site was run on 2026-10-12, on the site of commit
+`c2044f9`: it found no file from another host, the two kinds of storage, and
+no cookie. DocC's scripts change with Xcode, so the proof runs again when
+the Xcode of the build changes.
+
+### 16.4 The files
+
+| File | Change |
+|---|---|
+| `Sources/DesqueezeCore/DesqueezeCore.docc/Privacy.md` | New. The article. |
+| `Sources/DesqueezeCore/DesqueezeCore.docc/DesqueezeCore.md` | A link to the article in the topics for a photographer, and one sentence in the text. |
+| `scripts/build_docs.sh` | After `docc convert`, it writes `privacy/index.html`, in the form of the page that it writes for the first address. The link is relative, so it holds under any base path. The script stops when the article is not in the built site. |
+| `README.md` | One line with the link, in the section "Where to go next". |
+| `PROJECT_CHARTER.md` | The section "Register" gets the register that Dom decided. |
+| `docs/changing-things.md` | A section "Change what a part loads or saves": change `Privacy.md` and its date in the same commit, and run the proofs of 16.3. |
+| `docs/decisions.md`, `CHANGELOG.md`, `SECURITY.md`, `docs/README.md` | The decision rows, the entry, a link to the article, and the row for the new article. |
+| `Tests/DesqueezeCoreTests/DocsCheckTests.swift` | One test, 16.5. |
+
+### 16.5 Testing
+
+- One test reads `Privacy.md`. It fails when the article has no line "Last
+  updated" with an ISO date, when the contact is not there, or when the
+  first page of the catalog does not link to the article.
+- `scripts/build_docs.sh` stops when `docc` gives a warning, as before, and
+  when the built site has no page for the article.
+- By hand, after the publish: the live site shows the article, the first
+  page links to it, and the address `/privacy/` reaches it.
+- No test asks a network. The proofs of 16.3 are run by hand.
+
+### 16.6 The register and the accent
+
+The register is in `PROJECT_CHARTER.md`: an operational tool. The accent of
+Desqueeze in the Plateworks color standard is Chalcanthite, a copper blue.
+It is assigned, and not in use: the app follows the accent color of each
+person's Mac, and the site has DocC's own colors. This repo holds no color
+value. A later release can put the accent into the app and the site, and
+that release takes the values from the color standard, never by hand.
+
+### 16.7 Known limits
+
+- The address `/privacy/` holds a page that sends a person on. It is not
+  the article itself.
+- The statements about GitHub are GitHub's to keep. The page links to them
+  and cannot prove them.
+- The proofs of 16.3 are run by hand. A later change can make a statement
+  false with no failing test. The section in `docs/changing-things.md` is
+  the guard.
