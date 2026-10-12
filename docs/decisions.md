@@ -129,6 +129,7 @@ win where they differ from an earlier section. Dom is the maintainer.
 | The contact on the privacy page is the address in full, as a link. | A masked address stops few scrapers. It is worse for a screen reader and for a person who copies it. | Design 16.1 |
 | The privacy page has a line "Last updated" with an ISO date. | A person can see how old the statements are. | Design 16.1, `Tests/DesqueezeCoreTests/DocsCheckTests.swift` |
 | When what a part loads or saves changes, the privacy page changes in the same commit. No statement goes on the page before its proof was run. | A privacy page that is not true is worse than none. The first proof of the site missed a storage key, so the proof now names each key. | Design 16.3, `docs/changing-things.md` |
+| The search of the built site is a script, `scripts/check_site_privacy.sh`, and each site build runs it. A build with a storage key that is not in its list fails. | The published site is built on GitHub's runner, with another Xcode than the maintainer's, and DocC's scripts change with Xcode. A proof on one Mac does not hold for that build. | Design 16.3, `scripts/build_docs.sh` |
 | Desqueeze has the register of an operational tool. Its accent in the Plateworks color standard is Chalcanthite, and it is not in use. | Dom decided both. The app follows the accent color of each person's Mac, and the site has DocC's own colors. This repo holds no color value. | `PROJECT_CHARTER.md`, design 16.6 |
 
 ## Rejected and deferred

@@ -18,6 +18,10 @@ below is not that number. A heading "Unreleased" is not a version.
   `scripts/build_docs.sh` writes the page of that address.
 - A test that fails when the privacy page has no date, no contact, or no
   link from the first page of the site.
+- `scripts/check_site_privacy.sh`, the last step of each site build. It
+  stops the build when a page loads a file from another host, or when a
+  script has a cookie. It also stops the build when a script saves a key in
+  the browser that the privacy page does not speak for.
 - The section "Change what a part loads or saves" in
   `docs/changing-things.md`, with the proof of each statement of the
   privacy page.

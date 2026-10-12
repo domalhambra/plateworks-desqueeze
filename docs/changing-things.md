@@ -575,6 +575,10 @@ The script also writes the page of the address `/privacy/`. That page sends
 a person to the article `Privacy.md` with a relative link. The script stops
 when the built site has no page for that article.
 
+The last step of the script is `scripts/check_site_privacy.sh`. It stops
+the build when the site loads or saves something that the privacy page does
+not speak for. The next section says what to do then.
+
 ## Change what a part loads or saves
 
 Read design 16 first. The privacy page of the site is the article
@@ -595,7 +599,8 @@ Use this section for each change of that kind:
 
 The steps:
 
-1. Run the four proofs below. Run each proof before its statement goes on
+1. Run the four proofs below. Proof 4 is a script, and proof 3 has a part
+   that only a person can do. Run each proof before its statement goes on
    the page. When a proof does not give the result that is written here,
    stop, and do not write the statement. Find what changed.
 2. When a statement changes, change design 16.2 and the row of its proof in
@@ -630,8 +635,9 @@ grep -rnE '[A-Za-z]+Transport\(' MCPServer/Sources/
 ```
 
 The first search finds nothing. The second finds the server's own
-`AnsweringTransport` and one transport of the library, `StdioTransport`:
-standard input and standard output only.
+`AnsweringTransport` and one transport of the library, `StdioTransport`. It
+uses standard input and standard output. The server writes its log on
+standard error, for the program that started it.
 
 **Proof 2: exiftool and dnglab open no network socket in a run.** The tests
 on the real programs must run, so `fixtures/` must be there. Sample the open
@@ -654,45 +660,95 @@ socket: read it, and find the program that opened it. The search was tried
 on a Perl script that opens a socket on this Mac, and it found that socket.
 
 **Proof 3: the app saves one setting of its own.** Search for the defaults
-of the system, then read what is saved for the app on a Mac that ran it:
+of the system:
 
 ```bash
 grep -rnE 'UserDefaults|AppStorage|SceneStorage' App/ Sources/ MCPServer/Sources/
-defaults read org.plateworks.desqueeze
 ```
 
 The search finds three lines, all in `App/PlateworksDesqueeze/AppModel.swift`.
 One line writes, and its key is `lastFactor`. One reads that key, and one
-reads the launch arguments. The second command shows three keys. One is
-`lastFactor`. macOS saves the other two, as it does for each app:
-`NSWindow Frame main` is the place and size of the window, and
-`NSNavPanelExpandedSizeForOpenMode` is the size of the folder dialog. A
-fourth key needs a new statement.
+reads the launch arguments.
 
-**Proof 4: the built site.** Build it with `scripts/build_docs.sh`, then
-search the folder docs inside build. Name each storage key that the search
-finds, and write each one down. A first, shorter search looked only for the
-two key names that were expected, and it missed the state of the page list.
+Then read what is saved for the app. macOS saves settings of its own for
+each app, and it saves some of them only after the folder dialog was open.
+No command opens that dialog, so a person does this part:
 
-The site loads no file from another host:
+1. Start the app, and move its window.
+2. Click "Choose folder". The folder dialog opens. Choose a copy of a photo
+   folder, never a real shoot folder.
+3. Quit the app, then read the defaults:
+
+   ```bash
+   defaults read org.plateworks.desqueeze
+   ```
+
+It shows four keys:
+
+| Key | Who saves it | Holds |
+|---|---|---|
+| `lastFactor` | The app, after a run that passed | The last squeeze factor |
+| `NSWindow Frame main` | macOS | The place and size of the window |
+| `NSNavPanelExpandedSizeForOpenMode` | macOS | The size of the folder dialog |
+| `NSOSPLastRootDirectory` | macOS | A bookmark of the last folder that the folder dialog showed |
+
+A first proof read the defaults before a use of the dialog, and it missed
+the last key. So do step 2 each time. A fifth key needs a new statement.
+
+**Proof 4: the built site.** This proof is a script,
+`scripts/check_site_privacy.sh`. `scripts/build_docs.sh` runs it as its last
+step, so each build has it: on your Mac, and on the runner that publishes
+the site. To run it alone on a site that is built:
 
 ```bash
-grep -rhoE '(src|href)="(https?:)?//[^"]*"' build/docs --include='*.html' | sort | uniq -c
-grep -rhoE 'url\([^)]*\)' build/docs --include='*.css' | grep '//'
-grep -rhoE '@import[^;]*;' build/docs --include='*.css'
-grep -rhoE '"https?://[^"]{3,80}"' build/docs/js | sort | uniq -c
+scripts/check_site_privacy.sh
 ```
 
-The first search finds only links that a person clicks, such as the link to
-the Releases page. A `src`, or an `href` of a style or a script, with a
-host is a file from another host. The second and the third find nothing.
-The fourth finds XML namespaces of `www.w3.org` and three addresses of
-`github.com` in license notes. None of them is a request.
+The script reads the files of the site, and it asks no network. It fails
+for each of these:
 
-The site has no cookie, and no other way to save or to send:
+- A file from another host. In the HTML and the CSS, that is a `src`, a
+  `link` tag, a `url(` or an `@import` with a host. In the data files, it
+  is a picture or a video of an article with a host.
+- `document.cookie`, `indexedDB`, `sendBeacon` or `serviceWorker` in a
+  script.
+- A key of the browser storage that is not in the list `known_keys` of the
+  script.
+- A use of the browser storage that the script cannot read.
+
+It prints each key that it finds. Read those lines each time, and name each
+key: the storage, the key, and what it holds. A first, shorter search
+looked only for the two key names that were expected, and it missed the
+state of the page list. It also prints the hosts that the data files and
+the scripts name. Those are links for a person, license notes and XML
+namespaces, and no page loads them.
+
+The script was tried on 2026-10-12 against copies of a built site: one with
+one more storage key, one with a script from another host, and one with a
+cookie. It failed for each, and it passed for the site as built.
+
+The published site is built on GitHub's runner, with the Xcode of that
+runner. DocC's scripts change with Xcode. So that build can have a key, or
+a form of the scripts, that the build on your Mac does not have. The check
+then fails on the runner, and the site is not published. That is the
+signal, and not a fault of the workflow. Do this:
+
+1. Read the output of the failed step. It names the key or the use.
+2. Read the scripts of that build by hand, with the searches below. Use a
+   Mac with the same Xcode as the runner, or the files of the failed build.
+3. Change the statement in `Privacy.md`, the row of design 16.3, the table
+   below and the list `known_keys` in the script. Do all four in the same
+   commit.
+
+A pass is not a full proof. The header of the script says how it finds a
+key in minified scripts, and what it can miss. So make the searches below
+by hand when the Xcode of the build changes, and compare the keys with the
+output of the script. The site is in the folder docs inside build.
+
+Other ways to send, which the script does not judge:
 
 ```bash
-grep -rlE 'document\.cookie|indexedDB|sendBeacon|serviceWorker|XMLHttpRequest|WebSocket|EventSource' build/docs/js
+grep -rlE 'XMLHttpRequest|WebSocket|EventSource' build/docs/js
 ```
 
 It finds nothing.
@@ -737,8 +793,9 @@ On 2026-10-12, with Xcode 27.0, the keys were these:
 | Session | `developer.setting.navigator.state` | The state of the page list: the page, the open items, the selected tags and the filter text |
 
 The scripts also read `docs.setting.preferredColorScheme`, an older key,
-and do not write it. A key that is not in this table needs a look at what it
-holds, and then a new statement or a new row.
+and do not write it. The list of the script has it as a key that is read. A
+key that is not in this table needs a look at what it holds, and then a new
+statement or a new row.
 
 GitHub hosts the site and the download. No proof here can show what GitHub
 keeps. The page says only what GitHub's own documents say, and links to

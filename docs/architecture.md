@@ -549,6 +549,13 @@ of the address `/privacy/`, which sends a person to the privacy page. It
 stops when the built site has no such article. No suite runs it: run it
 after a change to an article or to a documentation comment.
 
+**The site check** is `scripts/check_site_privacy.sh`. It is the last step
+of the site build, on each machine. It reads the built site. It stops the
+build for a file from another host, for a cookie, and for a key of the
+browser storage that is not in its list. The list is what the privacy page
+speaks for. DocC's scripts change with Xcode, so a new Xcode can fail this
+check: `docs/changing-things.md` says what to do then.
+
 **Two workflows** are in `.github/workflows/`. `tests.yml` runs the three
 suites on every push and on every pull request. `docs.yml` builds the site
 with `scripts/build_docs.sh` and publishes it to GitHub Pages. Both first

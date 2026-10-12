@@ -188,6 +188,12 @@ Four checks run inside `swift test`:
   not link to that page. It does not judge a statement of the page: the
   proofs in `docs/changing-things.md` do.
 
+One check runs in the build of this site, and not inside `swift test`.
+`scripts/check_site_privacy.sh` reads the built site. It stops the build
+when a page loads a file from another host, or when a script has a cookie.
+It also stops the build when a script saves a key in the browser that
+<doc:Privacy> does not speak for.
+
 ## The drift check
 
 `AdobeDriftTests` is the guard of the match table. It converts the fixture
