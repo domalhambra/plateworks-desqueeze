@@ -7,7 +7,7 @@ The version number is `DesqueezeVersion.current` in
 `Sources/DesqueezeCore/Version.swift`. A test fails when the newest entry
 below is not that number.
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-10-12
 
 The first version. No release is published yet. Until one is, it is built
 from source.
