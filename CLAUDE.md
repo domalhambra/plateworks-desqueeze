@@ -6,7 +6,7 @@ This file is a router: the rules that must not break, and the one document to re
 
 ## Read this before changing that
 
-"Design" is `docs/superpowers/specs/2026-10-05-desqueeze-design.md`. Its sections 12 to 16 win over earlier ones.
+"Design" is `docs/superpowers/specs/2026-10-05-desqueeze-design.md`. Its sections 12 to 17 win over earlier ones.
 
 | Changing | Read first |
 |---|---|
@@ -20,6 +20,7 @@ This file is a router: the rules that must not break, and the one document to re
 | The originals to the Trash, on request | Design 14, `Sources/DesqueezeCore/Originals.swift`, and its section in `docs/changing-things.md` |
 | The download, the programs inside it, where the window looks | Design 15, `scripts/make_release.sh`, and its two sections in `docs/changing-things.md` |
 | What a part loads or saves: a setting, a network request, the site | Design 16, and its section in `docs/changing-things.md` |
+| The accent, the icon, the colors of the site | Design 17, and its section in `docs/changing-things.md` |
 | A sentence that a front end says | It is made once, in the core. `docs/changing-things.md` says where. |
 | Something that looks like a past decision | `docs/decisions.md` |
 | A change that you send from outside | `CONTRIBUTING.md` |

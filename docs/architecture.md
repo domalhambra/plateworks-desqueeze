@@ -179,9 +179,10 @@ tests check the bytes on the wire.
 |---|---|---|
 | `AppModel.swift` | The window's state: the folder, the factor, the box for the originals, the one job in flight, Cancel, a run that another run kept out, the detail line of a lock call that failed, the quit during a run, and the launch arguments | `AppModelTests.swift` and `OriginalsModelTests.swift` in `App/PlateworksDesqueezeTests/`. `Fakes.swift` beside them holds their fakes. |
 | `BundledTools.swift` | The two places of exiftool and dnglab inside the bundle of the app (design 15.3). `WindowTools.find`: the one way from the URL of the bundle and the launch arguments to the three programs of the window, with what a launch argument hides. No file work. | `BundledToolsTests.swift` in `App/PlateworksDesqueezeTests/`. Its tests call `WindowTools.find`, as `AppModel.live` does. One of them reads `scripts/make_release.sh`: the script and this file must hold the same two places. |
-| `ContentView.swift` | The one view: the drop zone, the factor row, the box for the originals, the buttons, the progress bar, the result list | - |
+| `ContentView.swift` | The one view: the drop zone, the factor row, the box for the originals, the buttons, the progress bar, the result list. The tint of the window, and `Color.chalcanthite`, the accent (design 17.2). | `AccentAndIconTests` reads the source: the place of the tint, and no use of the accent of the Mac. The look has no test. |
 | `DesqueezeApp.swift` | The app and its delegate: one window, and the reply to a quit | - |
 | `Info.plist` | Written by XcodeGen from `project.yml`. A hand edit is lost. | - |
+| `Assets.xcassets` | The two color assets, `Chalcanthite` and `AccentColor`, with one value, and the icon set `AppIcon` (design 17). `scripts/make_app_icon.py` writes the ten files of the icon set. A hand edit of one is lost. | `AccentAndIconTests` in `Tests/DesqueezeCoreTests/` |
 
 The view and the delegate have no test. Check them by hand, with the launch
 arguments in `docs/changing-things.md`. The window's tests compile
@@ -554,6 +555,16 @@ each page a second time, for a reader with no JavaScript. It gives each
 picture there the path of the checkout in place of the address of the file.
 The build script runs the correction after `docc convert` (design 16.8).
 `StaticPicturesTests` holds it.
+
+**The colors of the site** are in `theme-settings.json` of the catalog:
+the accent for links, buttons and the focus ring (design 17.1). The file
+holds colors only. `AccentAndIconTests` fails for a font, an address or a
+color that is not of the accent family.
+
+**The icon script** is `scripts/make_app_icon.py`. It writes the vector
+`App/AppIcon.svg` and the ten files of the icon set from one set of
+constants (design 17.3). No suite runs it. `AccentAndIconTests` checks that
+each slot has a file of its size.
 
 **The site check** is `scripts/check_site_privacy.sh`. It is the last step
 of the site build, on each machine. It reads the built site. It stops the

@@ -26,6 +26,13 @@ struct ContentView: View {
         }
         .padding(16)
         .frame(width: 440)
+        // macOS uses the `AccentColor` of an app only on a Mac whose accent
+        // is Multicolor. The tint holds for each Mac (design 17.1). It is
+        // here, inside the view, and before `onAppear`. On the view in
+        // `DesqueezeApp`, the first focus of the custom field came after
+        // the block below, and the window opened with the custom factor
+        // selected.
+        .tint(Color.chalcanthite)
         .onAppear {
             // AppKit gives the custom field the keyboard focus when the
             // window opens. Nobody chose that, so the field gives the focus
@@ -131,6 +138,7 @@ struct ContentView: View {
                 .padding(.vertical, 2)
             }
             Button("Choose folder") { model.chooseFolder() }
+                .plain()
                 .disabled(model.isRunning)
             Text("or drag a folder here")
                 .font(.caption)
@@ -139,11 +147,11 @@ struct ContentView: View {
         .padding(.vertical, 18)
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity)
-        .background(showsDropTarget ? Color.accentColor.opacity(0.12) : Color.clear,
+        .background(showsDropTarget ? Color.chalcanthite.opacity(0.12) : Color.clear,
                     in: RoundedRectangle(cornerRadius: 8))
         .overlay {
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(showsDropTarget ? Color.accentColor : Color.secondary.opacity(0.5),
+                .strokeBorder(showsDropTarget ? Color.chalcanthite : Color.secondary.opacity(0.5),
                               style: StrokeStyle(lineWidth: showsDropTarget ? 2 : 1, dash: [5, 4]))
         }
         .dropDestination(for: URL.self) { urls, _ in
@@ -211,10 +219,11 @@ struct ContentView: View {
             .focused($customFocused)
             .frame(width: 72)
             // The selected field gets a check mark and a border in the text
-            // colour. The accent colour stays off it: on a Mac whose accent
-            // is red, an accent border reads as an error. The system's focus
-            // ring has the accent colour too, so it is off. The field with
-            // the focus is always the selected one, so the border shows it.
+            // colour. The accent stays off it: a border in the accent beside
+            // a preset that is filled with the accent reads as a second
+            // selection (design 17.2). The system's focus ring has the
+            // colour of the accent too, so it is off. The field with the
+            // focus is always the selected one, so the border shows it.
             .focusEffectDisabled()
             .overlay(alignment: .trailing) {
                 if isSelected {
@@ -272,6 +281,7 @@ struct ContentView: View {
                     Text(model.isFinishing ? "Finishing…" : "Cancel").frame(maxWidth: .infinity)
                 }
                 .controlSize(.large)
+                .plain()
                 .keyboardShortcut(.cancelAction)
                 .disabled(model.isFinishing)
             } else {
@@ -284,6 +294,7 @@ struct ContentView: View {
             }
             Button("Remove", action: model.remove)
                 .controlSize(.large)
+                .plain()
                 .disabled(!model.canRemove)
                 .help("Set every DNG back to no stretch")
         }
@@ -385,8 +396,8 @@ struct ContentView: View {
 }
 
 /// One line of text behind a symbol. The symbol carries the meaning, so no
-/// meaning is in a colour alone: the Mac's accent colour can be the red of
-/// an error. VoiceOver reads the symbol's meaning, then the text.
+/// meaning is in a colour alone: a person who does not see the colour still
+/// gets it. VoiceOver reads the symbol's meaning, then the text.
 private struct SymbolLine: View {
     enum Meaning {
         /// `information` says "good to know". It is never an error, and it
@@ -445,8 +456,9 @@ private struct SymbolLine: View {
     }
 }
 
-/// The look of a preset: filled with the accent colour when it is the
-/// selected factor, grey when it is not.
+/// The look of a preset: filled with the accent when it is the selected
+/// factor, grey when it is not. White text on the accent is 4.76:1 (design
+/// 17.2).
 private struct FactorButtonStyle: ButtonStyle {
     let isSelected: Bool
 
@@ -464,11 +476,25 @@ private struct FactorButtonStyle: ButtonStyle {
             configuration.label
                 .padding(.vertical, 3)
                 .foregroundStyle(isSelected ? Color.white : Color.primary)
-                .background(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary.opacity(0.08)),
+                .background(isSelected ? AnyShapeStyle(Color.chalcanthite) : AnyShapeStyle(Color.primary.opacity(0.08)),
                             in: shape)
                 .overlay { if configuration.isPressed { shape.fill(Color.black.opacity(0.12)) } }
                 .opacity(isEnabled ? 1 : 0.5)
                 .contentShape(shape)
         }
     }
+}
+
+private extension View {
+    /// For a button that is not the main action. The tint of the window
+    /// would color its label, and then the Run button would not stand out
+    /// (design 17.2). With no tint, the button has the grey of the system.
+    func plain() -> some View { tint(nil) }
+}
+
+extension Color {
+    /// The accent of Desqueeze: the Chalcanthite fill, one value in both
+    /// appearances (design 17.1). The value is in the asset catalog, and a
+    /// test holds it. No view asks for the accent of the Mac.
+    static let chalcanthite = Color("Chalcanthite")
 }

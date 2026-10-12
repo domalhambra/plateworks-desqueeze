@@ -366,7 +366,7 @@ final class EndToEndTests: BuiltToolTestCase {
 
     func testVersionAndHelp() throws {
         let version = try desqueeze("--version")
-        XCTAssertEqual(version.stdout, "desqueeze 0.1.0\n")
+        XCTAssertEqual(version.stdout, "desqueeze 0.1.1\n")
         XCTAssertEqual(version.stderr, "")
         XCTAssertEqual(version.exitCode, 0)
 

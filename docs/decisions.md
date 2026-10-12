@@ -6,7 +6,7 @@ is reversed, mark the old row superseded and add the new one under its own
 date.
 
 "Design" is `docs/superpowers/specs/2026-10-05-desqueeze-design.md`. "Design
-13.3" is its section 13.3. Sections 12 to 16 are the newest, and they
+13.3" is its section 13.3. Sections 12 to 17 are the newest, and they
 win where they differ from an earlier section. Dom is the maintainer.
 
 ## 2026-10-05
@@ -130,8 +130,20 @@ win where they differ from an earlier section. Dom is the maintainer.
 | The privacy page has a line "Last updated" with an ISO date. | A person can see how old the statements are. | Design 16.1, `Tests/DesqueezeCoreTests/DocsCheckTests.swift` |
 | When what a part loads or saves changes, the privacy page changes in the same commit. No statement goes on the page before its proof was run. | A privacy page that is not true is worse than none. The first proof of the site missed a storage key, so the proof now names each key. | Design 16.3, `docs/changing-things.md` |
 | The search of the built site is a script, `scripts/check_site_privacy.sh`, and each site build runs it. A build with a storage key that is not in its list fails. | The published site is built on GitHub's runner, with another Xcode than the maintainer's, and DocC's scripts change with Xcode. A proof on one Mac does not hold for that build. | Design 16.3, `scripts/build_docs.sh` |
-| Desqueeze has the register of an operational tool. Its accent in the Plateworks color standard is Chalcanthite, and it is not in use. | Dom decided both. The app follows the accent color of each person's Mac, and the site has DocC's own colors. This repo holds no color value. | `PROJECT_CHARTER.md`, design 16.6 |
+| **Changed the same day by the rows for version 0.1.1 below: the accent is in use.** Desqueeze has the register of an operational tool. Its accent in the Plateworks color standard is Chalcanthite, and it is not in use. | Dom decided both. The app follows the accent color of each person's Mac, and the site has DocC's own colors. This repo holds no color value. | `PROJECT_CHARTER.md`, design 16.6 |
 | The site build corrects the pictures that DocC writes for a reader with no JavaScript, with `scripts/fix_static_pictures.py`, and the check of the site fails for a page that holds a checkout path. | DocC gave each such picture a `src` that a browser ignores, with the path of the build's checkout in it, and an `img` with no `src`. A reader with JavaScript off got no screenshot, and the public pages named a folder of the build machine. A correction after `docc convert` is small and is tested. A wait for a corrected DocC has no date. | `scripts/fix_static_pictures.py`, `StaticPicturesTests`, design 16.8 |
+
+### Version 0.1.1: the accent and the icon
+
+| Decision | Why | Source |
+|---|---|---|
+| The app and the site use the Chalcanthite accent, from version 0.1.1. The app has one value in both appearances, the light fill `#157BA6`. | Dom decided it. On a Mac with a red accent, the selected factor and the Run button were red, the color of an error. White on the light fill is 4.76:1. macOS draws white on the accent in its own controls, and white on the dark fill is 3.34:1. | Design 17.1, `App/PlateworksDesqueeze/Assets.xcassets`, `AccentAndIconTests` |
+| The window sets its tint itself, on the content view and before `onAppear`. The asset `AccentColor` alone is not enough. | macOS uses the `AccentColor` of an app only on a Mac whose accent is Multicolor: a build with the asset alone stayed red. With the tint in `DesqueezeApp.swift`, the window opened with the custom factor selected. Both were tried on macOS 27.2. | Design 17.1 and 17.2, `App/PlateworksDesqueeze/ContentView.swift` |
+| "Choose folder", "Remove" and "Cancel" take no tint. | The tint of a window colors the label of each bordered button. Only the main action has the accent, so it stands out. | Design 17.2, `App/PlateworksDesqueeze/ContentView.swift` |
+| The theme file of the site holds colors only, and each value is a value of the Chalcanthite family. | A font or an address in it would make the site load a file, and the privacy page says that the site loads none from another host. A test holds the file, and the check of the site reads it in each build. | Design 17.1, `Sources/DesqueezeCore/DesqueezeCore.docc/theme-settings.json`, `AccentAndIconTests` |
+| The icon of the app is the Plateworks mark as lines, in the accent, over a copy that is squeezed to 0.52 of its width. A script writes the vector and each file of the icon set. | Dom chose the drawing and the color. It says what the app does. One script with one set of constants keeps the ten files and the vector equal, and it compares the contours with the master mark. | Design 17.3, `scripts/make_app_icon.py` |
+| The tile of the icon has the shape of a Mac icon since macOS 11, with nothing around it. It is not a full square. | The deployment target is macOS 14. macOS 14 and 15 draw an icon as it is given, so a full square would be a hard square in the Dock. macOS 27.2 draws both forms the same. | Design 17.3, `scripts/make_app_icon.py` |
+| The grey of the squeezed copy, `#AEB6AD`, is derived for the icon. It is no token of the color standard. | It has the hue of the ground, and no token has that hue at that lightness. Dom chose the look. | Design 17.3 |
 
 ## Rejected and deferred
 
@@ -148,7 +160,7 @@ win where they differ from an earlier section. Dom is the maintainer.
 | The command line tool and the MCP server in the download | Left, a known limit | The download holds the window only (design 15.1 and 15.8). The two stay a build from source. |
 | A release made by GitHub Actions | Rejected | The Developer ID stays on one Mac (design 15.5). |
 | Match rows for other cameras | Deferred | Each camera needs its own measurement (design 13.9). `CONTRIBUTING.md` has the steps. |
-| Brand marks, an accent color, app icon art, a privacy page | Changed on 2026-10-12. It was "Deferred to a release" for all four. | The privacy page is done (design 16). The accent is assigned in the Plateworks color standard, Chalcanthite, and is not in use (design 16.6). Brand marks and app icon art stay deferred: the app uses system colors and the system font. |
+| Brand marks, an accent color, app icon art, a privacy page | Done on 2026-10-12, with version 0.1.1 for the accent and the icon. Before that day it was "Deferred to a release" for all four. | The privacy page is done (design 16). The accent is in use in the app and the site, and the app has its icon, the Plateworks mark in the accent (design 17). The app keeps the system font. |
 | Subfolder scan | Deferred | Subfolders hold exports and the data of other programs. |
 | Folder drop on the Dock icon | Deferred | The window drop does the job. |
 | Parallel writes | Rejected for now | Design 2.1 measured about 30 s for a 228-file folder, one file at a time. |

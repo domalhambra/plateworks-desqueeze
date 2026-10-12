@@ -1,0 +1,17 @@
+{
+  "theme": {
+    "color": {
+      "link": { "light": "#00688F", "dark": "#65B4DD" },
+      "figure-blue": { "light": "#00688F", "dark": "#65B4DD" },
+      "nav-link-color-hover": "#00688F",
+      "nav-dark-link-color-hover": "#65B4DD",
+      "fill-blue": { "light": "#157BA6", "dark": "#4595BC" },
+      "button-background": { "light": "#157BA6", "dark": "#4595BC" },
+      "button-background-hover": { "light": "#004C6A", "dark": "#7DCDF7" },
+      "button-background-active": { "light": "#004C6A", "dark": "#7DCDF7" },
+      "button-text": { "light": "#FFFFFF", "dark": "#020306" },
+      "focus-border-color": { "light": "#157BA6", "dark": "#4595BC" },
+      "focus-color": { "light": "#157BA6", "dark": "#4595BC" }
+    }
+  }
+}
