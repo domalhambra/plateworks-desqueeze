@@ -28,6 +28,12 @@
 #                       Plateworks property has its privacy page there. The
 #                       script stops when the built site has no such article.
 #
+# Then it runs scripts/fix_static_pictures.py on the site. docc writes each
+# page a second time for a reader with no JavaScript, and it gives a picture
+# there the path of the checkout in place of the address of the file. The
+# header of that script has the detail. It needs python3, which macOS has
+# with the command line tools of Xcode.
+#
 # Variables, all optional:
 #
 #   DOCS_HOSTING_BASE_PATH  The path under which the site is served. The
@@ -140,6 +146,11 @@ cat > "$output/privacy/index.html" <<EOF
 </body>
 </html>
 EOF
+
+# The pictures of a page, for a reader with no JavaScript. This runs before
+# the check of step 3, which stops for a page that holds the path of the
+# checkout.
+python3 "$root/scripts/fix_static_pictures.py" "$output"
 
 echo "3/3 What the site loads and saves"
 "$root/scripts/check_site_privacy.sh" "$output"

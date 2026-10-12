@@ -192,7 +192,13 @@ One check runs in the build of this site, and not inside `swift test`.
 `scripts/check_site_privacy.sh` reads the built site. It stops the build
 when a page loads a file from another host, or when a script has a cookie.
 It also stops the build when a script saves a key in the browser that
-<doc:Privacy> does not speak for.
+<doc:Privacy> does not speak for, and when a page holds the path of the
+checkout of a build.
+
+`StaticPicturesTests` holds `scripts/fix_static_pictures.py`. That script
+corrects the pictures that DocC writes for a reader with no JavaScript. The
+tests give it a small site in a temporary folder. They need no build of
+this site.
 
 ## The drift check
 

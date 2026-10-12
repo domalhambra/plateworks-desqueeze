@@ -549,11 +549,18 @@ of the address `/privacy/`, which sends a person to the privacy page. It
 stops when the built site has no such article. No suite runs it: run it
 after a change to an article or to a documentation comment.
 
+**The picture correction** is `scripts/fix_static_pictures.py`. DocC writes
+each page a second time, for a reader with no JavaScript. It gives each
+picture there the path of the checkout in place of the address of the file.
+The build script runs the correction after `docc convert` (design 16.8).
+`StaticPicturesTests` holds it.
+
 **The site check** is `scripts/check_site_privacy.sh`. It is the last step
 of the site build, on each machine. It reads the built site. It stops the
 build for a file from another host, for a cookie, and for a key of the
 browser storage that is not in its list. The list is what the privacy page
-speaks for. DocC's scripts change with Xcode, so a new Xcode can fail this
+speaks for. It also stops for a page that holds the path of the checkout of
+a build. DocC's scripts change with Xcode, so a new Xcode can fail this
 check: `docs/changing-things.md` says what to do then.
 
 **Two workflows** are in `.github/workflows/`. `tests.yml` runs the three

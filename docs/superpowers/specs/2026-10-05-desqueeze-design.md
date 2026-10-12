@@ -5,8 +5,8 @@ each one's fix is in the body. Revised 2026-10-09 after the code reviews of
 the job and the window, and extended with section 12 (command line and MCP)
 and section 13 (dnglab first). Extended 2026-10-10 with section 14 (the
 originals to the Trash, on request) and section 15 (the download). Extended
-2026-10-12 with section 16 (the privacy page). Status: approved by Dom.
-Sections 1 to 15 are built. Section 16 is not built yet.
+2026-10-12 with section 16 (the privacy page). Status: approved by Dom, and
+built.
 
 **How to read this document.** It grew in one week, and the later sections
 changed earlier decisions. Sections 12 to 16 are the newest. Where they
@@ -1524,3 +1524,57 @@ that release takes the values from the color standard, never by hand.
   name for the document, and a request that a script makes to another host.
 - The page speaks for the scripts of the site. It cannot prove what GitHub
   sets when it serves a page.
+
+### 16.8 The pictures for a reader with no JavaScript
+
+Added 2026-10-12. The second review of the privacy page found it, and it
+is a fault of the site, not a privacy statement.
+
+`docc` writes the text of each page a second time, into a `noscript`
+element, for a browser with no JavaScript and for a search engine. Its
+`picture` element there has three faults. Each `source` has a `src`, and a
+browser reads only `srcset` in a `picture`. That `src` is the path of the
+file in the checkout of the build, in small letters, not the address of the
+file in the site. The `img` has no `src`. So such a reader got the text
+alternative and no picture, and two public pages named a folder of the
+machine that built them. The docc of Xcode 26.6 and of Xcode 27.0 both do
+this.
+
+`scripts/fix_static_pictures.py` corrects each such `picture` after `docc
+convert`:
+
+- For each `source`, it takes the file name from the wrong `src`, finds the
+  one file with that name under `images/` of the site, and writes its
+  address as `srcset`, relative to the page. The name is written as the
+  site has it, because a web server tells `A.png` from `a.png`. A name with
+  `@2x` gets the density `2x`, so the picture has its correct size.
+- The `img` gets the address of the light variant as its `src`. For a name
+  with `@2x` it gets a `srcset` with the density too. So a reader that
+  ignores the `source` elements shows the picture at its correct size.
+- A picture with one variant has no `source`: `docc` gives its `img` the
+  wrong address directly. The script corrects that `src` in the same way.
+  The independent review found this form with a real build.
+- It reads and corrects each page before it writes the first one. When a
+  picture has no file under `images/`, or more than one, it stops the build
+  and changes no page.
+- A `picture` that is correct already stays as it is. So a second run
+  changes nothing, and a later `docc` with no fault passes.
+
+`scripts/check_site_privacy.sh` then fails for a page that holds the path
+of this checkout. It also fails for the address of a picture that has the
+end of the path of a catalog in it, which a site from another machine has.
+Before, it printed the count and did not judge it.
+
+Testing. `StaticPicturesTests` gives the script a small site in a temporary
+folder. Its cases are: the wrong form, a name in capital letters, the dark
+variant first, a picture with one variant and a space in its name, a fault
+on a later page, a second run, a correct page, a missing file, and two
+files with one name. By hand, the page "Using the window" was loaded as
+plain content, as a browser with JavaScript off shows it. Before the
+correction no picture loaded. After it, each picture in view loaded at 552
+points wide.
+
+Known limits. The script knows the form that `docc` writes today: one `img`
+in each `picture`. Another form stops the build with a sentence. A web view
+that only blocks scripts hides the `noscript` part, so it cannot show this
+part of a page: use a browser with JavaScript off.

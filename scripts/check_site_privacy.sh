@@ -42,6 +42,10 @@
 #      read, and a storage module that it cannot read. Then a person reads
 #      the scripts: docs/changing-things.md has the steps. One of the two
 #      words in quotes, or in an error message of plain words, is not a use.
+#   6. A page that holds the path of the checkout of a build. DocC writes
+#      that path, in small letters, into the picture tags that a browser with
+#      no script reads. scripts/fix_static_pictures.py corrects those tags
+#      before this check runs.
 #
 # What the check reports and does not judge:
 #
@@ -49,9 +53,6 @@
 #     for a person, license notes and XML namespaces. With
 #     DOCS_SOURCE_BASE_URL set, each API page has a link to its source on
 #     GitHub, and the report counts them.
-#   - The pages that hold the path of the checkout of the build. DocC writes
-#     that path, in small letters, into the picture tags that a browser with
-#     no script reads.
 #
 # How it finds a storage key. The scripts are minified, so it reads text:
 #
@@ -426,10 +427,21 @@ fi
 script_hosts="$(echo "$all_js" | search -oE '"https?://[^"/]+' | sed -E 's/^"https?:\/\///' | sort | uniq -c | awk '{ printf "%s%s (%s)", sep, $2, $1; sep = ", " }')"
 echo "  Hosts that the scripts name, as text: ${script_hosts:-none}."
 
-# The report, not judged: the path of the checkout. DocC writes it in small
-# letters, so the search does not look at the case of the letters.
-checkout_pages="$(search -rliF --include='*.html' "${root#/}" "$site" | wc -l | tr -d ' ')"
-echo "  Pages that hold the path of the checkout of this build, not judged: $checkout_pages."
+# The path of the checkout. DocC writes it, in small letters, into the
+# picture tags that a browser with no script reads: there it stands in place
+# of the address of the file, so the picture does not load, and the public
+# site names a folder of the machine that built it.
+# scripts/fix_static_pictures.py corrects those tags before this check. The
+# search does not look at the case of the letters. It finds the path of this
+# checkout in any place of a page. It also finds the end of the path of a
+# catalog, which a site from another machine has too: that one only as the
+# address of a picture, because an article can quote the name of the folder
+# in its text.
+checkout_pages="$( { search -rliF --include='*.html' "${root#/}" "$site"; search -rliE --include='*.html' '(src|srcset)="[^"]*\.docc/resources/' "$site"; } | sort -u | wc -l | tr -d ' ')"
+if [ "$checkout_pages" -gt 0 ]; then
+    fail "$checkout_pages page(s) hold the path of the checkout of a build. scripts/build_docs.sh runs scripts/fix_static_pictures.py to correct them: this site did not get that step, or docc writes the path in a new place."
+fi
+echo "  Pages that hold the path of the checkout of a build: $checkout_pages."
 
 if [ "$failures" -gt 0 ]; then
     echo "check_site_privacy.sh: $failures finding(s). The article Privacy is not true for this site. docs/changing-things.md has the steps." >&2
