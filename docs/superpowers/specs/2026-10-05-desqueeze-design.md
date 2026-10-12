@@ -1520,7 +1520,7 @@ that release takes the values from the color standard, never by hand.
 - The search of the site reads minified scripts. It finds a storage key
   that is written as text. A key that a script builds in a way that the
   search does not know can pass. The header of the script lists the forms
-  that it cannot see, for example storage that is reached through a name in
-  brackets, and a request that a script makes to another host.
+  that it cannot see, for example a cookie that is reached through another
+  name for the document, and a request that a script makes to another host.
 - The page speaks for the scripts of the site. It cannot prove what GitHub
   sets when it serves a page.
