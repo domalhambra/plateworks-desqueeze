@@ -1634,7 +1634,7 @@ whose accent is red.
   white, and 9.13:1 on black. The label is 4.76:1 on the light fill, and
   6.17:1 on the dark fill.
 - The icon is the four contours of the Plateworks mark as lines in
-  Chalcanthite, each one pinched at its middle height. Dom chose it on
+  Chalcanthite, pinched toward the center of the core. Dom chose it on
   2026-10-12, for version 0.1.2: the rings themselves are squeezed, as an
   anamorphic lens squeezes a photo. Version 0.1.1 had another drawing, the
   one on plateworks.org/apps/ (concept "Desqueeze A"): the true rings over
@@ -1682,27 +1682,30 @@ whose accent is red.
   center of the tile, at 1.448 grid units for each mark unit. That is the
   1.8 of the drawing, times the part of the grid that the tile fills.
 - The pinch. Each contour is made into points, 60 for each curve. Each
-  point then moves toward the vertical line through the center of its own
-  contour, and its height does not change:
+  point then moves toward the vertical line through one point, the center
+  of the core, (53.0, 57.0) in mark units. Its height does not change:
 
   `x' = cx + (x - cx) * (1 - 0.42 * exp(-((y - cy) / 16)^2))`
 
-  The centers, the outer contour first, in mark units: (49.99, 49.16),
-  (49.40, 52.99), (53.06, 55.57), (53.0, 57.0). So a contour has 0.58 of
-  its width at its own middle height, and its true width far above and
-  below. The contours are those of the master, and the pinch is the one
-  change.
+  So the figure has 0.58 of its width at the height of the core, and its
+  true width far above and below. The contours are those of the master,
+  and the pinch is the one change.
 - The three outer contours are lines of 4.5 mark units, drawn after the
   pinch, so a line has one width all the way around. The core is filled.
-- Because each contour has its own center, the lines meet in two places:
-  the outer and the second ring at the left of the waist (they go 0.5 mark
-  units into each other), and the second and the third ring at the right
-  (2.1 mark units). Dom chose the drawing with these.
+- One center for the four contours. The first drawing of this icon had a
+  center for each contour, and its lines went into each other in two
+  places, by 0.5 and by 2.1 mark units. With one center, the outer and the
+  second ring are 1.2 mark units apart at the nearest place. The second
+  and the third ring still meet at the right of the waist, by 0.1 mark
+  units: the master has 7.5 units between those two contours there, and
+  0.58 of that is less than one line.
 - Values: the ground is Halite, `#EAEEE9`. The rings and the core are the
   fill, `#157BA6`, 4.05:1 on the ground. The icon has no other color.
 - The ink is 66.5 grid units from the center at its farthest, and the tile
-  has 80.5 to its edge. At the sides the ink is 134 pixels from the edge of
-  the tile, of 1024, and 85 at the top and the bottom.
+  has 80.5 to its edge. The ink is 126 pixels from the left edge of the
+  tile, of 1024, 110 from the right edge, and 85 from the top and the
+  bottom. The pinch has its center right of the middle of the mark, so the
+  figure sits a little to the right.
 - Small sizes. At 128 points and more, each ring reads. At 32 points the
   figure is an hourglass of lines with a dot. At 16 points it is a pale
   blue blot with the shape of the waist.

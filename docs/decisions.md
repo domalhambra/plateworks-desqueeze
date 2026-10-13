@@ -149,7 +149,7 @@ win where they differ from an earlier section. Dom is the maintainer.
 
 | Decision | Why | Source |
 |---|---|---|
-| The icon is the four contours of the Plateworks mark as lines in the accent, each pinched at its middle height to 0.58 of its width. It has no grey copy and one color. | Dom chose it after he saw the first icon: the rings themselves must look squeezed. Each contour is pinched about its own center, so the lines meet in two places, and Dom chose the drawing with these. | Design 17.3, `scripts/make_app_icon.py` |
+| The icon is the four contours of the Plateworks mark as lines in the accent, pinched toward one point, the center of the core, to 0.58 of their width at that height. It has no grey copy and one color. | Dom chose it after he saw the first icon: the rings themselves must look squeezed. A first drawing pinched each contour about its own center, and its lines went into each other in two places. Dom then chose one center, "Waist at the core". The second and the third ring still meet by 0.1 mark units at the right of the waist. | Design 17.3, `scripts/make_app_icon.py` |
 | The vector of the icon holds each line as a filled band, not as a stroke. | Quick Look and a browser drew a hairline gap across a stroke of the pinched rings. The bands are the polygons that the PNG files come from, so the vector and the files cannot differ. | Design 17.3, `scripts/make_app_icon.py` |
 
 ## Rejected and deferred

@@ -14,8 +14,8 @@ A new drawing for the icon. Nothing else changed.
 ### Changed
 
 - The icon of the app: the rings of the Plateworks mark are now squeezed
-  themselves. Each ring is pinched at its middle height, to 0.58 of its
-  width, and keeps its true width above and below. The grey copy behind
+  themselves. They are pinched toward the center of the core, to 0.58 of
+  their width at that height, and keep their true width above and below. The grey copy behind
   the rings is gone. The icon has one color.
 - `App/AppIcon.svg` holds each line as a filled band. Two renderers drew a
   hairline gap across a stroke of the pinched rings.

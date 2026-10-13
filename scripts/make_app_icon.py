@@ -7,8 +7,8 @@
 
 The icon is the Plateworks mark, pinched at the waist (design 17.3). The four
 contours of the mark are drawn as lines, in the accent of the app. Each one
-is pressed in at its own middle height, as an anamorphic lens squeezes a
-photo, and it keeps its true width above and below.
+is pressed in toward one point, the center of the core, as an anamorphic
+lens squeezes a photo, and it keeps its true width far above and below.
 
 It writes, from one set of constants, so the files cannot differ:
 
@@ -74,17 +74,18 @@ INK_CENTER = (50.0, 49.2)
 # One mark unit is this many grid units: 1.8 on a tile that fills the grid,
 # so 1.8 times the part of the grid that the tile fills.
 MARK_SCALE = 1.8 * 824 / 1024
-# The pinch. Each point of a contour moves toward the vertical line through
-# the center of that contour:
+# The pinch. Each point of each contour moves toward the vertical line
+# through one point, the center of the core, in mark units:
 #
 #     x' = cx + (x - cx) * (1 - PINCH * exp(-((y - cy) / PINCH_HEIGHT) ** 2))
 #
-# y does not change. So a contour has 1 - PINCH of its width at its own
-# middle height, and its true width far above and below. CENTERS has the
-# center of the box of each contour, the outer one first, in mark units.
+# y does not change. So the figure has 1 - PINCH of its width at the height
+# of the core, and its true width far above and below. One center for the
+# four contours keeps them apart: with a center for each contour, the lines
+# met in two places.
 PINCH = 0.42
 PINCH_HEIGHT = 16.0
-CENTERS = [(49.99, 49.16), (49.40, 52.99), (53.06, 55.57), (53.0, 57.0)]
+PINCH_CENTER = (53.0, 57.0)
 # The line width in mark units. The three outer contours are lines, and the
 # core is filled. A line is drawn after the pinch, so it has one width all
 # the way around.
@@ -200,7 +201,7 @@ def pinch(polygon, center):
 
 def pinched():
     """The four contours after the pinch, as polygons in mark units."""
-    return [pinch(flatten(d), center) for d, center in zip(MARK, CENTERS)]
+    return [pinch(flatten(d), PINCH_CENTER) for d in MARK]
 
 
 def to_grid(polygon):
@@ -360,7 +361,7 @@ def svg():
         'role="img" aria-label="Plateworks Desqueeze">' % (number(GRID), number(GRID)),
         '  <!-- The icon of Plateworks Desqueeze. scripts/make_app_icon.py writes this',
         '       file: run it again, and never edit this file by hand. The four contours',
-        '       of the Plateworks mark as lines, each pinched at its middle height. -->',
+        '       of the Plateworks mark as lines, pinched toward the center of the core. -->',
         '  <rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="#%s"/>'
         % (number(TILE_INSET), number(TILE_INSET), number(GRID - 2 * TILE_INSET),
            number(GRID - 2 * TILE_INSET), number(TILE_RADIUS), GROUND),
