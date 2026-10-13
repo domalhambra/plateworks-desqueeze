@@ -19,7 +19,7 @@ command line tool named `desqueeze`, and an MCP server named `desqueeze-mcp`
 for Claude Code. The code is Swift: one package with all the rules,
 `DesqueezeCore`, and three thin front ends.
 
-Version 0.1.0. The window has a download: a signed, notarized disk image,
+Version 0.1.1. The window has a download: a signed, notarized disk image,
 with exiftool and dnglab inside the app. The section "Download" says what it
 holds. The command line tool and the MCP server are a build from source.
 
@@ -117,7 +117,8 @@ gets the correct shape, whatever camera made it.
 
 Get the disk image of the newest release from the Releases page of the repo
 on GitHub: <https://github.com/domalhambra/plateworks-desqueeze/releases>.
-The first release is version 0.1.0, of 2026-10-12.
+The first release is version 0.1.0, of 2026-10-12. Version 0.1.1, of the
+same day, gives the app its accent and its icon.
 
 `scripts/make_release.sh` makes the download. It is one disk image.
 
@@ -386,12 +387,13 @@ make a release, and to change a program inside the download.
 The deployment target is macOS 14. No other Mac, system or tool version was
 tested.
 
-The download: `scripts/make_release.sh` made version 0.1.0 on this Mac. All
-eight steps passed: the signature with the Developer ID, the notarization of
-the app and of the disk image, and the stapled tickets. `spctl` accepted the
-app, the disk image, and the app inside the disk image. The app from the
-disk image then converted copies of ARW files with the two programs inside
-it. Not tested: the first open of a copy that a browser downloaded, macOS 14
+The download: `scripts/make_release.sh` made versions 0.1.0 and 0.1.1 on
+this Mac. For each, all eight steps passed: the signature with the
+Developer ID, the notarization of the app and of the disk image, and the
+stapled tickets. `spctl` accepted the app, the disk image, and the app
+inside the disk image. For version 0.1.0, the app from the disk image then
+converted copies of ARW files with the two programs inside it. For version
+0.1.1, the app that the script makes with `--local` did that. Not tested: the first open of a copy that a browser downloaded, macOS 14
 to 26, and an Intel Mac, with the download or with a build from source.
 
 ## Where to go next

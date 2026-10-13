@@ -476,6 +476,7 @@ Desqueeze.app/Contents/Resources/licenses/            the license texts
 All eight steps ran for version 0.1.0, on macOS 27.2 (design 15.7). The
 first try stopped at step 4: `codesign` waited for the dialog of the
 keychain, and its time stamp was then too old. A second run is the fix.
+All eight steps ran again for version 0.1.1, with no stop.
 
 There are no environment variables for normal use. The tools read `PATH` to
 find exiftool and dnglab. `DESQUEEZE_TEST_BACKUP_FOLDER` is for tests only:

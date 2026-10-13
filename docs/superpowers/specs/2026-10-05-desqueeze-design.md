@@ -1363,7 +1363,9 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
 - Steps 6 to 8 need the Developer ID. The release of version 0.1.0 proved
   them, on macOS 27.2: all eight steps passed, and the app from the disk
   image ran its two programs in a window trial. `hdiutil` says there that a
-  later macOS wants `diskutil image` in its place.
+  later macOS wants `diskutil image` in its place. The release of version
+  0.1.1 passed all eight steps again. Its window trial used the app of
+  `--local`, from the same commit of the code.
 - Step 4 with the Developer ID asks for the key in the keychain the first
   time, with a dialog. When the answer comes late, the time stamp is too
   old and `codesign` fails. A second run is the fix.
