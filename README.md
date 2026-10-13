@@ -19,7 +19,7 @@ command line tool named `desqueeze`, and an MCP server named `desqueeze-mcp`
 for Claude Code. The code is Swift: one package with all the rules,
 `DesqueezeCore`, and three thin front ends.
 
-Version 0.1.1. The window has a download: a signed, notarized disk image,
+Version 0.1.2. The window has a download: a signed, notarized disk image,
 with exiftool and dnglab inside the app. The section "Download" says what it
 holds. The command line tool and the MCP server are a build from source.
 

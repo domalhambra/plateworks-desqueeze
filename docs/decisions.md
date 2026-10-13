@@ -141,9 +141,16 @@ win where they differ from an earlier section. Dom is the maintainer.
 | The window sets its tint itself, on the content view and before `onAppear`. The asset `AccentColor` alone is not enough. | macOS uses the `AccentColor` of an app only on a Mac whose accent is Multicolor: a build with the asset alone stayed red. With the tint in `DesqueezeApp.swift`, the window opened with the custom factor selected. Both were tried on macOS 27.2. | Design 17.1 and 17.2, `App/PlateworksDesqueeze/ContentView.swift` |
 | "Choose folder", "Remove" and "Cancel" take no tint. | The tint of a window colors the label of each bordered button. Only the main action has the accent, so it stands out. | Design 17.2, `App/PlateworksDesqueeze/ContentView.swift` |
 | The theme file of the site holds colors only, and each value is a value of the Chalcanthite family. | A font or an address in it would make the site load a file, and the privacy page says that the site loads none from another host. A test holds the file, and the check of the site reads it in each build. | Design 17.1, `Sources/DesqueezeCore/DesqueezeCore.docc/theme-settings.json`, `AccentAndIconTests` |
-| The icon of the app is the Plateworks mark as lines, in the accent, over a copy that is squeezed to 0.52 of its width. A script writes the vector and each file of the icon set. | Dom chose the drawing and the color. It says what the app does. One script with one set of constants keeps the ten files and the vector equal, and it compares the contours with the master mark. | Design 17.3, `scripts/make_app_icon.py` |
+| **Superseded on 2026-10-12 by the row for version 0.1.2 below.** The icon of the app is the Plateworks mark as lines, in the accent, over a copy that is squeezed to 0.52 of its width. A script writes the vector and each file of the icon set. | Dom chose the drawing and the color. It says what the app does. One script with one set of constants keeps the ten files and the vector equal, and it compares the contours with the master mark. | Design 17.3, `scripts/make_app_icon.py` |
 | The tile of the icon has the shape of a Mac icon since macOS 11, with nothing around it. It is not a full square. | The deployment target is macOS 14. macOS 14 and 15 draw an icon as it is given, so a full square would be a hard square in the Dock. macOS 27.2 draws both forms the same. | Design 17.3, `scripts/make_app_icon.py` |
-| The grey of the squeezed copy, `#AEB6AD`, is derived for the icon. It is no token of the color standard. | It has the hue of the ground, and no token has that hue at that lightness. Dom chose the look. | Design 17.3 |
+| **Superseded on 2026-10-12: the icon of version 0.1.2 has no grey.** The grey of the squeezed copy, `#AEB6AD`, is derived for the icon. It is no token of the color standard. | It has the hue of the ground, and no token has that hue at that lightness. Dom chose the look. | Design 17.3 |
+
+### Version 0.1.2: the icon is drawn again
+
+| Decision | Why | Source |
+|---|---|---|
+| The icon is the four contours of the Plateworks mark as lines in the accent, each pinched at its middle height to 0.58 of its width. It has no grey copy and one color. | Dom chose it after he saw the first icon: the rings themselves must look squeezed. Each contour is pinched about its own center, so the lines meet in two places, and Dom chose the drawing with these. | Design 17.3, `scripts/make_app_icon.py` |
+| The vector of the icon holds each line as a filled band, not as a stroke. | Quick Look and a browser drew a hairline gap across a stroke of the pinched rings. The bands are the polygons that the PNG files come from, so the vector and the files cannot differ. | Design 17.3, `scripts/make_app_icon.py` |
 
 ## Rejected and deferred
 

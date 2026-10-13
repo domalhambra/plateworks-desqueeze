@@ -7,6 +7,19 @@ The version number is `DesqueezeVersion.current` in
 `Sources/DesqueezeCore/Version.swift`. A test fails when the newest entry
 below is not that number. A heading "Unreleased" is not a version.
 
+## [0.1.2] - 2026-10-12
+
+A new drawing for the icon. Nothing else changed.
+
+### Changed
+
+- The icon of the app: the rings of the Plateworks mark are now squeezed
+  themselves. Each ring is pinched at its middle height, to 0.58 of its
+  width, and keeps its true width above and below. The grey copy behind
+  the rings is gone. The icon has one color.
+- `App/AppIcon.svg` holds each line as a filled band. Two renderers drew a
+  hairline gap across a stroke of the pinched rings.
+
 ## [0.1.1] - 2026-10-12
 
 The app has its own accent and its own icon. No rule of a run changed.

@@ -132,6 +132,6 @@ final class VersionTests: XCTestCase {
         let project = try String(contentsOf: root.appendingPathComponent("project.yml"), encoding: .utf8)
         XCTAssertTrue(project.contains("MARKETING_VERSION: \"\(DesqueezeVersion.current)\""),
                       "project.yml and DesqueezeVersion.current must hold the same number")
-        XCTAssertEqual(DesqueezeVersion.current, "0.1.1")
+        XCTAssertEqual(DesqueezeVersion.current, "0.1.2")
     }
 }

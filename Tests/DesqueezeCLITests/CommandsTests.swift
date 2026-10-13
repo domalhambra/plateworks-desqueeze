@@ -13,7 +13,7 @@ final class CommandsTests: XCTestCase {
 
     func testVersionPrintsTheNameAndTheNumber() {
         XCTAssertEqual(h.run("--version"), 0)
-        XCTAssertEqual(h.out.lines, ["desqueeze 0.1.1"])
+        XCTAssertEqual(h.out.lines, ["desqueeze 0.1.2"])
         XCTAssertEqual(h.out.lines, ["desqueeze \(DesqueezeVersion.current)"], "the number is in one place")
         XCTAssertEqual(h.err.lines, [])
     }

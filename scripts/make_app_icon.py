@@ -5,11 +5,10 @@
     python3 scripts/make_app_icon.py --master PATH
     python3 scripts/make_app_icon.py --check
 
-The icon is the Plateworks mark, two times (design 17.3). The four contours
-of the mark are drawn as lines, in the accent of the app. Behind them is a
-copy of the same contours, squeezed to 0.52 of their width, in a grey of the
-ground. The grey copy is the squeezed photo. The colored rings are the photo
-at its correct shape.
+The icon is the Plateworks mark, pinched at the waist (design 17.3). The four
+contours of the mark are drawn as lines, in the accent of the app. Each one
+is pressed in at its own middle height, as an anamorphic lens squeezes a
+photo, and it keeps its true width above and below.
 
 It writes, from one set of constants, so the files cannot differ:
 
@@ -53,7 +52,6 @@ SVG_OUT = os.path.join("App", "AppIcon.svg")
 # Colors (design 17.3).
 GROUND = "EAEEE9"     # Halite, the light ground of the color standard
 RINGS = "157BA6"      # the Chalcanthite fill, the accent of the app
-SQUEEZED = "AEB6AD"   # the hue of the ground, darker. Derived, not a token.
 
 # ---------------------------------------------------------------------------
 # Geometry. The master mark has a box of 100 units. The icon has a grid of
@@ -76,14 +74,21 @@ INK_CENTER = (50.0, 49.2)
 # One mark unit is this many grid units: 1.8 on a tile that fills the grid,
 # so 1.8 times the part of the grid that the tile fills.
 MARK_SCALE = 1.8 * 824 / 1024
-# The squeezed copy: the same contours at this part of their width, about
-# the vertical line through the ink center.
-SQUEEZE = 0.52
-# Line widths in mark units. The three outer contours are lines, and the
-# core is filled. The lines of the squeezed copy are squeezed with it, so
-# they are thinner at the sides than at the top.
+# The pinch. Each point of a contour moves toward the vertical line through
+# the center of that contour:
+#
+#     x' = cx + (x - cx) * (1 - PINCH * exp(-((y - cy) / PINCH_HEIGHT) ** 2))
+#
+# y does not change. So a contour has 1 - PINCH of its width at its own
+# middle height, and its true width far above and below. CENTERS has the
+# center of the box of each contour, the outer one first, in mark units.
+PINCH = 0.42
+PINCH_HEIGHT = 16.0
+CENTERS = [(49.99, 49.16), (49.40, 52.99), (53.06, 55.57), (53.0, 57.0)]
+# The line width in mark units. The three outer contours are lines, and the
+# core is filled. A line is drawn after the pinch, so it has one width all
+# the way around.
 LINE = 4.5
-LINE_SQUEEZED = 3.4
 
 # The tile, in grid units: how far its edge is from the edge of the grid,
 # and the radius of its corners. It is the shape of a Mac icon since macOS
@@ -146,7 +151,7 @@ def parse(d):
     return segments
 
 
-def flatten(d, steps=96):
+def flatten(d, steps=60):
     """One closed contour as a polygon. The last point is not the first."""
     points, current = [], None
     for op, ps in parse(d):
@@ -187,9 +192,15 @@ def area(polygon):
     return abs(sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in zip(polygon, polygon[1:] + polygon[:1]))) / 2
 
 
-def squeeze(polygon):
-    cx = INK_CENTER[0]
-    return [(cx + (x - cx) * SQUEEZE, y) for x, y in polygon]
+def pinch(polygon, center):
+    cx, cy = center
+    return [(cx + (x - cx) * (1 - PINCH * math.exp(-((y - cy) / PINCH_HEIGHT) ** 2)), y)
+            for x, y in polygon]
+
+
+def pinched():
+    """The four contours after the pinch, as polygons in mark units."""
+    return [pinch(flatten(d), center) for d, center in zip(MARK, CENTERS)]
 
 
 def to_grid(polygon):
@@ -202,15 +213,14 @@ def layers():
     """What is painted over the ground, in order: (color, add, subtract).
     Each is a list of polygons in grid units. A line is the area between
     its two edges."""
+    contours = pinched()
     out = []
-    for color, width, shape in ((SQUEEZED, LINE_SQUEEZED, squeeze), (RINGS, LINE, lambda p: p)):
-        for d in MARK[:3]:
-            contour = flatten(d)
-            # The contours do not all turn the same way, so the sign of the
-            # distance does not say which edge is the outer one. The area does.
-            edges = sorted((offset(contour, width / 2), offset(contour, -width / 2)), key=area)
-            out.append((rgb(color), [to_grid(shape(edges[1]))], [to_grid(shape(edges[0]))]))
-        out.append((rgb(color), [to_grid(shape(flatten(MARK[3])))], []))
+    for contour in contours[:3]:
+        # The contours do not all turn the same way, so the sign of the
+        # distance does not say which edge is the outer one. The area does.
+        edges = sorted((offset(contour, LINE / 2), offset(contour, -LINE / 2)), key=area)
+        out.append((rgb(RINGS), [to_grid(edges[1])], [to_grid(edges[0])]))
+    out.append((rgb(RINGS), [to_grid(contours[3])], []))
     return out
 
 
@@ -338,43 +348,26 @@ def number(v):
 
 
 def svg():
-    """The icon as a vector: the contours of the master under transforms."""
-    c = GRID / 2
-    cx, cy = number(INK_CENTER[0]), number(INK_CENTER[1])
+    """The icon as a vector. The pinch is no transform of SVG, so the file
+    holds points, in grid units. A line is a filled band between its two
+    edges, the same polygons that the PNG files are drawn from. A stroke
+    would be shorter, but two renderers drew a hairline gap across it."""
+    def path(polygon):
+        return "M" + "L".join("%s %s" % (number(x), number(y)) for x, y in polygon) + "Z"
 
-    def rings(color, width):
-        out = []
-        for d in MARK[:3]:
-            out.append('      <path d="%s" fill="none" stroke="#%s" stroke-width="%s" stroke-linejoin="round"/>'
-                       % (d, color, number(width)))
-        out.append('      <path d="%s" fill="#%s"/>' % (MARK[3], color))
-        return out
-
-    if TILE_RADIUS:
-        ground = ('  <rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="#%s"/>'
-                  % (number(TILE_INSET), number(TILE_INSET), number(GRID - 2 * TILE_INSET),
-                     number(GRID - 2 * TILE_INSET), number(TILE_RADIUS), GROUND))
-    else:
-        ground = ('  <rect x="%s" y="%s" width="%s" height="%s" fill="#%s"/>'
-                  % (number(TILE_INSET), number(TILE_INSET), number(GRID - 2 * TILE_INSET),
-                     number(GRID - 2 * TILE_INSET), GROUND))
     lines = [
         '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 %s %s" '
         'role="img" aria-label="Plateworks Desqueeze">' % (number(GRID), number(GRID)),
         '  <!-- The icon of Plateworks Desqueeze. scripts/make_app_icon.py writes this',
         '       file: run it again, and never edit this file by hand. The four contours',
-        '       of the Plateworks mark as lines, over a copy of them that is squeezed to',
-        '       %s of its width. -->' % number(SQUEEZE),
-        ground,
-        '  <g transform="translate(%s %s) scale(%s) translate(-%s -%s)">' % (number(c), number(c), "%.6f" % MARK_SCALE, cx, cy),
-        '    <g transform="translate(%s 0) scale(%s 1) translate(-%s 0)">' % (cx, number(SQUEEZE), cx),
+        '       of the Plateworks mark as lines, each pinched at its middle height. -->',
+        '  <rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="#%s"/>'
+        % (number(TILE_INSET), number(TILE_INSET), number(GRID - 2 * TILE_INSET),
+           number(GRID - 2 * TILE_INSET), number(TILE_RADIUS), GROUND),
     ]
-    lines += rings(SQUEEZED, LINE_SQUEEZED)
-    lines.append('    </g>')
-    lines.append('    <g>')
-    lines += rings(RINGS, LINE)
-    lines.append('    </g>')
-    lines.append('  </g>')
+    for color, add, subtract in layers():
+        d = " ".join(path(polygon) for polygon in add + subtract)
+        lines.append('  <path fill="#%02X%02X%02X" fill-rule="evenodd" d="%s"/>' % (color + (d,)))
     lines.append('</svg>')
     return "\n".join(lines) + "\n"
 
