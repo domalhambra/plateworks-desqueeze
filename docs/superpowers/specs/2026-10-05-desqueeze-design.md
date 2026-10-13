@@ -1365,7 +1365,9 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
   image ran its two programs in a window trial. `hdiutil` says there that a
   later macOS wants `diskutil image` in its place. The release of version
   0.1.1 passed all eight steps again. Its window trial used the app of
-  `--local`, from the same commit of the code.
+  `--local`, from the same commit of the code. The release of version
+  0.1.2 passed all eight steps too. It changes the icon only, and it had
+  no window trial.
 - The first open of a copy that a browser downloaded: on 2026-10-12 the
   maintainer downloaded the disk image of version 0.1.1 with a browser,
   opened it, and opened the app. Before that day, nobody had tried this

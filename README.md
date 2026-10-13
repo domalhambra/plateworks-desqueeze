@@ -118,7 +118,8 @@ gets the correct shape, whatever camera made it.
 Get the disk image of the newest release from the Releases page of the repo
 on GitHub: <https://github.com/domalhambra/plateworks-desqueeze/releases>.
 The first release is version 0.1.0, of 2026-10-12. Version 0.1.1, of the
-same day, gives the app its accent and its icon.
+same day, gives the app its accent and its icon, and version 0.1.2 draws
+the icon again.
 
 `scripts/make_release.sh` makes the download. It is one disk image.
 
@@ -387,16 +388,19 @@ make a release, and to change a program inside the download.
 The deployment target is macOS 14. No other Mac, system or tool version was
 tested.
 
-The download: `scripts/make_release.sh` made versions 0.1.0 and 0.1.1 on
-this Mac. For each, all eight steps passed: the signature with the
+The download: `scripts/make_release.sh` made versions 0.1.0, 0.1.1 and
+0.1.2 on this Mac. For each, all eight steps passed: the signature with the
 Developer ID, the notarization of the app and of the disk image, and the
 stapled tickets. `spctl` accepted the app, the disk image, and the app
 inside the disk image. For version 0.1.0, the app from the disk image then
 converted copies of ARW files with the two programs inside it. For version
-0.1.1, the app that the script makes with `--local` did that. On
+0.1.1, the app that the script makes with `--local` did that. Version
+0.1.2 changes the icon only, and had no window trial. On
 2026-10-12 the maintainer downloaded the disk image of version 0.1.1 with a
 browser, opened it, and opened the app: the first open of a downloaded copy
-works. Not tested: macOS 14 to 26, and an Intel Mac, with the download or
+works. On the same day the maintainer listened to the window with
+VoiceOver through one run, and found no fault. Not tested: macOS 14 to 26,
+and an Intel Mac, with the download or
 with a build from source.
 
 ## Where to go next
