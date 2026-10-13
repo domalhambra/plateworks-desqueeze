@@ -1366,6 +1366,10 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
   later macOS wants `diskutil image` in its place. The release of version
   0.1.1 passed all eight steps again. Its window trial used the app of
   `--local`, from the same commit of the code.
+- The first open of a copy that a browser downloaded: on 2026-10-12 the
+  maintainer downloaded the disk image of version 0.1.1 with a browser,
+  opened it, and opened the app. Before that day, nobody had tried this
+  step.
 - Step 4 with the Developer ID asks for the key in the keychain the first
   time, with a dialog. When the answer comes late, the time stamp is too
   old and `codesign` fails. A second run is the fix.
@@ -1633,12 +1637,13 @@ whose accent is red.
   The site keeps DocC's grounds, white and black. The ink is 6.22:1 on
   white, and 9.13:1 on black. The label is 4.76:1 on the light fill, and
   6.17:1 on the dark fill.
-- The icon is the drawing on plateworks.org/apps/ (concept "Desqueeze A"),
-  in the color that Dom chose: the four contours of the Plateworks mark,
-  verbatim, as lines, over a copy of them squeezed to 0.52 of their width.
-  The true rings are Chalcanthite. The squeezed copy is a grey of the
-  ground. It says what the app does: the squeezed photo, and the photo at
-  its correct shape.
+- The icon is the four contours of the Plateworks mark as lines in
+  Chalcanthite, pinched toward the center of the core. Dom chose it on
+  2026-10-12, for version 0.1.2: the rings themselves are squeezed, as an
+  anamorphic lens squeezes a photo. Version 0.1.1 had another drawing, the
+  one on plateworks.org/apps/ (concept "Desqueeze A"): the true rings over
+  a grey copy of them, squeezed to 0.52 of their width. Dom wanted one
+  figure and one color.
 
 ### 17.2 The window
 
@@ -1679,17 +1684,42 @@ whose accent is red.
 - Geometry on a grid of 200 units. The tile is 160.9 units wide. The mark
   is scaled about the center of its ink (50, 49.2 in mark units) onto the
   center of the tile, at 1.448 grid units for each mark unit. That is the
-  1.8 of the drawing, times the part of the grid that the tile fills. The
-  lines are 4.5 mark units for the true rings and 3.4 for the squeezed
-  copy. The lines of the copy are squeezed with it. Each core is filled.
-- Values: the ground is Halite, `#EAEEE9`. The true rings are the fill,
-  `#157BA6`, 4.05:1 on the ground. The squeezed copy is `#AEB6AD`: the hue
-  of the ground, darker. It is derived for this icon, and it is no token of
-  the color standard.
-- The ink is 66.7 grid units from the center at its farthest, and the tile
-  has 80.5 to its edge.
-- The script's file of 1024 pixels and a Quick Look render of the vector
-  differ by a mean of 0.06 of a level for each channel.
+  1.8 of the drawing, times the part of the grid that the tile fills.
+- The pinch. Each contour is made into points, 60 for each curve. Each
+  point then moves toward the vertical line through one point, the center
+  of the core, (53.0, 57.0) in mark units. Its height does not change:
+
+  `x' = cx + (x - cx) * (1 - 0.42 * exp(-((y - cy) / 16)^2))`
+
+  So the figure has 0.58 of its width at the height of the core, and its
+  true width far above and below. The contours are those of the master,
+  and the pinch is the one change.
+- The three outer contours are lines of 4.0 mark units, drawn after the
+  pinch, so a line has one width all the way around. The core is filled.
+- One center for the four contours. The first drawing of this icon had a
+  center for each contour, and its lines went into each other in two
+  places, by 0.5 and by 2.1 mark units. With one center, the outer and the
+  second ring are 1.7 mark units apart at the nearest place.
+- The line is 4.0 mark units, not the 4.5 of the first icon. At 4.5 the
+  second and the third ring still met at the right of the waist, by 0.1
+  mark units: the master has 7.5 units between those two contours there,
+  and 0.58 of that is less than one line of 4.5. At 4.0 they are 0.4 units
+  apart, 2.8 pixels of 1024. No two rings meet. Dom chose 4.0.
+- Values: the ground is Halite, `#EAEEE9`. The rings and the core are the
+  fill, `#157BA6`, 4.05:1 on the ground. The icon has no other color.
+- The ink is 66.3 grid units from the center at its farthest, and the tile
+  has 80.5 to its edge. The ink is 127 pixels from the left edge of the
+  tile, of 1024, 112 from the right edge, and 87 from the top and the
+  bottom. The pinch has its center right of the middle of the mark, so the
+  figure sits a little to the right.
+- Small sizes. At 128 points and more, each ring reads. At 32 points the
+  figure is an hourglass of lines with a dot. At 16 points it is a pale
+  blue blot with the shape of the waist.
+- The vector holds each line as a filled band between its two edges, the
+  same polygons that the PNG files come from. As a stroke, Quick Look and a
+  browser drew a hairline gap across the line. The script's file of 1024
+  pixels and a Quick Look render of the vector differ by a mean of 0.008
+  of a level for each channel.
 - The Plateworks standard for marks gets the icon's geometry, values and
   fit, in the maintainer's workspace, not in this repo.
 - The browser tab of the site keeps DocC's favicon. The site has no mark.
@@ -1732,7 +1762,10 @@ By hand:
 ### 17.5 Known limits
 
 - A person who wants their own accent in the app cannot have it.
-- The icon has one appearance. macOS 26 and later can tint or darken it.
+- The icon has one appearance, the light one. macOS 26 and later can tint
+  or darken it. Seen on macOS 27.2 with the Mac in the dark appearance:
+  macOS drew the icon of version 0.1.2 with a black ground and brighter
+  blue rings, by itself. The files of the repo hold the light icon only.
 - The icon has no shadow of its own, which the icons of macOS 11 to 15
   have.
 - macOS 14 to 26 were not tried, for the tint, the buttons and the icon.

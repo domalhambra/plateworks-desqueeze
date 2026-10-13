@@ -19,7 +19,7 @@ command line tool named `desqueeze`, and an MCP server named `desqueeze-mcp`
 for Claude Code. The code is Swift: one package with all the rules,
 `DesqueezeCore`, and three thin front ends.
 
-Version 0.1.1. The window has a download: a signed, notarized disk image,
+Version 0.1.2. The window has a download: a signed, notarized disk image,
 with exiftool and dnglab inside the app. The section "Download" says what it
 holds. The command line tool and the MCP server are a build from source.
 
@@ -393,8 +393,11 @@ Developer ID, the notarization of the app and of the disk image, and the
 stapled tickets. `spctl` accepted the app, the disk image, and the app
 inside the disk image. For version 0.1.0, the app from the disk image then
 converted copies of ARW files with the two programs inside it. For version
-0.1.1, the app that the script makes with `--local` did that. Not tested: the first open of a copy that a browser downloaded, macOS 14
-to 26, and an Intel Mac, with the download or with a build from source.
+0.1.1, the app that the script makes with `--local` did that. On
+2026-10-12 the maintainer downloaded the disk image of version 0.1.1 with a
+browser, opened it, and opened the app: the first open of a downloaded copy
+works. Not tested: macOS 14 to 26, and an Intel Mac, with the download or
+with a build from source.
 
 ## Where to go next
 

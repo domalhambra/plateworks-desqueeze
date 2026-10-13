@@ -550,7 +550,9 @@ does. With no such call it gets a label in the accent.
 The icon:
 
 1. Change a constant in `scripts/make_app_icon.py`. Never edit a PNG file
-   or `App/AppIcon.svg` by hand.
+   or `App/AppIcon.svg` by hand. A new icon is a new version: cut one (the
+   section "Cut a version"). The window does not change, so the screenshots
+   stay.
 2. Run the script. Give it the file of the master mark with `--master`,
    so that it compares the four contours:
 

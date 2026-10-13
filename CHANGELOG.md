@@ -7,6 +7,23 @@ The version number is `DesqueezeVersion.current` in
 `Sources/DesqueezeCore/Version.swift`. A test fails when the newest entry
 below is not that number. A heading "Unreleased" is not a version.
 
+## [0.1.2] - 2026-10-12
+
+A new drawing for the icon. Nothing else changed.
+
+### Changed
+
+- The icon of the app: the rings of the Plateworks mark are now squeezed
+  themselves. They are pinched toward the center of the core, to 0.58 of
+  their width at that height, and keep their true width above and below.
+  The lines are a little thinner, so that no two rings meet. The grey copy behind
+  the rings is gone. The icon has one color.
+- `App/AppIcon.svg` holds each line as a filled band. Two renderers drew a
+  hairline gap across a stroke of the pinched rings.
+- The documents no longer list the first open of a downloaded copy as not
+  tested. The maintainer downloaded the disk image of version 0.1.1 with a
+  browser on 2026-10-12, opened it, and opened the app.
+
 ## [0.1.1] - 2026-10-12
 
 The app has its own accent and its own icon. No rule of a run changed.
@@ -184,9 +201,10 @@ source.
 - The MCP server has no argument that moves an original, but an agent that
   has a shell can start the command line tool with the flag.
 - An app that is built from source is not signed with a Developer ID and
-  not notarized. The release script does both for the download. The first
-  open of a copy that a browser downloaded was not tested, and no macOS
-  before 27.2 was.
+  not notarized. The release script does both for the download. No macOS
+  before 27.2 was tested. The first open of a copy that a browser
+  downloaded was not tested for this version: it was tested with version
+  0.1.1.
 - The download is for Apple silicon. On an Intel Mac the app does not
   start. A build from source on an Intel Mac was not tested either.
 - The exiftool inside the app needs the Perl of macOS. Apple has said that
