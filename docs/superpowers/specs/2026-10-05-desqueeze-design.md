@@ -1366,6 +1366,10 @@ Developer ID. It uploads nothing. Each step stops the script when it fails.
   later macOS wants `diskutil image` in its place. The release of version
   0.1.1 passed all eight steps again. Its window trial used the app of
   `--local`, from the same commit of the code.
+- The first open of a copy that a browser downloaded: on 2026-10-12 the
+  maintainer downloaded the disk image of version 0.1.1 with a browser,
+  opened it, and opened the app. Before that day, nobody had tried this
+  step.
 - Step 4 with the Developer ID asks for the key in the keychain the first
   time, with a dialog. When the answer comes late, the time stamp is too
   old and `codesign` fails. A second run is the fix.
@@ -1690,20 +1694,22 @@ whose accent is red.
   So the figure has 0.58 of its width at the height of the core, and its
   true width far above and below. The contours are those of the master,
   and the pinch is the one change.
-- The three outer contours are lines of 4.5 mark units, drawn after the
+- The three outer contours are lines of 4.0 mark units, drawn after the
   pinch, so a line has one width all the way around. The core is filled.
 - One center for the four contours. The first drawing of this icon had a
   center for each contour, and its lines went into each other in two
   places, by 0.5 and by 2.1 mark units. With one center, the outer and the
-  second ring are 1.2 mark units apart at the nearest place. The second
-  and the third ring still meet at the right of the waist, by 0.1 mark
-  units: the master has 7.5 units between those two contours there, and
-  0.58 of that is less than one line.
+  second ring are 1.7 mark units apart at the nearest place.
+- The line is 4.0 mark units, not the 4.5 of the first icon. At 4.5 the
+  second and the third ring still met at the right of the waist, by 0.1
+  mark units: the master has 7.5 units between those two contours there,
+  and 0.58 of that is less than one line of 4.5. At 4.0 they are 0.4 units
+  apart, 2.8 pixels of 1024. No two rings meet. Dom chose 4.0.
 - Values: the ground is Halite, `#EAEEE9`. The rings and the core are the
   fill, `#157BA6`, 4.05:1 on the ground. The icon has no other color.
-- The ink is 66.5 grid units from the center at its farthest, and the tile
-  has 80.5 to its edge. The ink is 126 pixels from the left edge of the
-  tile, of 1024, 110 from the right edge, and 85 from the top and the
+- The ink is 66.3 grid units from the center at its farthest, and the tile
+  has 80.5 to its edge. The ink is 127 pixels from the left edge of the
+  tile, of 1024, 112 from the right edge, and 87 from the top and the
   bottom. The pinch has its center right of the middle of the mark, so the
   figure sits a little to the right.
 - Small sizes. At 128 points and more, each ring reads. At 32 points the

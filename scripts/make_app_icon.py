@@ -88,8 +88,9 @@ PINCH_HEIGHT = 16.0
 PINCH_CENTER = (53.0, 57.0)
 # The line width in mark units. The three outer contours are lines, and the
 # core is filled. A line is drawn after the pinch, so it has one width all
-# the way around.
-LINE = 4.5
+# the way around. At 4.5 units the second and the third contour met at the
+# right of the waist. At 4.0 they are 0.38 units apart.
+LINE = 4.0
 
 # The tile, in grid units: how far its edge is from the edge of the grid,
 # and the radius of its corners. It is the shape of a Mac icon since macOS

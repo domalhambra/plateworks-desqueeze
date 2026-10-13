@@ -122,7 +122,7 @@ win where they differ from an earlier section. Dom is the maintainer.
 
 | Decision | Why | Source |
 |---|---|---|
-| Version 0.1.0 is the first release. Its page has the disk image and the source archive of dnglab 0.8.0. | All eight steps of the release script passed, and the app from the disk image ran its two programs in a window trial. The first open of a copy that a browser downloaded, and macOS 14 to 26, were not tested. | `CHANGELOG.md`, design 15.7 |
+| Version 0.1.0 is the first release. Its page has the disk image and the source archive of dnglab 0.8.0. | All eight steps of the release script passed, and the app from the disk image ran its two programs in a window trial. The first open of a copy that a browser downloaded, and macOS 14 to 26, were not tested. **Since 2026-10-12 the first open is tested: the maintainer downloaded the disk image of version 0.1.1 with a browser, opened it, and opened the app.** | `CHANGELOG.md`, design 15.7 |
 | The privacy page is an article of the documentation site, `Privacy.md`. | The site is the one public page of the property. DocC has no footer and no free page, and an article is in the search and the navigation. | Design 16.1, `Sources/DesqueezeCore/DesqueezeCore.docc/Privacy.md` |
 | The first page of the site and `README.md` link to the privacy page. | A footer link is not possible. These are the two first pages that a person reads. | Design 16.1 |
 | The site build writes a page at the address `/privacy/` that sends a person to the article. | Each Plateworks property has its privacy page at that address. | Design 16.1, `scripts/build_docs.sh` |
@@ -149,7 +149,7 @@ win where they differ from an earlier section. Dom is the maintainer.
 
 | Decision | Why | Source |
 |---|---|---|
-| The icon is the four contours of the Plateworks mark as lines in the accent, pinched toward one point, the center of the core, to 0.58 of their width at that height. It has no grey copy and one color. | Dom chose it after he saw the first icon: the rings themselves must look squeezed. A first drawing pinched each contour about its own center, and its lines went into each other in two places. Dom then chose one center, "Waist at the core". The second and the third ring still meet by 0.1 mark units at the right of the waist. | Design 17.3, `scripts/make_app_icon.py` |
+| The icon is the four contours of the Plateworks mark as lines in the accent, pinched toward one point, the center of the core, to 0.58 of their width at that height. It has no grey copy and one color. | Dom chose it after he saw the first icon: the rings themselves must look squeezed. A first drawing pinched each contour about its own center, and its lines went into each other in two places. Dom then chose one center, "Waist at the core". At a line of 4.5 mark units the second and the third ring still met at the right of the waist, so the line is 4.0, on Dom's choice, and no two rings meet. | Design 17.3, `scripts/make_app_icon.py` |
 | The vector of the icon holds each line as a filled band, not as a stroke. | Quick Look and a browser drew a hairline gap across a stroke of the pinched rings. The bands are the polygons that the PNG files come from, so the vector and the files cannot differ. | Design 17.3, `scripts/make_app_icon.py` |
 
 ## Rejected and deferred
