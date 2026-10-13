@@ -485,9 +485,14 @@ Take all of them again when the window changes, so that they stay one set.
    Prove that on one file first.
 
    ```bash
-   hdiutil create -size 700m -fs APFS -volname Card card.dmg
+   hdiutil create -size 2g -fs APFS -volname Card card.dmg
    hdiutil attach -nobrowse card.dmg
    ```
+
+   Each run puts the backups of its DNG files into the Trash of the
+   image, about 200 MB for the 12 photos with the box for the originals
+   on. An image of 700 MB was full in the fourth run, and that run failed
+   with "No space left on device". No original was lost.
 
 2. Make a folder named "Shoot 1" on it. Put 8 DNG files and 4 ARW files
    in it, under plain names such as `DSC04093.dng`. Copies of one photo are
@@ -513,6 +518,51 @@ Take all of them again when the window changes, so that they stay one set.
    text alternative in the article. `README.md` shows `window-result` too.
 8. Run `scripts/build_docs.sh`, and look at "Using the window" on the site.
 9. Detach the disk image, and delete it.
+
+## Change the accent or the icon
+
+Read design 17 first. The accent is one value, `#157BA6`, in four places.
+The values come from the Plateworks color standard, which is kept outside
+this repo. Never change one by hand: change design 17.1 first, from the
+standard.
+
+The accent:
+
+1. Change the value in `AccentAndIconTests`, and see the tests fail. For
+   the site, the list is `family` in that file.
+2. Change the two color assets in
+   `App/PlateworksDesqueeze/Assets.xcassets`: `Chalcanthite`, which the
+   views name, and `AccentColor`, which macOS reads. They hold the same
+   value, and no second value for the dark appearance.
+3. Change `Sources/DesqueezeCore/DesqueezeCore.docc/theme-settings.json`.
+   It holds colors only. A font or an address in it fails the test, and an
+   address with a host fails the check of the site.
+4. Change `RINGS` in `scripts/make_app_icon.py`, and run the script.
+5. Leave the tint where it is: on the content view in `ContentView.swift`,
+   before `onAppear`. In `DesqueezeApp.swift` it makes the window open with
+   the custom factor selected (design 17.2).
+6. Take the screenshots again (the section above), and look at the window
+   on a Mac whose accent is not Multicolor.
+
+A new button that is not the main action takes `.plain()`, as "Remove"
+does. With no such call it gets a label in the accent.
+
+The icon:
+
+1. Change a constant in `scripts/make_app_icon.py`. Never edit a PNG file
+   or `App/AppIcon.svg` by hand.
+2. Run the script. Give it the file of the master mark with `--master`,
+   so that it compares the four contours:
+
+   ```bash
+   python3 scripts/make_app_icon.py
+   ```
+
+3. Run it with `--check`. It writes nothing, and fails for a file that
+   differs from what the script writes.
+4. Run `xcodegen generate`, build the app, and look at the icon in the
+   Dock and in Finder. Finder keeps an old icon for a path that it knows:
+   look at a copy of the app in a new folder.
 
 ## Add or change a document
 

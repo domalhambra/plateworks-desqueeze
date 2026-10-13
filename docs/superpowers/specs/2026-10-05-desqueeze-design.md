@@ -5,11 +5,11 @@ each one's fix is in the body. Revised 2026-10-09 after the code reviews of
 the job and the window, and extended with section 12 (command line and MCP)
 and section 13 (dnglab first). Extended 2026-10-10 with section 14 (the
 originals to the Trash, on request) and section 15 (the download). Extended
-2026-10-12 with section 16 (the privacy page). Status: approved by Dom, and
-built.
+2026-10-12 with section 16 (the privacy page) and section 17 (the accent
+and the icon). Status: approved by Dom, and built.
 
 **How to read this document.** It grew in one week, and the later sections
-changed earlier decisions. Sections 12 to 16 are the newest. Where they
+changed earlier decisions. Sections 12 to 17 are the newest. Where they
 differ from any earlier section, they win. The earlier text was corrected
 where it would mislead, and it still tells the story in the order it
 happened: Adobe DNG Converter was the only converter until section 13.
@@ -108,7 +108,7 @@ until Dom asks for it.
 | A bundled dnglab | dnglab converts since 2026-10-09 (section 13). Version 1 finds the one Homebrew installed. A shipped app must carry its own. |
 | A match table for cameras other than the A7S III | Section 13 has one measured row. Each other camera needs its own. |
 | Code signing and notarization | Needed only for other people's Macs. |
-| Brand marks, accent color, app icon art | The Plateworks brand standards, kept outside this repo, govern them. Version 1 uses system colors and the system font. |
+| Brand marks, accent color, app icon art | The Plateworks brand standards, kept outside this repo, govern them. Version 1 uses system colors and the system font. Since version 0.1.1 the app has its accent and its icon (section 17). |
 | A register row in the Plateworks principles | A register belongs to a published property. |
 | Privacy page | Same reason. |
 | Subfolder scan | Shoot folders hold `Exports` and `CaptureOne` subfolders that must stay untouched. |
@@ -272,8 +272,10 @@ When a run left ARW files unconverted because no converter is installed, the
 result says so, with the count (13.5).
 
 The result line and each error message carry a symbol, and the counts stay in
-the primary text colour. Colour is never the only signal: the Mac's accent
-colour can be the same red as an error. A result with a failed or blocked file
+the primary text colour. Colour is never the only signal. When this was written,
+the app took the accent of each Mac, which can be the same red as an error.
+Since version 0.1.1 the accent is one blue on each Mac (section 17), and the
+rule holds: a person who does not see a colour still gets the meaning. A result with a failed or blocked file
 gets the "needs attention" symbol.
 
 Under the counts, when the run set the tag on at least one photo, one line:
@@ -1508,6 +1510,9 @@ person's Mac, and the site has DocC's own colors. This repo holds no color
 value. A later release can put the accent into the app and the site, and
 that release takes the values from the color standard, never by hand.
 
+Version 0.1.1 is that release. Section 17 has it, and since then this repo
+holds the color values that section 17.1 lists.
+
 ### 16.7 Known limits
 
 - The address `/privacy/` holds a page that sends a person on. It is not
@@ -1578,3 +1583,156 @@ Known limits. The script knows the form that `docc` writes today: one `img`
 in each `picture`. Another form stops the build with a sentence. A web view
 that only blocks scripts hides the `noscript` part, so it cannot show this
 part of a page: use a browser with JavaScript off.
+
+## 17. The accent and the icon
+
+Added 2026-10-12, for version 0.1.1. Before it, the app took the accent of
+each Mac, the site had DocC's colors, and the app had no icon of its own.
+Each claim about macOS in this section was tried on macOS 27.2, on a Mac
+whose accent is red.
+
+### 17.1 Decisions
+
+- The accent is Chalcanthite, the accent of Desqueeze in the Plateworks
+  color standard. The values come from that standard, never by hand:
+
+  | Part | Light | Dark |
+  |---|---|---|
+  | Ink, for text | `#00688F` | `#65B4DD` |
+  | Fill | `#157BA6` | `#4595BC` |
+  | Hover | `#004C6A` | `#7DCDF7` |
+  | A label on the fill | `#FFFFFF` | `#020306` |
+
+- The app uses one value in both appearances: the light fill, `#157BA6`.
+  White on it is 4.76:1. The app does not use the dark fill, because macOS
+  draws white text on the accent in its own controls, and white on
+  `#4595BC` is 3.34:1. The dark ground of the window measures `#1D1E20`
+  on a screenshot, and the light fill is 3.51:1 on it, over the 3:1 for a
+  control.
+- macOS uses the `AccentColor` of an app only when the accent of the Mac is
+  Multicolor. Any other choice wins over it. Proof: a build with the color
+  asset and no other change showed the selected preset in red. So the app
+  does not rely on `AccentColor`. The content view has
+  `.tint(Color.chalcanthite)`, and each view that used `Color.accentColor`
+  uses the named color. The asset `AccentColor` stays, with the same value,
+  for the parts that macOS draws outside the view.
+- The site gets `theme-settings.json` in the catalog. It holds colors only:
+  no font, no address. `scripts/check_site_privacy.sh` reads it in each
+  build. Its keys:
+
+  | Key of DocC | Value |
+  |---|---|
+  | `link`, `figure-blue` | The ink |
+  | `nav-link-color-hover`, `nav-dark-link-color-hover` | The light ink, the dark ink |
+  | `fill-blue`, `button-background`, `focus-border-color`, `focus-color` | The fill |
+  | `button-background-hover`, `button-background-active` | The hover |
+  | `button-text` | The label on the fill: white in light, `#020306` in dark |
+
+  The site keeps DocC's grounds, white and black. The ink is 6.22:1 on
+  white, and 9.13:1 on black. The label is 4.76:1 on the light fill, and
+  6.17:1 on the dark fill.
+- The icon is the drawing on plateworks.org/apps/ (concept "Desqueeze A"),
+  in the color that Dom chose: the four contours of the Plateworks mark,
+  verbatim, as lines, over a copy of them squeezed to 0.52 of their width.
+  The true rings are Chalcanthite. The squeezed copy is a grey of the
+  ground. It says what the app does: the squeezed photo, and the photo at
+  its correct shape.
+
+### 17.2 The window
+
+- The tint is on the content view, before `onAppear`, and not on the view
+  in `DesqueezeApp.swift`. Proof: with the tint in `DesqueezeApp.swift`,
+  the window opened with the custom factor selected, three times of three.
+  The first focus of the custom field then came after the block that
+  ignores it (section 6). With the tint in the content view, the window
+  opened with the preset selected, as before.
+- The selected preset and the Run button have white text on the accent.
+- The tint of a window also colors the label of each bordered button. So
+  "Choose folder", "Remove" and "Cancel" take no tint, and stay grey. Only
+  the main action has the accent, and it stands out.
+- The custom-factor field keeps its border in the text color. The reason
+  changes: before, the accent could be red. Now, a border in the accent
+  beside a preset that is filled with the accent reads as a second
+  selection. The comment in `ContentView.swift` says the new reason.
+- The drop target uses the accent for its border and its 12% tint.
+- `SymbolLine` keeps its rule: the symbol carries the meaning, never the
+  color alone. Its comment no longer names a red accent.
+
+### 17.3 The icon
+
+- `scripts/make_app_icon.py` writes the vector, `App/AppIcon.svg`, and
+  each slot of `App/PlateworksDesqueeze/Assets.xcassets/AppIcon.appiconset`
+  (16, 32, 128, 256 and 512 points, each at 1x and 2x) from one set of
+  constants. It draws each size from the vector. With `--master` and the
+  file of the master mark, it stops when the four contours differ. The
+  master is kept outside this repo, so with no path the script says that
+  it did not compare. It stops when `Contents.json` names other files.
+  With `--check` it writes nothing, and fails for a file that differs.
+- The tile is the shape of a Mac icon since macOS 11: at 1024 pixels, a
+  square of 824 with corners of radius 185.4, and nothing around it. The
+  first plan was a tile that fills the square, for macOS to cut. macOS 27.2
+  does cut such a tile, and it draws both forms the same. macOS 14 and 15
+  draw an icon as it is given, so the full square would be a hard square
+  there. Those versions were not tried: no such Mac is here.
+- Geometry on a grid of 200 units. The tile is 160.9 units wide. The mark
+  is scaled about the center of its ink (50, 49.2 in mark units) onto the
+  center of the tile, at 1.448 grid units for each mark unit. That is the
+  1.8 of the drawing, times the part of the grid that the tile fills. The
+  lines are 4.5 mark units for the true rings and 3.4 for the squeezed
+  copy. The lines of the copy are squeezed with it. Each core is filled.
+- Values: the ground is Halite, `#EAEEE9`. The true rings are the fill,
+  `#157BA6`, 4.05:1 on the ground. The squeezed copy is `#AEB6AD`: the hue
+  of the ground, darker. It is derived for this icon, and it is no token of
+  the color standard.
+- The ink is 66.7 grid units from the center at its farthest, and the tile
+  has 80.5 to its edge.
+- The script's file of 1024 pixels and a Quick Look render of the vector
+  differ by a mean of 0.06 of a level for each channel.
+- The Plateworks standard for marks gets the icon's geometry, values and
+  fit, in the maintainer's workspace, not in this repo.
+- The browser tab of the site keeps DocC's favicon. The site has no mark.
+
+### 17.4 Testing
+
+`AccentAndIconTests` reads files of the repo, and starts no app:
+
+- The two color assets hold `#157BA6`, with one value for both appearances.
+- The content view has the tint before `onAppear`, `DesqueezeApp.swift` has
+  none, and no view asks for the accent of the Mac.
+- `project.yml` names the accent and the icon.
+- `theme-settings.json` holds the key `theme` with the key `color` only,
+  and each value is a value of 17.1. A font, an address or another color
+  fails.
+- Each slot of the icon set has a file of its size in pixels.
+
+Each test failed against a break first: a changed value, a second value for
+the dark appearance, `Color.accentColor` in a view, no tint, the tint in
+the other file, a line of `project.yml` removed, a font, an address and
+another color in the theme, a slot removed, and a file of the wrong size.
+The three stops of the icon script were tried too.
+
+By hand:
+
+- On a Mac with a red accent: the presets, the Run button, the checkbox
+  and the progress bar are Chalcanthite, in both appearances. "Choose
+  folder", "Remove" and "Cancel" are grey. This was seen on 2026-10-12, in
+  the app that `scripts/make_release.sh --local` made. The drop target was
+  not seen: no folder was dragged. It uses the same named color.
+- The site in a browser, in both appearances: the variables of 17.1 have
+  their values, and a link in an article has the ink.
+- The ten screenshots again ("Take the screenshots again"). Done on
+  2026-10-12.
+- The icon in the Dock, in Finder, and in the window of the disk image.
+  On 2026-10-12 the icon was read as macOS draws it for the local app, at
+  32, 128 and 512 points. The Dock, a Finder window and the disk image
+  wait for the release build.
+
+### 17.5 Known limits
+
+- A person who wants their own accent in the app cannot have it.
+- The icon has one appearance. macOS 26 and later can tint or darken it.
+- The icon has no shadow of its own, which the icons of macOS 11 to 15
+  have.
+- macOS 14 to 26 were not tried, for the tint, the buttons and the icon.
+- The tests read the source. They cannot see a color on the screen, so the
+  check by hand stays.

@@ -43,14 +43,19 @@ targets:
       base:
         PRODUCT_NAME: Desqueeze
         PRODUCT_BUNDLE_IDENTIFIER: org.plateworks.desqueeze
-        MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.1.1"
+        CURRENT_PROJECT_VERSION: "2"
         SWIFT_VERSION: "6.0"
         # Sign to run locally. scripts/make_release.sh signs the app of a
         # release again, with the Developer ID and the hardened runtime.
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"
         ENABLE_APP_SANDBOX: NO
+        # The accent and the icon (design 17). macOS uses AccentColor only
+        # on a Mac whose accent is Multicolor, so the window sets its tint
+        # too. scripts/make_app_icon.py writes the files of AppIcon.
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: NO
     # The scheme PlateworksDesqueeze builds the app, and its test action runs
     # the bundle below.

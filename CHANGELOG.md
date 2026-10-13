@@ -7,10 +7,18 @@ The version number is `DesqueezeVersion.current` in
 `Sources/DesqueezeCore/Version.swift`. A test fails when the newest entry
 below is not that number. A heading "Unreleased" is not a version.
 
-## [Unreleased]
+## [0.1.1] - 2026-10-12
+
+The app has its own accent and its own icon. No rule of a run changed.
 
 ### Added
 
+- An icon for the app: the four contours of the Plateworks mark as lines,
+  over a copy of them that is squeezed to 0.52 of its width.
+  `scripts/make_app_icon.py` writes the vector and the ten files of the
+  icon set from one set of constants.
+- Tests that hold the accent value, the place of the tint, the theme file
+  of the site and the files of the icon set (`AccentAndIconTests`).
 - A privacy page on the documentation site, the article "Privacy". It says
   what the app, the command line tool, the MCP server, the site and the
   download load and save. The first page of the site and `README.md` link
@@ -25,6 +33,16 @@ below is not that number. A heading "Unreleased" is not a version.
 - The section "Change what a part loads or saves" in
   `docs/changing-things.md`, with the proof of each statement of the
   privacy page.
+
+### Changed
+
+- The window has one accent on each Mac: Chalcanthite, a copper blue,
+  `#157BA6`. Before, it took the accent of each Mac, so on a Mac with a red
+  accent the selected factor and the Run button were red, the color of an
+  error. The buttons "Choose folder", "Remove" and "Cancel" stay grey.
+- The documentation site has the same accent for its links, its buttons
+  and its focus ring. Its theme file holds colors only.
+- The ten screenshots of the window are new.
 
 ### Fixed
 
