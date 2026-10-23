@@ -27,6 +27,7 @@ file.
 | Document | Read when |
 |---|---|
 | `superpowers/specs/2026-10-05-desqueeze-design.md` | You change any behavior. It is the contract: the scan, the factor, the run, the window, the errors, the command line tool, the MCP server, the converters, the option that moves the originals to the Trash, the download, the privacy page, and the accent and the icon. Sections 12 to 17 are the newest, and they win where they differ from an earlier section. Section 2.1 records what was tested by hand. |
+| `superpowers/specs/2026-10-12-docc-issue-draft.md` | You are about to post the draft issue about DocC static content, or change what it reports. It is a draft, not posted. |
 
 One file in that folder is not Markdown:
 
